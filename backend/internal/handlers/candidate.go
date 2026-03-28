@@ -92,9 +92,10 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		// Whitelist sort columns
 		allowedSorts := map[string]string{
-			"created_at": "c.created_at",
-			"full_name":  "c.full_name",
+			"created_at":  "c.created_at",
+			"full_name":   "c.full_name",
 			"final_score": "a.final_score",
+			"analyzed_at": "a.analyzed_at",
 		}
 		sortCol, ok := allowedSorts[sortBy]
 		if !ok {
@@ -127,7 +128,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		// Fetch
 		query := fmt.Sprintf(
-			`SELECT c.id, c.full_name, c.email, c.city, c.school, c.status, c.created_at, a.final_score, a.category
+			`SELECT c.id, c.full_name, c.email, c.city, c.school, c.status, c.created_at, a.final_score, a.category, a.analyzed_at, a.model_used
 			 FROM candidates c
 			 LEFT JOIN analyses a ON c.id = a.candidate_id
 			 %s ORDER BY %s %s NULLS LAST LIMIT $%d OFFSET $%d`,
@@ -146,7 +147,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 		for rows.Next() {
 			var item models.CandidateListItem
 			if err := rows.Scan(&item.ID, &item.FullName, &item.Email, &item.City, &item.School,
-				&item.Status, &item.CreatedAt, &item.FinalScore, &item.Category); err != nil {
+				&item.Status, &item.CreatedAt, &item.FinalScore, &item.Category, &item.AnalyzedAt, &item.ModelUsed); err != nil {
 				continue
 			}
 			candidates = append(candidates, item)

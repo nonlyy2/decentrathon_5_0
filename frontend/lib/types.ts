@@ -24,6 +24,8 @@ export interface CandidateListItem {
   created_at: string;
   final_score: number | null;
   category: string | null;
+  analyzed_at: string | null;
+  model_used: string | null;
 }
 
 export interface Analysis {

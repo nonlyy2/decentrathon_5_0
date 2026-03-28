@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-import { Globe, MonitorCog } from "lucide-react";
+import { Globe, MonitorCog, Zap } from "lucide-react";
 
 interface Props {
   value: string;
@@ -10,7 +10,8 @@ interface Props {
 }
 
 const providerMeta: Record<string, { label: string; icon: typeof Globe; description: string }> = {
-  gemini: { label: "Gemini", icon: Globe, description: "Cloud API" },
+  gemini: { label: "Gemini", icon: Globe, description: "Cloud" },
+  groq: { label: "Groq", icon: Zap, description: "Fast" },
   ollama: { label: "Ollama", icon: MonitorCog, description: "Local" },
 };
 

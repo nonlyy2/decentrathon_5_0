@@ -7,6 +7,7 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/config"
 	"github.com/assylkhan/invisionu-backend/internal/database"
 	"github.com/assylkhan/invisionu-backend/internal/gemini"
+	"github.com/assylkhan/invisionu-backend/internal/groq"
 	"github.com/assylkhan/invisionu-backend/internal/handlers"
 	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/assylkhan/invisionu-backend/internal/ollama"
@@ -55,6 +56,12 @@ func main() {
 	ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
 	providers["ollama"] = ollamaClient.AnalyzeCandidate
 	log.Printf("Ollama client initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
+
+	if cfg.GroqAPIKey != "" {
+		groqClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
+		providers["groq"] = groqClient.AnalyzeCandidate
+		log.Printf("Groq client initialized (model=%s)", cfg.GroqModel)
+	}
 
 	defaultProvider := cfg.AIProvider
 	if _, ok := providers[defaultProvider]; !ok {

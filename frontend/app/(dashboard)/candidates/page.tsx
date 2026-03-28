@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 const STATUS_TABS = [
   { value: "all", label: "All" },
@@ -39,6 +39,8 @@ export default function CandidatesPage() {
   const [deleting, setDeleting] = useState(false);
   const [provider, setProvider] = useState<string>("");
   const [providers, setProviders] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
   const { user } = useAuth();
@@ -89,8 +91,8 @@ export default function CandidatesPage() {
       if (search) params.set("search", search);
       params.set("limit", String(limit));
       params.set("offset", String(page * limit));
-      params.set("sort_by", "created_at");
-      params.set("order", "desc");
+      params.set("sort_by", sortBy);
+      params.set("order", sortOrder);
 
       const res = await api.get(`/candidates?${params}`);
       setCandidates(res.data.candidates || []);
@@ -100,7 +102,7 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, search, page]);
+  }, [status, search, page, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchCandidates();
@@ -171,6 +173,16 @@ export default function CandidatesPage() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(column);
+      setSortOrder("desc");
+    }
+    setPage(0);
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -257,25 +269,27 @@ export default function CandidatesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <SortableHead column="full_name" label="Name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>City</TableHead>
-              <TableHead>Score</TableHead>
+              <SortableHead column="final_score" label="Score" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>Status</TableHead>
-              <TableHead>Date</TableHead>
+              <SortableHead column="created_at" label="Created" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <SortableHead column="analyzed_at" label="Analyzed" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <TableHead>Model</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 5 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <TableCell key={j}><div className="h-4 bg-slate-200 rounded animate-pulse w-24" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No candidates found
                 </TableCell>
               </TableRow>
@@ -298,6 +312,12 @@ export default function CandidatesPage() {
                   <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
                     {new Date(c.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="relative z-20 text-sm text-muted-foreground">
+                    {c.analyzed_at ? new Date(c.analyzed_at).toLocaleDateString() : "—"}
+                  </TableCell>
+                  <TableCell className="relative z-20 text-sm text-muted-foreground">
+                    {c.model_used ? c.model_used.replace(/^(gemini|groq|ollama)\//, "") : "—"}
                   </TableCell>
                 </TableRow>
               ))
@@ -353,5 +373,26 @@ export default function CandidatesPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function SortableHead({ column, label, sortBy, sortOrder, onSort }: {
+  column: string; label: string; sortBy: string; sortOrder: string; onSort: (col: string) => void;
+}) {
+  const active = sortBy === column;
+  return (
+    <TableHead>
+      <button
+        onClick={() => onSort(column)}
+        className="flex items-center gap-1 hover:text-slate-900 transition-colors"
+      >
+        {label}
+        {active ? (
+          sortOrder === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+        ) : (
+          <ArrowUpDown size={14} className="text-slate-300" />
+        )}
+      </button>
+    </TableHead>
   );
 }

@@ -28,6 +28,8 @@ type CandidateListItem struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	FinalScore *float64   `json:"final_score"`
 	Category   *string    `json:"category"`
+	AnalyzedAt *time.Time `json:"analyzed_at"`
+	ModelUsed  *string    `json:"model_used"`
 }
 
 type CandidateDetail struct {
