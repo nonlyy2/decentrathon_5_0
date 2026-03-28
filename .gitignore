@@ -9,3 +9,5 @@ tasks/
 tmp/
 node_modules/
 .next/
+
+.claude/
