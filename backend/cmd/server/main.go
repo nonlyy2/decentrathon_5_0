@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/assylkhan/invisionu-backend/internal/config"
 	"github.com/assylkhan/invisionu-backend/internal/database"
@@ -46,21 +47,38 @@ func main() {
 
 	// AI clients — create all available providers
 	providers := make(handlers.AIProviders)
+	batchProviders := make(handlers.AIBatchProviders)
 
-	if cfg.GeminiAPIKey != "" {
+	if cfg.GeminiAPIKeys != "" {
+		var keys []string
+		for _, k := range strings.Split(cfg.GeminiAPIKeys, ",") {
+			if k = strings.TrimSpace(k); k != "" {
+				keys = append(keys, k)
+			}
+		}
+		if len(keys) > 0 {
+			pool := gemini.NewPool(keys)
+			providers["gemini"] = pool.AnalyzeCandidate
+			batchProviders["gemini"] = pool.AnalyzeBatch
+			log.Printf("Gemini initialized with %d API keys (round-robin, batch enabled)", len(keys))
+		}
+	} else if cfg.GeminiAPIKey != "" {
 		geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
 		providers["gemini"] = geminiClient.AnalyzeCandidate
-		log.Println("Gemini API client initialized")
+		batchProviders["gemini"] = geminiClient.AnalyzeBatch
+		log.Println("Gemini API client initialized (single key, batch enabled)")
 	}
 
 	ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
 	providers["ollama"] = ollamaClient.AnalyzeCandidate
-	log.Printf("Ollama client initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
+	batchProviders["ollama"] = ollamaClient.AnalyzeBatch
+	log.Printf("Ollama client initialized (url=%s, model=%s, batch enabled)", cfg.OllamaURL, cfg.OllamaModel)
 
 	if cfg.GroqAPIKey != "" {
 		groqClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
 		providers["groq"] = groqClient.AnalyzeCandidate
-		log.Printf("Groq client initialized (model=%s)", cfg.GroqModel)
+		batchProviders["groq"] = groqClient.AnalyzeBatch
+		log.Printf("Groq client initialized (model=%s, batch enabled)", cfg.GroqModel)
 	}
 
 	defaultProvider := cfg.AIProvider
@@ -106,7 +124,7 @@ func main() {
 
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
 
-		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, defaultProvider))
+		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, batchProviders, defaultProvider))
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
 
 		protected.GET("/ai-providers", handlers.GetAIProviders(providers, defaultProvider))

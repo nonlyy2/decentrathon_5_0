@@ -78,6 +78,36 @@ CATEGORY ASSIGNMENT:
 
 You MUST respond with ONLY a valid JSON object matching the exact schema below. No additional text.`
 
+const BatchResponseSchema = `[
+  {
+    "score_leadership": <int 0-100>,
+    "score_motivation": <int 0-100>,
+    "score_growth": <int 0-100>,
+    "score_vision": <int 0-100>,
+    "score_communication": <int 0-100>,
+    "final_score": <float>,
+    "category": "<Strong Recommend|Recommend|Borderline|Not Recommended>",
+    "ai_generated_risk": "<low|medium|high>",
+    "incomplete_flag": <bool>,
+    "explanation_leadership": "<2-3 sentences>",
+    "explanation_motivation": "<2-3 sentences>",
+    "explanation_growth": "<2-3 sentences>",
+    "explanation_vision": "<2-3 sentences>",
+    "explanation_communication": "<2-3 sentences>",
+    "summary": "<3-5 sentence assessment>",
+    "key_strengths": ["<strength 1>", "<strength 2>"],
+    "red_flags": ["<flag>"] or []
+  }
+]`
+
+// BatchSystemPrompt replaces the single-object instruction with an array instruction.
+var BatchSystemPrompt = strings.Replace(
+	SystemPrompt,
+	"You MUST respond with ONLY a valid JSON object matching the exact schema below. No additional text.",
+	"You will receive MULTIPLE candidates numbered in order. You MUST respond with ONLY a valid JSON ARRAY containing exactly one result object per candidate in the same order. No additional text, no wrapping object — just the JSON array.",
+	1,
+)
+
 const ResponseSchema = `{
   "score_leadership": <int 0-100>,
   "score_motivation": <int 0-100>,
@@ -97,6 +127,17 @@ const ResponseSchema = `{
   "key_strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "red_flags": ["<flag 1>"] or []
 }`
+
+func BuildBatchUserMessage(candidates []models.Candidate) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Evaluate the following %d candidates. Return a JSON array with exactly %d objects in order.\n\n", len(candidates), len(candidates)))
+	for i, c := range candidates {
+		sb.WriteString(fmt.Sprintf("=== CANDIDATE %d ===\n", i+1))
+		sb.WriteString(BuildUserMessage(&c))
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
 
 func BuildUserMessage(c *models.Candidate) string {
 	var sb strings.Builder

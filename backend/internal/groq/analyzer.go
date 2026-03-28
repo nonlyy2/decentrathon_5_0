@@ -26,3 +26,22 @@ func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candida
 	analysis.ModelUsed = "groq/" + c.ModelName()
 	return analysis, nil
 }
+
+func (c *Client) AnalyzeBatch(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error) {
+	userMsg := gemini.BuildBatchUserMessage(candidates)
+	fullSystemPrompt := gemini.BatchSystemPrompt + "\n\nExpected JSON array schema:\n" + gemini.BatchResponseSchema
+	responseText, err := c.Generate(ctx, fullSystemPrompt, userMsg)
+	if err != nil {
+		return nil, fmt.Errorf("groq batch API error: %w", err)
+	}
+	parsed, err := gemini.ParseBatchAnalysisResponse(responseText, len(candidates))
+	if err != nil {
+		return nil, fmt.Errorf("batch response parsing error: %w", err)
+	}
+	analyses := make([]*models.Analysis, len(candidates))
+	for i, r := range parsed {
+		analyses[i] = gemini.ToAnalysis(r, candidates[i].ID)
+		analyses[i].ModelUsed = "groq/" + c.ModelName()
+	}
+	return analyses, nil
+}

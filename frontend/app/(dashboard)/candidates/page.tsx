@@ -117,14 +117,22 @@ export default function CandidatesPage() {
     pollRef.current = setInterval(async () => {
       try {
         const res = await api.get("/analyze-all/status");
-        const { running, processed, total } = res.data;
+        const { running, processed, total, errors } = res.data;
         setBatchProgress({ done: processed, total });
         if (!running) {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setBatchRunning(false);
           setBatchProgress(null);
-          toast.success("Batch analysis complete");
+          const errCount = Array.isArray(errors) ? errors.length : 0;
+          const successCount = processed - errCount;
+          if (errCount === 0) {
+            toast.success(`Batch analysis complete: ${successCount}/${processed} analyzed`);
+          } else if (successCount === 0) {
+            toast.error(`Batch failed: all ${errCount} candidates errored (check API limits)`);
+          } else {
+            toast.warning(`Batch done: ${successCount} analyzed, ${errCount} failed`);
+          }
           fetchCandidates();
           fetchCounts();
         }

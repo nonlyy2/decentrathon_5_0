@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
@@ -27,6 +28,49 @@ type GeminiAnalysisResponse struct {
 	Summary                  string   `json:"summary"`
 	KeyStrengths             []string `json:"key_strengths"`
 	RedFlags                 []string `json:"red_flags"`
+}
+
+func ParseBatchAnalysisResponse(jsonStr string, expected int) ([]*GeminiAnalysisResponse, error) {
+	// Strip any markdown code fences the model might add
+	jsonStr = strings.TrimSpace(jsonStr)
+	if idx := strings.Index(jsonStr, "["); idx > 0 {
+		jsonStr = jsonStr[idx:]
+	}
+	if idx := strings.LastIndex(jsonStr, "]"); idx >= 0 && idx < len(jsonStr)-1 {
+		jsonStr = jsonStr[:idx+1]
+	}
+
+	var responses []*GeminiAnalysisResponse
+	if err := json.Unmarshal([]byte(jsonStr), &responses); err != nil {
+		return nil, fmt.Errorf("failed to parse batch response: %w", err)
+	}
+	if len(responses) != expected {
+		return nil, fmt.Errorf("expected %d results but got %d", expected, len(responses))
+	}
+
+	for _, resp := range responses {
+		resp.ScoreLeadership = clamp(resp.ScoreLeadership, 0, 100)
+		resp.ScoreMotivation = clamp(resp.ScoreMotivation, 0, 100)
+		resp.ScoreGrowth = clamp(resp.ScoreGrowth, 0, 100)
+		resp.ScoreVision = clamp(resp.ScoreVision, 0, 100)
+		resp.ScoreCommunication = clamp(resp.ScoreCommunication, 0, 100)
+		resp.FinalScore = math.Round((float64(resp.ScoreLeadership)*0.25+
+			float64(resp.ScoreMotivation)*0.25+
+			float64(resp.ScoreGrowth)*0.20+
+			float64(resp.ScoreVision)*0.15+
+			float64(resp.ScoreCommunication)*0.15)*100) / 100
+		resp.Category = scoreToCategory(resp.FinalScore)
+		if resp.AIGeneratedRisk != "low" && resp.AIGeneratedRisk != "medium" && resp.AIGeneratedRisk != "high" {
+			resp.AIGeneratedRisk = "low"
+		}
+		if resp.KeyStrengths == nil {
+			resp.KeyStrengths = []string{}
+		}
+		if resp.RedFlags == nil {
+			resp.RedFlags = []string{}
+		}
+	}
+	return responses, nil
 }
 
 func ParseAnalysisResponse(jsonStr string) (*GeminiAnalysisResponse, error) {

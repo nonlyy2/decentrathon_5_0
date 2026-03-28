@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
@@ -14,8 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AIProviders maps provider names to their analyze functions
+// AIProviders maps provider names to their single-candidate analyze functions
 type AIProviders map[string]func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
+
+// AIBatchProviders maps provider names to their batch analyze functions
+type AIBatchProviders map[string]func(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error)
 
 // GetAIProviders returns the list of available AI providers
 func GetAIProviders(providers AIProviders, defaultProvider string) gin.HandlerFunc {
@@ -265,7 +269,7 @@ var batchStatus struct {
 	Errors    []string `json:"errors"`
 }
 
-func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, defaultProvider string) gin.HandlerFunc {
+func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders AIBatchProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		analyzeFunc, ok := resolveProvider(c, providers, defaultProvider)
 		if !ok {
@@ -275,6 +279,11 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, defaultProvide
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return
 		}
+		providerName := c.Query("provider")
+		if providerName == "" {
+			providerName = defaultProvider
+		}
+		batchFunc := batchProviders[providerName] // may be nil
 
 		batchStatus.Lock()
 		if batchStatus.Running {
@@ -315,6 +324,8 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, defaultProvide
 		batchStatus.Errors = []string{}
 		batchStatus.Unlock()
 
+		const batchSize = 5
+
 		go func() {
 			defer func() {
 				batchStatus.Lock()
@@ -322,36 +333,101 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, defaultProvide
 				batchStatus.Unlock()
 			}()
 
-			for i, cand := range candidates {
-				func(candidate models.Candidate) {
-					defer func() {
-						if r := recover(); r != nil {
+			isRateLimited := func(err error) bool {
+				msg := err.Error()
+				return strings.Contains(msg, "429") || strings.Contains(msg, "RESOURCE_EXHAUSTED") ||
+					strings.Contains(msg, "rate-limited") || strings.Contains(msg, "rate limit")
+			}
+
+			processedCount := 0
+			for i := 0; i < len(candidates); i += batchSize {
+				end := i + batchSize
+				if end > len(candidates) {
+					end = len(candidates)
+				}
+				batch := candidates[i:end]
+
+				ctx := context.Background()
+				stopped := false
+
+				if batchFunc != nil {
+					// Try batch processing
+					analyses, err := batchFunc(ctx, batch)
+					if err != nil {
+						if isRateLimited(err) {
 							batchStatus.Lock()
-							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("panic for candidate %d: %v", candidate.ID, r))
+							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("rate limit at batch starting candidate %d: %v", batch[0].ID, err))
+							batchStatus.Unlock()
+							log.Printf("Batch stopped: rate limit hit at batch %d-%d", i+1, end)
+							stopped = true
+						} else {
+							// Batch parse/API error — fall back to individual
+							log.Printf("Batch request failed (%v), falling back to individual for %d candidates", err, len(batch))
+							for _, cand := range batch {
+								a, err2 := analyzeFunc(ctx, &cand)
+								processedCount++
+								if err2 != nil {
+									batchStatus.Lock()
+									batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", cand.ID, err2))
+									batchStatus.Unlock()
+									if isRateLimited(err2) {
+										stopped = true
+										break
+									}
+									continue
+								}
+								if err2 = SaveAnalysis(ctx, pool, a); err2 != nil {
+									batchStatus.Lock()
+									batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", cand.ID, err2))
+									batchStatus.Unlock()
+								}
+							}
+						}
+					} else {
+						for j, a := range analyses {
+							processedCount++
+							if a == nil {
+								continue
+							}
+							if err2 := SaveAnalysis(ctx, pool, a); err2 != nil {
+								batchStatus.Lock()
+								batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", batch[j].ID, err2))
+								batchStatus.Unlock()
+							}
+						}
+					}
+				} else {
+					// No batch function — process individually
+					for _, cand := range batch {
+						a, err := analyzeFunc(ctx, &cand)
+						processedCount++
+						if err != nil {
+							batchStatus.Lock()
+							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", cand.ID, err))
+							batchStatus.Unlock()
+							if isRateLimited(err) {
+								stopped = true
+								break
+							}
+							continue
+						}
+						if err = SaveAnalysis(ctx, pool, a); err != nil {
+							batchStatus.Lock()
+							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", cand.ID, err))
 							batchStatus.Unlock()
 						}
-					}()
-
-					ctx := context.Background()
-					analysis, err := analyzeFunc(ctx, &candidate)
-					if err != nil {
-						batchStatus.Lock()
-						batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", candidate.ID, err))
-						batchStatus.Unlock()
-						return
 					}
-
-					if err := SaveAnalysis(ctx, pool, analysis); err != nil {
-						batchStatus.Lock()
-						batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", candidate.ID, err))
-						batchStatus.Unlock()
-					}
-				}(cand)
+				}
 
 				batchStatus.Lock()
-				batchStatus.Processed = i + 1
+				batchStatus.Processed = processedCount
 				batchStatus.Unlock()
-				log.Printf("Analyzed candidate %d/%d (ID: %d)", i+1, len(candidates), cand.ID)
+				log.Printf("Processed batch %d-%d/%d", i+1, end, len(candidates))
+
+				if stopped {
+					log.Printf("Batch stopped early: rate limit hit after %d/%d candidates", processedCount, len(candidates))
+					break
+				}
 			}
 		}()
 

@@ -23,3 +23,24 @@ func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candida
 
 	return ToAnalysis(parsed, candidate.ID), nil
 }
+
+func (c *Client) AnalyzeBatch(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error) {
+	userMsg := BuildBatchUserMessage(candidates)
+	fullSystemPrompt := BatchSystemPrompt + "\n\nExpected JSON array schema:\n" + BatchResponseSchema
+
+	responseText, err := c.Generate(ctx, fullSystemPrompt, userMsg)
+	if err != nil {
+		return nil, fmt.Errorf("gemini batch API error: %w", err)
+	}
+
+	parsed, err := ParseBatchAnalysisResponse(responseText, len(candidates))
+	if err != nil {
+		return nil, fmt.Errorf("batch response parsing error: %w", err)
+	}
+
+	analyses := make([]*models.Analysis, len(candidates))
+	for i, r := range parsed {
+		analyses[i] = ToAnalysis(r, candidates[i].ID)
+	}
+	return analyses, nil
+}
