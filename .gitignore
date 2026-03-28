@@ -10,4 +10,4 @@ tmp/
 node_modules/
 .next/
 
-.claude/
+claude/
