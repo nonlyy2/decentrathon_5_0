@@ -9,9 +9,10 @@ import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 const STATUS_TABS = [
   { value: "all", label: "All" },
@@ -32,6 +33,9 @@ export default function CandidatesPage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
   const { user } = useAuth();
@@ -132,6 +136,22 @@ export default function CandidatesPage() {
     };
   }, []);
 
+  const handleDeleteAllAnalyses = async () => {
+    setDeleting(true);
+    try {
+      const res = await api.delete("/analyses");
+      toast.success(`Deleted ${res.data.deleted} analyses`);
+      setDeleteDialogOpen(false);
+      setDeleteConfirmText("");
+      fetchCandidates();
+      fetchCounts();
+    } catch {
+      toast.error("Failed to delete analyses");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -152,13 +172,23 @@ export default function CandidatesPage() {
             </div>
           )}
           {user?.role === "admin" && (
-            <Button
-              onClick={handleAnalyzeAll}
-              className="bg-purple-600 hover:bg-purple-700"
-              disabled={batchRunning}
-            >
-              {batchRunning ? <><Loader2 size={14} className="animate-spin mr-2" /> Running...</> : "Analyze All Pending"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleAnalyzeAll}
+                className="bg-purple-600 hover:bg-purple-700"
+                disabled={batchRunning}
+              >
+                {batchRunning ? <><Loader2 size={14} className="animate-spin mr-2" /> Running...</> : "Analyze All Pending"}
+              </Button>
+              <Button
+                variant="outline"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
+                disabled={batchRunning}
+              >
+                <Trash2 size={14} className="mr-1" /> Reset Analyses
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -267,6 +297,37 @@ export default function CandidatesPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Reset All Analyses</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            This will delete AI analyses for all candidates that have <strong>not</strong> been shortlisted, rejected, or waitlisted.
+            Their status will reset to <strong>Pending</strong>.
+          </p>
+          <p className="text-sm text-slate-500 mt-2">
+            To confirm, type <span className="font-mono font-bold text-red-600">удалить</span> below:
+          </p>
+          <Input
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="удалить"
+            className="mt-1"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteConfirmText !== "удалить" || deleting}
+              onClick={handleDeleteAllAnalyses}
+            >
+              {deleting ? <><Loader2 size={14} className="animate-spin mr-2" /> Deleting...</> : "Delete All"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

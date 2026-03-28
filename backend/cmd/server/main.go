@@ -87,7 +87,9 @@ func main() {
 
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
 		protected.GET("/candidates/:id/analysis-status", handlers.GetCandidateAnalysisStatus())
+		protected.DELETE("/candidates/:id/analysis", handlers.DeleteAnalysis(pool))
 		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, analyzeFunc))
+		protected.DELETE("/analyses", handlers.DeleteAllAnalyses(pool))
 
 		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))
 		protected.GET("/candidates/:id/decisions", handlers.GetDecisions(pool))

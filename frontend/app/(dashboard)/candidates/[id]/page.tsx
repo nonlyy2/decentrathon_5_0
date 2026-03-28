@@ -12,7 +12,7 @@ import KeyStrengthsRedFlags from "@/components/KeyStrengthsRedFlags";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -43,6 +43,7 @@ export default function CandidateDetailPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [deletingAnalysis, setDeletingAnalysis] = useState(false);
   const [expandedScore, setExpandedScore] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -93,6 +94,21 @@ export default function CandidateDetailPage() {
     }
   };
 
+  const handleDeleteAnalysis = async () => {
+    if (!confirm("Delete this analysis? The candidate will return to Pending status.")) return;
+    setDeletingAnalysis(true);
+    try {
+      await api.delete(`/candidates/${params.id}/analysis`);
+      toast.success("Analysis deleted");
+      setAnalysisFailed(false);
+      refetch();
+    } catch {
+      toast.error("Failed to delete analysis");
+    } finally {
+      setDeletingAnalysis(false);
+    }
+  };
+
   if (loading || !detail) {
     return (
       <div className="space-y-4">
@@ -119,9 +135,14 @@ export default function CandidateDetailPage() {
           <StatusBadge status={detail.status} />
         </div>
         {a ? (
-          <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing}>
-            {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Re-analyzing...</> : "Re-analyze"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
+              {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Re-analyzing...</> : "Re-analyze"}
+            </Button>
+            <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={handleDeleteAnalysis} disabled={deletingAnalysis}>
+              {deletingAnalysis ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+            </Button>
+          </div>
         ) : (
           <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => handleAnalyze()} disabled={analyzing}>
             {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Analyzing...</> : <><Sparkles size={16} className="mr-2" /> Analyze with AI</>}

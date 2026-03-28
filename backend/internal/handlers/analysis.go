@@ -44,6 +44,48 @@ func GetAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
+func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "invalid candidate id"})
+			return
+		}
+		ctx := c.Request.Context()
+		tag, err := pool.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, candidateID)
+		if err != nil || tag.RowsAffected() == 0 {
+			c.JSON(404, gin.H{"error": "analysis not found"})
+			return
+		}
+		pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1`, candidateID)
+		candidateAnalyses.Delete(candidateID)
+		c.JSON(200, gin.H{"message": "analysis deleted"})
+	}
+}
+
+func DeleteAllAnalyses(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		// Delete analyses only for candidates without a committee decision (not shortlisted/rejected/waitlisted)
+		tag, err := pool.Exec(ctx,
+			`DELETE FROM analyses WHERE candidate_id IN (
+				SELECT id FROM candidates WHERE status NOT IN ('shortlisted', 'rejected', 'waitlisted')
+			)`)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to delete analyses"})
+			return
+		}
+		// Reset those candidates back to pending
+		pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE status = 'analyzed'`)
+		// Clear in-memory status cache
+		candidateAnalyses.Range(func(key, _ any) bool {
+			candidateAnalyses.Delete(key)
+			return true
+		})
+		c.JSON(200, gin.H{"deleted": tag.RowsAffected()})
+	}
+}
+
 func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Analysis) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
