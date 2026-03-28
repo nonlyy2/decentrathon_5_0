@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { CandidateListItem, DashboardStats } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
+import ProviderSelector from "@/components/ProviderSelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -36,9 +37,28 @@ export default function CandidatesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [provider, setProvider] = useState<string>("");
+  const [providers, setProviders] = useState<string[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
   const { user } = useAuth();
+
+  useEffect(() => {
+    api.get("/ai-providers").then((res) => {
+      setProviders(res.data.providers);
+      const saved = localStorage.getItem("ai_provider");
+      if (saved && res.data.providers.includes(saved)) {
+        setProvider(saved);
+      } else {
+        setProvider(res.data.default_provider);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const selectProvider = (p: string) => {
+    setProvider(p);
+    localStorage.setItem("ai_provider", p);
+  };
 
   const fetchCounts = useCallback(async () => {
     try {
@@ -116,7 +136,8 @@ export default function CandidatesPage() {
 
   const handleAnalyzeAll = async () => {
     try {
-      const res = await api.post("/analyze-all");
+      const qs = provider ? `?provider=${provider}` : "";
+      const res = await api.post(`/analyze-all${qs}`);
       if (res.data.count === 0) {
         toast.info("No pending candidates to analyze");
         return;
@@ -170,6 +191,9 @@ export default function CandidatesPage() {
                 />
               </div>
             </div>
+          )}
+          {providers.length > 1 && (
+            <ProviderSelector value={provider} onChange={selectProvider} />
           )}
           {user?.role === "admin" && (
             <div className="flex gap-2">

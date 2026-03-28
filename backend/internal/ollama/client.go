@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -65,9 +66,9 @@ func (c *Client) ModelName() string {
 
 func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string) (string, error) {
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 2; attempt++ {
 		if attempt > 0 {
-			backoff := time.Duration(attempt*attempt) * 2 * time.Second
+			backoff := 3 * time.Second
 			log.Printf("Ollama attempt %d failed: %v, retrying in %v...", attempt, lastErr, backoff)
 			select {
 			case <-time.After(backoff):
@@ -81,8 +82,24 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string)
 			return result, nil
 		}
 		lastErr = err
+
+		// Don't retry on non-retryable errors (model not found, bad request, etc.)
+		if isNonRetryable(lastErr) {
+			return "", lastErr
+		}
 	}
-	return "", fmt.Errorf("ollama failed after 3 attempts: %w", lastErr)
+	return "", fmt.Errorf("ollama failed after 2 attempts: %w", lastErr)
+}
+
+// isNonRetryable checks if the error message indicates a non-retryable condition
+func isNonRetryable(err error) bool {
+	msg := err.Error()
+	for _, s := range []string{"status 404", "status 400", "not found", "marshal"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) doGenerate(ctx context.Context, systemPrompt, userMessage string) (string, error) {
@@ -99,7 +116,7 @@ func (c *Client) doGenerate(ctx context.Context, systemPrompt, userMessage strin
 		Options: Options{
 			Temperature: 0.3,
 			TopP:        0.95,
-			NumPredict:  4096,
+			NumPredict:  2048,
 		},
 	}
 

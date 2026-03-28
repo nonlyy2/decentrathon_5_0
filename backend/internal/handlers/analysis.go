@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -12,6 +13,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// AIProviders maps provider names to their analyze functions
+type AIProviders map[string]func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
+
+// GetAIProviders returns the list of available AI providers
+func GetAIProviders(providers AIProviders, defaultProvider string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		available := make([]string, 0, len(providers))
+		for k := range providers {
+			available = append(available, k)
+		}
+		sort.Strings(available)
+		c.JSON(200, gin.H{
+			"providers":        available,
+			"default_provider": defaultProvider,
+		})
+	}
+}
 
 func GetAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -118,12 +137,31 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	return tx.Commit(ctx)
 }
 
-// AnalyzeSingleCandidate creates a handler — geminiAnalyze is injected from main
-func AnalyzeSingleCandidate(pool *pgxpool.Pool, geminiAnalyze func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)) gin.HandlerFunc {
+// resolveProvider picks the analyze function based on ?provider= query param or default
+func resolveProvider(c *gin.Context, providers AIProviders, defaultProvider string) (func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error), bool) {
+	providerName := c.Query("provider")
+	if providerName == "" {
+		providerName = defaultProvider
+	}
+	fn, ok := providers[providerName]
+	if !ok {
+		c.JSON(400, gin.H{"error": fmt.Sprintf("unknown AI provider: %s", providerName)})
+		return nil, false
+	}
+	return fn, true
+}
+
+// AnalyzeSingleCandidate creates a handler — providers map is injected from main
+func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})
+			return
+		}
+
+		analyzeFunc, ok := resolveProvider(c, providers, defaultProvider)
+		if !ok {
 			return
 		}
 
@@ -153,7 +191,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, geminiAnalyze func(ctx context.C
 			pool.Exec(c.Request.Context(), `DELETE FROM analyses WHERE candidate_id = $1`, candidateID)
 		}
 
-		if geminiAnalyze == nil {
+		if analyzeFunc == nil {
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return
 		}
@@ -172,7 +210,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, geminiAnalyze func(ctx context.C
 
 		go func(cand models.Candidate) {
 			ctx := context.Background()
-			analysis, err := geminiAnalyze(ctx, &cand)
+			analysis, err := analyzeFunc(ctx, &cand)
 			if err != nil {
 				log.Printf("Analysis failed for candidate %d: %v", cand.ID, err)
 				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: err.Error()})
@@ -227,8 +265,12 @@ var batchStatus struct {
 	Errors    []string `json:"errors"`
 }
 
-func AnalyzeAllPending(pool *pgxpool.Pool, analyzeFunc func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)) gin.HandlerFunc {
+func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		analyzeFunc, ok := resolveProvider(c, providers, defaultProvider)
+		if !ok {
+			return
+		}
 		if analyzeFunc == nil {
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return

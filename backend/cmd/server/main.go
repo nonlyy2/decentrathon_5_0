@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/gemini"
 	"github.com/assylkhan/invisionu-backend/internal/handlers"
 	"github.com/assylkhan/invisionu-backend/internal/middleware"
-	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/assylkhan/invisionu-backend/internal/ollama"
 	"github.com/assylkhan/invisionu-backend/internal/seed"
 	"github.com/gin-gonic/gin"
@@ -45,23 +43,28 @@ func main() {
 		}
 	}
 
-	// AI client — select provider based on AI_PROVIDER env var
-	var analyzeFunc func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
+	// AI clients — create all available providers
+	providers := make(handlers.AIProviders)
 
-	switch cfg.AIProvider {
-	case "ollama":
-		ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
-		analyzeFunc = ollamaClient.AnalyzeCandidate
-		log.Printf("Ollama client initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
-	default: // "gemini"
-		if cfg.GeminiAPIKey != "" {
-			geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
-			analyzeFunc = geminiClient.AnalyzeCandidate
-			log.Println("Gemini API client initialized")
-		} else {
-			log.Println("Warning: GEMINI_API_KEY not set, analysis endpoint will return 503")
+	if cfg.GeminiAPIKey != "" {
+		geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
+		providers["gemini"] = geminiClient.AnalyzeCandidate
+		log.Println("Gemini API client initialized")
+	}
+
+	ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
+	providers["ollama"] = ollamaClient.AnalyzeCandidate
+	log.Printf("Ollama client initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
+
+	defaultProvider := cfg.AIProvider
+	if _, ok := providers[defaultProvider]; !ok {
+		// fallback to whatever is available
+		for k := range providers {
+			defaultProvider = k
+			break
 		}
 	}
+	log.Printf("Default AI provider: %s", defaultProvider)
 
 	// Router
 	router := gin.Default()
@@ -88,7 +91,7 @@ func main() {
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
 		protected.GET("/candidates/:id/analysis-status", handlers.GetCandidateAnalysisStatus())
 		protected.DELETE("/candidates/:id/analysis", handlers.DeleteAnalysis(pool))
-		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, analyzeFunc))
+		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, providers, defaultProvider))
 		protected.DELETE("/analyses", handlers.DeleteAllAnalyses(pool))
 
 		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))
@@ -96,8 +99,10 @@ func main() {
 
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
 
-		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, analyzeFunc))
+		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, defaultProvider))
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
+
+		protected.GET("/ai-providers", handlers.GetAIProviders(providers, defaultProvider))
 	}
 
 	log.Printf("Server starting on port %s", cfg.Port)

@@ -9,6 +9,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ScoreRadar from "@/components/ScoreRadar";
 import DecisionButtons from "@/components/DecisionButtons";
 import KeyStrengthsRedFlags from "@/components/KeyStrengthsRedFlags";
+import ProviderSelector from "@/components/ProviderSelector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,26 @@ export default function CandidateDetailPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [deletingAnalysis, setDeletingAnalysis] = useState(false);
   const [expandedScore, setExpandedScore] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string>("");
+  const [providers, setProviders] = useState<string[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    api.get("/ai-providers").then((res) => {
+      setProviders(res.data.providers);
+      const saved = localStorage.getItem("ai_provider");
+      if (saved && res.data.providers.includes(saved)) {
+        setProvider(saved);
+      } else {
+        setProvider(res.data.default_provider);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const selectProvider = (p: string) => {
+    setProvider(p);
+    localStorage.setItem("ai_provider", p);
+  };
 
   // Poll analysis status while analyzing
   const startPolling = () => {
@@ -86,7 +106,11 @@ export default function CandidateDetailPage() {
     setAnalysisError(null);
     setAnalyzing(true);
     try {
-      await api.post(`/candidates/${params.id}/analyze${force ? "?force=true" : ""}`);
+      const params2 = new URLSearchParams();
+      if (force) params2.set("force", "true");
+      if (provider) params2.set("provider", provider);
+      const qs = params2.toString();
+      await api.post(`/candidates/${params.id}/analyze${qs ? `?${qs}` : ""}`);
       startPolling();
     } catch {
       setAnalyzing(false);
@@ -134,20 +158,25 @@ export default function CandidateDetailPage() {
           <h1 className="text-2xl font-bold">{detail.full_name}</h1>
           <StatusBadge status={detail.status} />
         </div>
-        {a ? (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
-              {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Re-analyzing...</> : "Re-analyze"}
+        <div className="flex items-center gap-3">
+          {providers.length > 1 && (
+            <ProviderSelector value={provider} onChange={selectProvider} />
+          )}
+          {a ? (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
+                {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Re-analyzing...</> : "Re-analyze"}
+              </Button>
+              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={handleDeleteAnalysis} disabled={deletingAnalysis}>
+                {deletingAnalysis ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+              </Button>
+            </div>
+          ) : (
+            <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => handleAnalyze()} disabled={analyzing}>
+              {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Analyzing...</> : <><Sparkles size={16} className="mr-2" /> Analyze with AI</>}
             </Button>
-            <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={handleDeleteAnalysis} disabled={deletingAnalysis}>
-              {deletingAnalysis ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-            </Button>
-          </div>
-        ) : (
-          <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => handleAnalyze()} disabled={analyzing}>
-            {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Analyzing...</> : <><Sparkles size={16} className="mr-2" /> Analyze with AI</>}
-          </Button>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
