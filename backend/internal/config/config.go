@@ -10,8 +10,7 @@ type Config struct {
 	Port         string
 	DatabaseURL  string
 	JWTSecret    string
-	GeminiAPIKey  string
-	GeminiAPIKeys string // comma-separated list for round-robin
+	GeminiAPIKey string
 	AllowOrigins string
 	AIProvider   string // "gemini", "ollama", or "groq"
 	OllamaURL    string
@@ -26,8 +25,7 @@ func Load() *Config {
 		Port:         getEnv("PORT", "8080"),
 		DatabaseURL:  getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/invisionu?sslmode=disable"),
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
-		GeminiAPIKey:  getEnv("GEMINI_API_KEY", ""),
-		GeminiAPIKeys: getEnv("GEMINI_API_KEYS", ""),
+		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		AllowOrigins: getEnv("ALLOW_ORIGINS", "http://localhost:3000"),
 		AIProvider:   getEnv("AI_PROVIDER", "gemini"),
 		OllamaURL:    getEnv("OLLAMA_URL", "http://localhost:11434"),

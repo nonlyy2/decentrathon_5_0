@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { LayoutDashboard, Users, BarChart3, LogOut } from "lucide-react";
-
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/candidates", label: "Candidates", icon: Users },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-];
+import { useI18n } from "@/lib/i18n";
+import { LayoutDashboard, Users, LogOut } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { lang, setLang, t } = useI18n();
+
+  const navItems = [
+    { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
+    { href: "/candidates", label: t("nav.candidates"), icon: Users },
+  ];
 
   return (
     <div className="w-64 h-screen bg-slate-900 text-white flex flex-col fixed left-0 top-0">
@@ -42,15 +43,35 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-slate-800">
-        <div className="text-sm text-slate-400 mb-2 truncate">{user?.email}</div>
-        <div className="text-xs text-slate-500 mb-3 capitalize">{user?.role}</div>
+      <div className="p-4 border-t border-slate-800 space-y-3">
+        {/* Language toggle */}
+        <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+          <button
+            onClick={() => setLang("en")}
+            className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
+              lang === "en" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            🇬🇧 EN
+          </button>
+          <button
+            onClick={() => setLang("ru")}
+            className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
+              lang === "ru" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            🇷🇺 RU
+          </button>
+        </div>
+
+        <div className="text-sm text-slate-400 truncate">{user?.email}</div>
+        <div className="text-xs text-slate-500 capitalize">{user?.role}</div>
         <button
           onClick={logout}
           className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
         >
           <LogOut size={16} />
-          Sign Out
+          {t("nav.signout")}
         </button>
       </div>
     </div>

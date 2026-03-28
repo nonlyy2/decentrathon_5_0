@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFetch } from "@/lib/hooks";
 import api from "@/lib/api";
@@ -13,7 +13,8 @@ import ProviderSelector from "@/components/ProviderSelector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -40,7 +41,7 @@ const scoreLabels = [
 export default function CandidateDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { data: detail, loading, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
+  const { data: detail, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -48,7 +49,30 @@ export default function CandidateDetailPage() {
   const [expandedScore, setExpandedScore] = useState<string | null>(null);
   const [provider, setProvider] = useState<string>("");
   const [providers, setProviders] = useState<string[]>([]);
+  const [comments, setComments] = useState<{ id: number; user_email: string; content: string; created_at: string }[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchComments = useCallback(() => {
+    api.get(`/candidates/${params.id}/comments`).then((res) => setComments(res.data)).catch(() => {});
+  }, [params.id]);
+
+  useEffect(() => { fetchComments(); }, [fetchComments]);
+
+  const handlePostComment = async () => {
+    if (!newComment.trim()) return;
+    setPostingComment(true);
+    try {
+      await api.post(`/candidates/${params.id}/comments`, { content: newComment });
+      setNewComment("");
+      fetchComments();
+    } catch {
+      toast.error("Failed to post comment");
+    } finally {
+      setPostingComment(false);
+    }
+  };
 
   useEffect(() => {
     api.get("/ai-providers").then((res) => {
@@ -133,7 +157,7 @@ export default function CandidateDetailPage() {
     }
   };
 
-  if (loading || !detail) {
+  if (!detail) {
     return (
       <div className="space-y-4">
         <div className="h-8 bg-slate-200 rounded animate-pulse w-48" />
@@ -363,6 +387,49 @@ export default function CandidateDetailPage() {
                           {new Date(d.decided_at).toLocaleDateString()}
                         </p>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Comments */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare size={16} /> Comments ({comments.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="Add a comment..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  rows={2}
+                  className="text-sm"
+                />
+                <Button
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 self-end"
+                  disabled={!newComment.trim() || postingComment}
+                  onClick={handlePostComment}
+                >
+                  {postingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                </Button>
+              </div>
+              {comments.length > 0 && (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {comments.map((cm) => (
+                    <div key={cm.id} className="border-l-2 border-purple-200 pl-3 py-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-purple-600">{cm.user_email}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(cm.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700 mt-0.5">{cm.content}</p>
                     </div>
                   ))}
                 </div>

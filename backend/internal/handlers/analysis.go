@@ -324,7 +324,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		batchStatus.Errors = []string{}
 		batchStatus.Unlock()
 
-		const batchSize = 5
+		const batchSize = 10
 
 		go func() {
 			defer func() {

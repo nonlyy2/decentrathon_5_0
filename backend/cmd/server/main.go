@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"strings"
 
 	"github.com/assylkhan/invisionu-backend/internal/config"
 	"github.com/assylkhan/invisionu-backend/internal/database"
@@ -49,24 +48,11 @@ func main() {
 	providers := make(handlers.AIProviders)
 	batchProviders := make(handlers.AIBatchProviders)
 
-	if cfg.GeminiAPIKeys != "" {
-		var keys []string
-		for _, k := range strings.Split(cfg.GeminiAPIKeys, ",") {
-			if k = strings.TrimSpace(k); k != "" {
-				keys = append(keys, k)
-			}
-		}
-		if len(keys) > 0 {
-			pool := gemini.NewPool(keys)
-			providers["gemini"] = pool.AnalyzeCandidate
-			batchProviders["gemini"] = pool.AnalyzeBatch
-			log.Printf("Gemini initialized with %d API keys (round-robin, batch enabled)", len(keys))
-		}
-	} else if cfg.GeminiAPIKey != "" {
+	if cfg.GeminiAPIKey != "" {
 		geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
 		providers["gemini"] = geminiClient.AnalyzeCandidate
 		batchProviders["gemini"] = geminiClient.AnalyzeBatch
-		log.Println("Gemini API client initialized (single key, batch enabled)")
+		log.Printf("Gemini initialized (model=%s, tier-1, no rate limit)", gemini.ModelName)
 	}
 
 	ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
@@ -122,12 +108,18 @@ func main() {
 		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))
 		protected.GET("/candidates/:id/decisions", handlers.GetDecisions(pool))
 
+		protected.GET("/candidates/:id/comments", handlers.GetComments(pool))
+		protected.POST("/candidates/:id/comments", handlers.AddComment(pool))
+		protected.DELETE("/comments/:commentId", handlers.DeleteComment(pool))
+
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
 
 		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, batchProviders, defaultProvider))
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
 
 		protected.GET("/ai-providers", handlers.GetAIProviders(providers, defaultProvider))
+		protected.GET("/candidates/export/csv", handlers.ExportCandidatesCSV(pool))
+		protected.POST("/candidates/bulk-decision", handlers.BulkDecision(pool))
 	}
 
 	log.Printf("Server starting on port %s", cfg.Port)

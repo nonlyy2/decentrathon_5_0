@@ -65,6 +65,14 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			decided_by INTEGER REFERENCES users(id),
 			decided_at TIMESTAMP DEFAULT NOW()
 		)`,
+		`CREATE TABLE IF NOT EXISTS comments (
+			id SERIAL PRIMARY KEY,
+			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+			user_id INTEGER REFERENCES users(id),
+			content TEXT NOT NULL,
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_comments_candidate ON comments(candidate_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_analyses_candidate ON analyses(candidate_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_analyses_final_score ON analyses(final_score DESC)`,
