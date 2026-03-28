@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { CandidateListItem, DashboardStats } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
@@ -16,18 +17,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react";
 
-const STATUS_TABS = [
-  { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "analyzed", label: "Analyzed" },
-  { value: "shortlisted", label: "Shortlisted" },
-  { value: "waitlisted", label: "Waitlisted" },
-  { value: "rejected", label: "Rejected" },
-];
-
 export default function CandidatesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { t } = useI18n();
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -49,6 +42,15 @@ export default function CandidatesPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
   const { user } = useAuth();
+
+  const STATUS_TABS = [
+    { value: "all", label: t("cand.all") },
+    { value: "pending", label: t("status.pending") },
+    { value: "analyzed", label: t("status.analyzed") },
+    { value: "shortlisted", label: t("status.shortlisted") },
+    { value: "waitlisted", label: t("status.waitlisted") },
+    { value: "rejected", label: t("status.rejected") },
+  ];
 
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
@@ -171,7 +173,6 @@ export default function CandidatesPage() {
         const res = await api.get("/analyze-all/status");
         const { running, processed, total, errors } = res.data;
         setBatchProgress({ done: processed, total });
-        // Refresh list to show newly analyzed candidates in real-time
         fetchCandidates();
         fetchCounts();
         if (!running) {
@@ -251,7 +252,7 @@ export default function CandidatesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Candidates</h1>
+        <h1 className="text-2xl font-bold">{t("cand.title")}</h1>
         <div className="flex items-center gap-3">
           {batchRunning && batchProgress && (
             <div className="flex items-center gap-2 text-sm text-purple-600">
@@ -275,7 +276,7 @@ export default function CandidatesPage() {
                 className="bg-purple-600 hover:bg-purple-700"
                 disabled={batchRunning}
               >
-                {batchRunning ? <><Loader2 size={14} className="animate-spin mr-2" /> Running...</> : "Analyze All Pending"}
+                {batchRunning ? <><Loader2 size={14} className="animate-spin mr-2" /> {t("cand.running")}</> : t("cand.analyze_all")}
               </Button>
               <Button
                 variant="outline"
@@ -293,7 +294,7 @@ export default function CandidatesPage() {
                   }
                 }}
               >
-                <Download size={14} className="mr-1" /> Export CSV
+                <Download size={14} className="mr-1" /> {t("cand.export")}
               </Button>
               <Button
                 variant="outline"
@@ -301,7 +302,7 @@ export default function CandidatesPage() {
                 onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
                 disabled={batchRunning}
               >
-                <Trash2 size={14} className="mr-1" /> Reset Analyses
+                <Trash2 size={14} className="mr-1" /> {t("cand.reset")}
               </Button>
             </div>
           )}
@@ -337,7 +338,7 @@ export default function CandidatesPage() {
 
       <div className="flex gap-4">
         <Input
-          placeholder="Search by name or email..."
+          placeholder={t("cand.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
@@ -347,25 +348,25 @@ export default function CandidatesPage() {
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg px-4 py-2">
-          <span className="text-sm font-medium text-purple-700">{selectedIds.size} selected</span>
+          <span className="text-sm font-medium text-purple-700">{selectedIds.size} {t("cand.selected")}</span>
           <div className="flex gap-2">
             <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("shortlist")}>
-              {bulkAction === "shortlist" ? <Loader2 size={14} className="animate-spin mr-1" /> : null} Shortlist
+              {bulkAction === "shortlist" ? <Loader2 size={14} className="animate-spin mr-1" /> : null} {t("dec.shortlist")}
             </Button>
             <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("waitlist")}>
-              Waitlist
+              {t("dec.waitlist")}
             </Button>
             <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("reject")}>
-              Reject
+              {t("dec.reject")}
             </Button>
           </div>
           {selectedIds.size >= 2 && (
             <Button size="sm" variant="outline" onClick={() => router.push(`/compare?ids=${Array.from(selectedIds).join(",")}`)}>
-              Compare ({selectedIds.size})
+              {t("cand.compare")} ({selectedIds.size})
             </Button>
           )}
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="ml-auto text-slate-500">
-            Clear
+            {t("cand.clear")}
           </Button>
         </div>
       )}
@@ -382,13 +383,13 @@ export default function CandidatesPage() {
                   className="rounded border-slate-300"
                 />
               </TableHead>
-              <SortableHead column="full_name" label="Name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
-              <TableHead>City</TableHead>
-              <SortableHead column="final_score" label="Score" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
-              <TableHead>Status</TableHead>
-              <SortableHead column="created_at" label="Created" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
-              <SortableHead column="analyzed_at" label="Analyzed" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
-              <TableHead>Model</TableHead>
+              <SortableHead column="full_name" label={t("cand.name")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <TableHead>{t("cand.city")}</TableHead>
+              <SortableHead column="final_score" label={t("cand.score")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <TableHead>{t("cand.status")}</TableHead>
+              <SortableHead column="created_at" label={t("cand.created")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <SortableHead column="analyzed_at" label={t("cand.analyzed_col")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <TableHead>{t("cand.model")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -403,7 +404,7 @@ export default function CandidatesPage() {
             ) : candidates.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No candidates found
+                  {t("cand.no_found")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -428,17 +429,17 @@ export default function CandidatesPage() {
                     />
                     <span className="relative z-20">{c.full_name}</span>
                   </TableCell>
-                  <TableCell className="relative z-20">{c.city || "—"}</TableCell>
+                  <TableCell className="relative z-20">{c.city || "\u2014"}</TableCell>
                   <TableCell className="relative z-20"><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
                   <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
                     {new Date(c.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
-                    {c.analyzed_at ? new Date(c.analyzed_at).toLocaleDateString() : "—"}
+                    {c.analyzed_at ? new Date(c.analyzed_at).toLocaleDateString() : "\u2014"}
                   </TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
-                    {c.model_used ? c.model_used.replace(/^(gemini|groq|ollama)\//, "") : "—"}
+                    {c.model_used ? c.model_used.replace(/^(gemini|groq|ollama)\//, "") : "\u2014"}
                   </TableCell>
                 </TableRow>
               ))
@@ -450,14 +451,14 @@ export default function CandidatesPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {page * limit + 1}-{Math.min((page + 1) * limit, total)} of {total}
+            {t("cand.showing")} {page * limit + 1}-{Math.min((page + 1) * limit, total)} {t("cand.of")} {total}
           </p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0}>
-              Previous
+              {t("cand.previous")}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages - 1}>
-              Next
+              {t("cand.next")}
             </Button>
           </div>
         </div>
@@ -466,29 +467,28 @@ export default function CandidatesPage() {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-red-600">Reset All Analyses</DialogTitle>
+            <DialogTitle className="text-red-600">{t("del.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-slate-600">
-            This will delete AI analyses for all candidates that have <strong>not</strong> been shortlisted, rejected, or waitlisted.
-            Their status will reset to <strong>Pending</strong>.
+            {t("del.desc")}
           </p>
           <p className="text-sm text-slate-500 mt-2">
-            To confirm, type <span className="font-mono font-bold text-red-600">удалить</span> below:
+            {t("del.confirm")} <span className="font-mono font-bold text-red-600">\u0443\u0434\u0430\u043b\u0438\u0442\u044c</span>:
           </p>
           <Input
             value={deleteConfirmText}
             onChange={(e) => setDeleteConfirmText(e.target.value)}
-            placeholder="удалить"
+            placeholder="\u0443\u0434\u0430\u043b\u0438\u0442\u044c"
             className="mt-1"
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>{t("del.cancel")}</Button>
             <Button
               className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={deleteConfirmText !== "удалить" || deleting}
+              disabled={deleteConfirmText !== "\u0443\u0434\u0430\u043b\u0438\u0442\u044c" || deleting}
               onClick={handleDeleteAllAnalyses}
             >
-              {deleting ? <><Loader2 size={14} className="animate-spin mr-2" /> Deleting...</> : "Delete All"}
+              {deleting ? <><Loader2 size={14} className="animate-spin mr-2" /> {t("del.deleting")}</> : t("del.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

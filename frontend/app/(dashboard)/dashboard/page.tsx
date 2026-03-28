@@ -1,6 +1,7 @@
 "use client";
 
 import { useFetch } from "@/lib/hooks";
+import { useI18n } from "@/lib/i18n";
 import { DashboardStats } from "@/lib/types";
 import { Users, CheckCircle, Star, Clock, TrendingUp, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,13 @@ const SCORE_COLORS: Record<string, string> = {
   "80-100": "#22c55e",
 };
 
+const CATEGORY_KEYS: Record<string, string> = {
+  "Strong Recommend": "cat.strong_recommend",
+  Recommend: "cat.recommend",
+  Borderline: "cat.borderline",
+  "Not Recommended": "cat.not_recommended",
+};
+
 const CATEGORY_COLORS: Record<string, string> = {
   "Strong Recommend": "#22c55e",
   Recommend: "#3b82f6",
@@ -33,11 +41,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const { data: stats, loading } = useFetch<DashboardStats>("/stats");
+  const { t } = useI18n();
 
   if (loading || !stats) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">{t("dash.title")}</h1>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Card key={i}><CardContent className="p-4"><div className="h-16 bg-slate-200 rounded animate-pulse" /></CardContent></Card>
@@ -50,15 +59,15 @@ export default function DashboardPage() {
   const pureAnalyzed = stats.analyzed - stats.shortlisted - stats.rejected - stats.waitlisted;
 
   const statusData = [
-    { name: "Pending", value: stats.pending },
-    { name: "Analyzed", value: pureAnalyzed },
-    { name: "Shortlisted", value: stats.shortlisted },
-    { name: "Waitlisted", value: stats.waitlisted },
-    { name: "Rejected", value: stats.rejected },
+    { name: t("dash.pending"), value: stats.pending, key: "Pending" },
+    { name: t("dash.analyzed"), value: pureAnalyzed, key: "Analyzed" },
+    { name: t("dash.shortlisted"), value: stats.shortlisted, key: "Shortlisted" },
+    { name: t("dash.waitlisted"), value: stats.waitlisted, key: "Waitlisted" },
+    { name: t("dash.rejected"), value: stats.rejected, key: "Rejected" },
   ].filter((d) => d.value > 0);
 
   const categoryData = ["Strong Recommend", "Recommend", "Borderline", "Not Recommended"].map((cat) => ({
-    name: cat,
+    name: t(CATEGORY_KEYS[cat]),
     count: stats.category_counts[cat] || 0,
     color: CATEGORY_COLORS[cat],
   }));
@@ -72,17 +81,17 @@ export default function DashboardPage() {
     : "0";
 
   const statCards = [
-    { label: "Total", value: stats.total_candidates, icon: <Users size={18} />, color: "text-blue-600 bg-blue-50" },
-    { label: "Pending", value: stats.pending, icon: <Clock size={18} />, color: "text-slate-600 bg-slate-50" },
-    { label: "Analyzed", value: stats.analyzed, icon: <CheckCircle size={18} />, color: "text-blue-600 bg-blue-50" },
-    { label: "Shortlisted", value: stats.shortlisted, icon: <Star size={18} />, color: "text-green-600 bg-green-50" },
-    { label: "Waitlisted", value: stats.waitlisted, icon: <TrendingUp size={18} />, color: "text-yellow-600 bg-yellow-50" },
-    { label: "Rejected", value: stats.rejected, icon: <XCircle size={18} />, color: "text-red-600 bg-red-50" },
+    { label: t("dash.total"), value: stats.total_candidates, icon: <Users size={18} />, color: "text-blue-600 bg-blue-50" },
+    { label: t("dash.pending"), value: stats.pending, icon: <Clock size={18} />, color: "text-slate-600 bg-slate-50" },
+    { label: t("dash.analyzed"), value: stats.analyzed, icon: <CheckCircle size={18} />, color: "text-blue-600 bg-blue-50" },
+    { label: t("dash.shortlisted"), value: stats.shortlisted, icon: <Star size={18} />, color: "text-green-600 bg-green-50" },
+    { label: t("dash.waitlisted"), value: stats.waitlisted, icon: <TrendingUp size={18} />, color: "text-yellow-600 bg-yellow-50" },
+    { label: t("dash.rejected"), value: stats.rejected, icon: <XCircle size={18} />, color: "text-red-600 bg-red-50" },
   ];
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <h1 className="text-2xl font-bold">{t("dash.title")}</h1>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -104,21 +113,21 @@ export default function DashboardPage() {
         <Card>
           <CardContent className="p-5 text-center">
             <div className="text-4xl font-bold text-purple-600">
-              {stats.avg_score > 0 ? stats.avg_score.toFixed(1) : "—"}
+              {stats.avg_score > 0 ? stats.avg_score.toFixed(1) : "\u2014"}
             </div>
-            <div className="text-sm text-muted-foreground mt-1">Average AI Score</div>
+            <div className="text-sm text-muted-foreground mt-1">{t("dash.avg_score")}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5 text-center">
             <div className="text-4xl font-bold text-blue-600">{analysisRate}%</div>
-            <div className="text-sm text-muted-foreground mt-1">Analysis Rate</div>
+            <div className="text-sm text-muted-foreground mt-1">{t("dash.analysis_rate")}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5 text-center">
             <div className="text-4xl font-bold text-green-600">{conversionRate}%</div>
-            <div className="text-sm text-muted-foreground mt-1">Shortlist Rate</div>
+            <div className="text-sm text-muted-foreground mt-1">{t("dash.shortlist_rate")}</div>
           </CardContent>
         </Card>
       </div>
@@ -127,7 +136,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Status distribution pie */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Status Distribution</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("dash.status_dist")}</CardTitle></CardHeader>
           <CardContent>
             {statusData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
@@ -144,7 +153,7 @@ export default function DashboardPage() {
                     labelLine={false}
                   >
                     {statusData.map((entry) => (
-                      <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || "#8884d8"} />
+                      <Cell key={entry.key} fill={STATUS_COLORS[entry.key] || "#8884d8"} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -152,14 +161,14 @@ export default function DashboardPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t("dash.no_data")}</div>
             )}
           </CardContent>
         </Card>
 
         {/* Score distribution bar */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Score Distribution</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("dash.score_dist")}</CardTitle></CardHeader>
           <CardContent>
             {stats.score_distribution.some((b) => b.count > 0) ? (
               <ResponsiveContainer width="100%" height={260}>
@@ -176,7 +185,7 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No analysis data yet</div>
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t("dash.no_analysis")}</div>
             )}
           </CardContent>
         </Card>
@@ -186,7 +195,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category breakdown */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Recommendation Categories</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("dash.categories")}</CardTitle></CardHeader>
           <CardContent>
             {categoryData.some((c) => c.count > 0) ? (
               <div className="space-y-3 pt-2">
@@ -208,22 +217,22 @@ export default function DashboardPage() {
                 })}
               </div>
             ) : (
-              <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No analysis data yet</div>
+              <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">{t("dash.no_analysis")}</div>
             )}
           </CardContent>
         </Card>
 
         {/* Admissions funnel */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Admissions Funnel</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">{t("dash.funnel")}</CardTitle></CardHeader>
           <CardContent className="pt-2">
             <div className="space-y-3">
               {[
-                { label: "Applied", count: stats.total_candidates, color: "bg-slate-400" },
-                { label: "AI Analyzed", count: stats.analyzed, color: "bg-blue-500" },
-                { label: "Shortlisted", count: stats.shortlisted, color: "bg-green-500" },
-                { label: "Waitlisted", count: stats.waitlisted, color: "bg-yellow-500" },
-                { label: "Rejected", count: stats.rejected, color: "bg-red-500" },
+                { label: t("funnel.applied"), count: stats.total_candidates, color: "bg-slate-400" },
+                { label: t("funnel.ai_analyzed"), count: stats.analyzed, color: "bg-blue-500" },
+                { label: t("funnel.shortlisted"), count: stats.shortlisted, color: "bg-green-500" },
+                { label: t("funnel.waitlisted"), count: stats.waitlisted, color: "bg-yellow-500" },
+                { label: t("funnel.rejected"), count: stats.rejected, color: "bg-red-500" },
               ].map((step) => {
                 const pct = stats.total_candidates > 0 ? (step.count / stats.total_candidates) * 100 : 0;
                 return (

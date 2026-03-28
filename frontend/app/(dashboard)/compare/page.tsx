@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { CandidateDetail } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
@@ -10,20 +11,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 
-const scoreFields = [
-  { key: "score_leadership", label: "Leadership" },
-  { key: "score_motivation", label: "Motivation" },
-  { key: "score_growth", label: "Growth" },
-  { key: "score_vision", label: "Vision" },
-  { key: "score_communication", label: "Communication" },
-];
-
 export default function ComparePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { t } = useI18n();
   const ids = (searchParams.get("ids") || "").split(",").filter(Boolean).map(Number);
   const [candidates, setCandidates] = useState<CandidateDetail[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const scoreFields = [
+    { key: "score_leadership", label: t("score.leadership") },
+    { key: "score_motivation", label: t("score.motivation") },
+    { key: "score_growth", label: t("score.growth") },
+    { key: "score_vision", label: t("score.vision") },
+    { key: "score_communication", label: t("score.communication") },
+  ];
 
   useEffect(() => {
     if (ids.length < 2) return;
@@ -38,9 +40,9 @@ export default function ComparePage() {
   if (ids.length < 2) {
     return (
       <div className="text-center py-20">
-        <p className="text-muted-foreground">Select at least 2 candidates to compare.</p>
+        <p className="text-muted-foreground">{t("compare.select_min")}</p>
         <Button variant="outline" className="mt-4" onClick={() => router.push("/candidates")}>
-          <ArrowLeft size={16} className="mr-2" /> Back to Candidates
+          <ArrowLeft size={16} className="mr-2" /> {t("compare.back")}
         </Button>
       </div>
     );
@@ -73,7 +75,7 @@ export default function ComparePage() {
         <Button variant="ghost" size="sm" onClick={() => router.push("/candidates")}>
           <ArrowLeft size={16} />
         </Button>
-        <h1 className="text-2xl font-bold">Compare Candidates</h1>
+        <h1 className="text-2xl font-bold">{t("compare.title")}</h1>
       </div>
 
       {/* Overview comparison */}
@@ -84,9 +86,9 @@ export default function ComparePage() {
               <h3 className="font-semibold text-lg">{c.full_name}</h3>
               <StatusBadge status={c.status} />
               <div className="flex justify-center gap-2 text-sm text-muted-foreground">
-                <span>{c.city || "—"}</span>
+                <span>{c.city || "\u2014"}</span>
                 <span>&middot;</span>
-                <span>{c.school || "—"}</span>
+                <span>{c.school || "\u2014"}</span>
               </div>
               {c.analysis ? (
                 <div className="pt-2">
@@ -94,7 +96,7 @@ export default function ComparePage() {
                   <ScoreBadge score={c.analysis.final_score} category={c.analysis.category} />
                 </div>
               ) : (
-                <p className="text-muted-foreground text-sm">Not analyzed</p>
+                <p className="text-muted-foreground text-sm">{t("compare.not_analyzed")}</p>
               )}
             </CardContent>
           </Card>
@@ -103,7 +105,7 @@ export default function ComparePage() {
 
       {/* Score breakdown comparison */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Score Comparison</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">{t("compare.scores")}</CardTitle></CardHeader>
         <CardContent>
           <div className="space-y-4">
             {scoreFields.map((sf) => {
@@ -140,14 +142,14 @@ export default function ComparePage() {
       <div className={`grid gap-4`} style={{ gridTemplateColumns: `repeat(${candidates.length}, 1fr)` }}>
         {candidates.map((c) => (
           <Card key={c.id}>
-            <CardHeader><CardTitle className="text-sm">{c.full_name} — Summary</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">{c.full_name} \u2014 {t("compare.summary")}</CardTitle></CardHeader>
             <CardContent>
               {c.analysis ? (
                 <div className="space-y-3 text-sm">
                   <p className="text-slate-700">{c.analysis.summary}</p>
                   {c.analysis.key_strengths.length > 0 && (
                     <div>
-                      <p className="text-xs font-medium text-green-600 mb-1">Strengths</p>
+                      <p className="text-xs font-medium text-green-600 mb-1">{t("compare.strengths")}</p>
                       <ul className="list-disc list-inside text-xs text-slate-600">
                         {c.analysis.key_strengths.map((s, i) => <li key={i}>{s}</li>)}
                       </ul>
@@ -155,7 +157,7 @@ export default function ComparePage() {
                   )}
                   {c.analysis.red_flags.length > 0 && (
                     <div>
-                      <p className="text-xs font-medium text-red-600 mb-1">Red Flags</p>
+                      <p className="text-xs font-medium text-red-600 mb-1">{t("compare.red_flags")}</p>
                       <ul className="list-disc list-inside text-xs text-slate-600">
                         {c.analysis.red_flags.map((f, i) => <li key={i}>{f}</li>)}
                       </ul>
@@ -163,7 +165,7 @@ export default function ComparePage() {
                   )}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-sm">Not analyzed yet</p>
+                <p className="text-muted-foreground text-sm">{t("compare.not_analyzed_yet")}</p>
               )}
             </CardContent>
           </Card>
