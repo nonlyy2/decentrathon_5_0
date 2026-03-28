@@ -1,5 +1,11 @@
 .env
+.env.local
+backend/.env
 
 tasks/
 
 .DS_Store
+*.exe
+tmp/
+node_modules/
+.next/
