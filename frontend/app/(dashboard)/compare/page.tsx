@@ -4,20 +4,47 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useAIProvider } from "@/lib/aiProvider";
 import { CandidateDetail } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Sparkles, Loader2, Trophy } from "lucide-react";
+import { toast } from "sonner";
+
+type AIPickResult = { id: number; name: string; score: number; reason: string };
 
 export default function ComparePage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { t } = useI18n();
+  const { provider } = useAIProvider();
   const ids = (searchParams.get("ids") || "").split(",").filter(Boolean).map(Number);
   const [candidates, setCandidates] = useState<CandidateDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectCount, setSelectCount] = useState(1);
+  const [aiPicking, setAiPicking] = useState(false);
+  const [aiResult, setAiResult] = useState<{ selected: AIPickResult[]; overall_reasoning: string } | null>(null);
+
+  const handleAIPick = async () => {
+    setAiPicking(true);
+    setAiResult(null);
+    try {
+      const qs = provider ? `?provider=${provider}` : "";
+      const res = await api.post(`/candidates/ai-recommend${qs}`, {
+        candidate_ids: ids,
+        select_count: selectCount,
+      });
+      setAiResult(res.data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg || "AI recommendation failed");
+    } finally {
+      setAiPicking(false);
+    }
+  };
 
   const scoreFields = [
     { key: "score_leadership", label: t("score.leadership") },
@@ -142,7 +169,7 @@ export default function ComparePage() {
       <div className={`grid gap-4`} style={{ gridTemplateColumns: `repeat(${candidates.length}, 1fr)` }}>
         {candidates.map((c) => (
           <Card key={c.id}>
-            <CardHeader><CardTitle className="text-sm">{c.full_name} \u2014 {t("compare.summary")}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">{c.full_name} — {t("compare.summary")}</CardTitle></CardHeader>
             <CardContent>
               {c.analysis ? (
                 <div className="space-y-3 text-sm">
@@ -171,6 +198,66 @@ export default function ComparePage() {
           </Card>
         ))}
       </div>
+
+      {/* AI Selection Assistant */}
+      <Card className="border-purple-200 bg-purple-50/50">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2 text-purple-700">
+            <Sparkles size={16} /> {t("compare.ai_pick_title")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-600">{t("compare.ai_pick_desc")}</span>
+            <Input
+              type="number"
+              min={1}
+              max={ids.length - 1}
+              value={selectCount}
+              onChange={(e) => setSelectCount(Math.max(1, Math.min(ids.length - 1, Number(e.target.value))))}
+              className="w-20 text-center"
+            />
+            <span className="text-sm text-slate-400">/ {ids.length}</span>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 ml-2"
+              onClick={handleAIPick}
+              disabled={aiPicking}
+            >
+              {aiPicking
+                ? <><Loader2 size={14} className="animate-spin mr-2" />{t("compare.ai_picking")}</>
+                : <><Sparkles size={14} className="mr-2" />{t("compare.ai_pick_btn")}</>}
+            </Button>
+          </div>
+
+          {aiResult && (
+            <div className="space-y-3 pt-2">
+              <p className="text-sm font-semibold text-purple-700 flex items-center gap-1">
+                <Trophy size={14} /> {t("compare.ai_result_title")}
+              </p>
+              <div className="space-y-2">
+                {aiResult.selected.map((item, i) => (
+                  <div key={item.id} className="flex items-start gap-3 bg-white rounded-lg border border-purple-100 p-3">
+                    <span className="text-lg font-bold text-purple-400 w-6 text-center">#{i + 1}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{item.name}</span>
+                        <span className="text-xs text-purple-600 font-semibold">{item.score.toFixed(1)}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">{item.reason}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {aiResult.overall_reasoning && (
+                <div className="bg-white rounded-lg border border-purple-100 p-3">
+                  <p className="text-xs font-medium text-purple-600 mb-1">{t("compare.ai_overall")}</p>
+                  <p className="text-sm text-slate-600">{aiResult.overall_reasoning}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

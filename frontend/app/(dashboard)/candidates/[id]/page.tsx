@@ -4,13 +4,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFetch } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n";
+import { useAIProvider } from "@/lib/aiProvider";
 import api from "@/lib/api";
 import { CandidateDetail } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreRadar from "@/components/ScoreRadar";
 import DecisionButtons from "@/components/DecisionButtons";
 import KeyStrengthsRedFlags from "@/components/KeyStrengthsRedFlags";
-import ProviderSelector from "@/components/ProviderSelector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,13 +36,12 @@ export default function CandidateDetailPage() {
   const router = useRouter();
   const { t } = useI18n();
   const { data: detail, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
+  const { provider, setProvider } = useAIProvider();
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [deletingAnalysis, setDeletingAnalysis] = useState(false);
   const [expandedScore, setExpandedScore] = useState<string | null>(null);
-  const [provider, setProvider] = useState<string>("");
-  const [providers, setProviders] = useState<string[]>([]);
   const [comments, setComments] = useState<{ id: number; user_email: string; content: string; created_at: string }[]>([]);
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
@@ -74,23 +73,6 @@ export default function CandidateDetailPage() {
     } finally {
       setPostingComment(false);
     }
-  };
-
-  useEffect(() => {
-    api.get("/ai-providers").then((res) => {
-      setProviders(res.data.providers);
-      const saved = localStorage.getItem("ai_provider");
-      if (saved && res.data.providers.includes(saved)) {
-        setProvider(saved);
-      } else {
-        setProvider(res.data.default_provider);
-      }
-    }).catch(() => {});
-  }, []);
-
-  const selectProvider = (p: string) => {
-    setProvider(p);
-    localStorage.setItem("ai_provider", p);
   };
 
   // Poll analysis status while analyzing
@@ -185,9 +167,25 @@ export default function CandidateDetailPage() {
           <StatusBadge status={detail.status} />
         </div>
         <div className="flex items-center gap-3">
-          {providers.length > 1 && (
-            <ProviderSelector value={provider} onChange={selectProvider} />
-          )}
+          {/* Provider toggle */}
+          <div className="flex items-center gap-1 bg-slate-100 border rounded-lg p-1">
+            <button
+              onClick={() => setProvider("gemini")}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                provider === "gemini" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ☁ Gemini
+            </button>
+            <button
+              onClick={() => setProvider("ollama")}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                provider === "ollama" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              ⚙ Ollama
+            </button>
+          </div>
           {a ? (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>

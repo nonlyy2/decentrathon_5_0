@@ -2,12 +2,13 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/assylkhan/invisionu-backend/internal/config"
 	"github.com/assylkhan/invisionu-backend/internal/database"
 	"github.com/assylkhan/invisionu-backend/internal/gemini"
-	"github.com/assylkhan/invisionu-backend/internal/groq"
 	"github.com/assylkhan/invisionu-backend/internal/handlers"
 	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/assylkhan/invisionu-backend/internal/ollama"
@@ -66,24 +67,24 @@ func main() {
 	// AI clients — create all available providers
 	providers := make(handlers.AIProviders)
 	batchProviders := make(handlers.AIBatchProviders)
+	textGens := make(handlers.AITextGenerators)
 
 	if cfg.GeminiAPIKey != "" {
 		geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
 		providers["gemini"] = geminiClient.AnalyzeCandidate
 		batchProviders["gemini"] = geminiClient.AnalyzeBatch
+		textGens["gemini"] = geminiClient.GenerateText
 		log.Printf("Gemini initialized (model=%s, tier-1, no rate limit)", gemini.ModelName)
 	}
 
 	ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
 	providers["ollama"] = ollamaClient.AnalyzeCandidate
 	batchProviders["ollama"] = ollamaClient.AnalyzeBatch
-	log.Printf("Ollama client initialized (url=%s, model=%s, batch enabled)", cfg.OllamaURL, cfg.OllamaModel)
-
-	if cfg.GroqAPIKey != "" {
-		groqClient := groq.NewClient(cfg.GroqAPIKey, cfg.GroqModel)
-		providers["groq"] = groqClient.AnalyzeCandidate
-		batchProviders["groq"] = groqClient.AnalyzeBatch
-		log.Printf("Groq client initialized (model=%s, batch enabled)", cfg.GroqModel)
+	textGens["ollama"] = ollamaClient.GenerateText
+	if isOllamaAvailable(cfg.OllamaURL) {
+		log.Printf("Ollama initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
+	} else {
+		log.Printf("Ollama registered but not reachable at %s — will show in UI, analysis will fail if not running", cfg.OllamaURL)
 	}
 
 	defaultProvider := cfg.AIProvider
@@ -136,6 +137,7 @@ func main() {
 
 		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, batchProviders, defaultProvider))
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
+		protected.POST("/candidates/ai-recommend", handlers.RecommendCandidates(pool, textGens, defaultProvider))
 
 		protected.GET("/ai-providers", handlers.GetAIProviders(providers, defaultProvider))
 		protected.GET("/candidates/export/csv", handlers.ExportCandidatesCSV(pool))
@@ -146,4 +148,15 @@ func main() {
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+// isOllamaAvailable checks if the Ollama service is reachable
+func isOllamaAvailable(baseURL string) bool {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(baseURL + "/api/version")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == 200
 }

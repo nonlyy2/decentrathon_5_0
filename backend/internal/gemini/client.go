@@ -69,11 +69,15 @@ func NewClient(apiKey string) *Client {
 }
 
 func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string) (string, error) {
-	return c.generate(ctx, systemPrompt, userMessage, 4096)
+	return c.generate(ctx, systemPrompt, userMessage, 2048)
 }
 
 func (c *Client) GenerateLarge(ctx context.Context, systemPrompt, userMessage string) (string, error) {
-	return c.generate(ctx, systemPrompt, userMessage, 8192)
+	return c.generate(ctx, systemPrompt, userMessage, 24576)
+}
+
+func (c *Client) GenerateText(ctx context.Context, systemPrompt, userMessage string) (string, error) {
+	return c.generate(ctx, systemPrompt, userMessage, 2048)
 }
 
 func (c *Client) generate(ctx context.Context, systemPrompt, userMessage string, maxTokens int) (string, error) {

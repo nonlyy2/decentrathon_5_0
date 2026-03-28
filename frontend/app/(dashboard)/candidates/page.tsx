@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
@@ -9,13 +9,11 @@ import { useI18n } from "@/lib/i18n";
 import { CandidateListItem, DashboardStats } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
-import ProviderSelector from "@/components/ProviderSelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react";
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 export default function CandidatesPage() {
   const searchParams = useSearchParams();
@@ -28,18 +26,10 @@ export default function CandidatesPage() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [page, setPage] = useState(Number(searchParams.get("page")) || 0);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [batchRunning, setBatchRunning] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [provider, setProvider] = useState<string>("");
-  const [providers, setProviders] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState(searchParams.get("sort") || "created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">((searchParams.get("order") as "asc" | "desc") || "desc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
   const { user } = useAuth();
 
@@ -99,23 +89,6 @@ export default function CandidatesPage() {
     router.replace(`/candidates${qs ? `?${qs}` : ""}`, { scroll: false });
   }, [status, search, page, sortBy, sortOrder, router]);
 
-  useEffect(() => {
-    api.get("/ai-providers").then((res) => {
-      setProviders(res.data.providers);
-      const saved = localStorage.getItem("ai_provider");
-      if (saved && res.data.providers.includes(saved)) {
-        setProvider(saved);
-      } else {
-        setProvider(res.data.default_provider);
-      }
-    }).catch(() => {});
-  }, []);
-
-  const selectProvider = (p: string) => {
-    setProvider(p);
-    localStorage.setItem("ai_provider", p);
-  };
-
   const fetchCounts = useCallback(async () => {
     try {
       const res = await api.get<DashboardStats>("/stats");
@@ -166,77 +139,6 @@ export default function CandidatesPage() {
     setPage(0);
   }, [status, search]);
 
-  const startBatchPoll = useCallback(() => {
-    if (pollRef.current) return;
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await api.get("/analyze-all/status");
-        const { running, processed, total, errors } = res.data;
-        setBatchProgress({ done: processed, total });
-        fetchCandidates();
-        fetchCounts();
-        if (!running) {
-          clearInterval(pollRef.current!);
-          pollRef.current = null;
-          setBatchRunning(false);
-          setBatchProgress(null);
-          const errCount = Array.isArray(errors) ? errors.length : 0;
-          const successCount = processed - errCount;
-          if (errCount === 0) {
-            toast.success(`Batch analysis complete: ${successCount}/${processed} analyzed`);
-          } else if (successCount === 0) {
-            toast.error(`Batch failed: all ${errCount} candidates errored (check API limits)`);
-          } else {
-            toast.warning(`Batch done: ${successCount} analyzed, ${errCount} failed`);
-          }
-        }
-      } catch {
-        clearInterval(pollRef.current!);
-        pollRef.current = null;
-        setBatchRunning(false);
-      }
-    }, 3000);
-  }, [fetchCandidates, fetchCounts]);
-
-  const handleAnalyzeAll = async () => {
-    try {
-      const qs = provider ? `?provider=${provider}` : "";
-      const res = await api.post(`/analyze-all${qs}`);
-      if (res.data.count === 0) {
-        toast.info("No pending candidates to analyze");
-        return;
-      }
-      toast.success(`Analysis started for ${res.data.count} candidates`);
-      setBatchRunning(true);
-      setBatchProgress({ done: 0, total: res.data.count });
-      startBatchPoll();
-    } catch {
-      toast.error("Failed to start batch analysis");
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
-
-  const handleDeleteAllAnalyses = async () => {
-    setDeleting(true);
-    try {
-      const res = await api.delete("/analyses");
-      toast.success(`Deleted ${res.data.deleted} analyses`);
-      setDeleteDialogOpen(false);
-      setDeleteConfirmText("");
-      fetchCandidates();
-      fetchCounts();
-    } catch {
-      toast.error("Failed to delete analyses");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const handleSort = (column: string) => {
     if (sortBy === column) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -266,45 +168,10 @@ export default function CandidatesPage() {
               </div>
             </div>
           )}
-          {providers.length > 1 && (
-            <ProviderSelector value={provider} onChange={selectProvider} />
-          )}
           {user?.role === "admin" && (
-            <div className="flex gap-2">
-              <Button
-                onClick={handleAnalyzeAll}
-                className="bg-purple-600 hover:bg-purple-700"
-                disabled={batchRunning}
-              >
-                {batchRunning ? <><Loader2 size={14} className="animate-spin mr-2" /> {t("cand.running")}</> : t("cand.analyze_all")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    const res = await api.get("/candidates/export/csv", { responseType: "blob" });
-                    const url = window.URL.createObjectURL(new Blob([res.data]));
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `candidates_${new Date().toISOString().slice(0, 10)}.csv`;
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                  } catch {
-                    toast.error("Failed to export CSV");
-                  }
-                }}
-              >
-                <Download size={14} className="mr-1" /> {t("cand.export")}
-              </Button>
-              <Button
-                variant="outline"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
-                disabled={batchRunning}
-              >
-                <Trash2 size={14} className="mr-1" /> {t("cand.reset")}
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>
+              {t("nav.admin")}
+            </Button>
           )}
         </div>
       </div>
@@ -433,13 +300,19 @@ export default function CandidatesPage() {
                   <TableCell className="relative z-20"><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
                   <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
-                    {new Date(c.created_at).toLocaleDateString()}
+                    <div>{new Date(c.created_at).toLocaleDateString()}</div>
+                    <div className="text-xs">{new Date(c.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
                   </TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
-                    {c.analyzed_at ? new Date(c.analyzed_at).toLocaleDateString() : "\u2014"}
+                    {c.analyzed_at ? (
+                      <>
+                        <div>{new Date(c.analyzed_at).toLocaleDateString()}</div>
+                        <div className="text-xs">{new Date(c.analyzed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                      </>
+                    ) : "\u2014"}
                   </TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
-                    {c.model_used ? c.model_used.replace(/^(gemini|groq|ollama)\//, "") : "\u2014"}
+                    {c.model_used ? c.model_used.replace(/^(gemini|ollama)\//, "") : "\u2014"}
                   </TableCell>
                 </TableRow>
               ))
@@ -464,35 +337,6 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-red-600">{t("del.title")}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-slate-600">
-            {t("del.desc")}
-          </p>
-          <p className="text-sm text-slate-500 mt-2">
-            {t("del.confirm")} <span className="font-mono font-bold text-red-600">\u0443\u0434\u0430\u043b\u0438\u0442\u044c</span>:
-          </p>
-          <Input
-            value={deleteConfirmText}
-            onChange={(e) => setDeleteConfirmText(e.target.value)}
-            placeholder="\u0443\u0434\u0430\u043b\u0438\u0442\u044c"
-            className="mt-1"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>{t("del.cancel")}</Button>
-            <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={deleteConfirmText !== "\u0443\u0434\u0430\u043b\u0438\u0442\u044c" || deleting}
-              onClick={handleDeleteAllAnalyses}
-            >
-              {deleting ? <><Loader2 size={14} className="animate-spin mr-2" /> {t("del.deleting")}</> : t("del.delete")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

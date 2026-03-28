@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -324,7 +325,8 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		batchStatus.Errors = []string{}
 		batchStatus.Unlock()
 
-		const batchSize = 5
+		const batchSize = 10
+		const maxConcurrent = 3
 
 		go func() {
 			defer func() {
@@ -339,99 +341,227 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 					strings.Contains(msg, "rate-limited") || strings.Contains(msg, "rate limit")
 			}
 
-			processedCount := 0
+			// Split into batches
+			var batches [][]models.Candidate
 			for i := 0; i < len(candidates); i += batchSize {
 				end := i + batchSize
 				if end > len(candidates) {
 					end = len(candidates)
 				}
-				batch := candidates[i:end]
+				batches = append(batches, candidates[i:end])
+			}
 
-				ctx := context.Background()
-				stopped := false
+			type batchResult struct {
+				analyses  []*models.Analysis
+				batch     []models.Candidate
+				err       error
+				batchIdx  int
+			}
 
-				if batchFunc != nil {
-					// Try batch processing
-					analyses, err := batchFunc(ctx, batch)
-					if err != nil {
-						if isRateLimited(err) {
-							batchStatus.Lock()
-							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("rate limit at batch starting candidate %d: %v", batch[0].ID, err))
-							batchStatus.Unlock()
-							log.Printf("Batch stopped: rate limit hit at batch %d-%d", i+1, end)
-							stopped = true
-						} else {
-							// Batch parse/API error — fall back to individual
-							log.Printf("Batch request failed (%v), falling back to individual for %d candidates", err, len(batch))
-							for _, cand := range batch {
-								a, err2 := analyzeFunc(ctx, &cand)
-								processedCount++
-								if err2 != nil {
-									batchStatus.Lock()
-									batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", cand.ID, err2))
-									batchStatus.Unlock()
-									if isRateLimited(err2) {
-										stopped = true
-										break
-									}
-									continue
-								}
-								if err2 = SaveAnalysis(ctx, pool, a); err2 != nil {
-									batchStatus.Lock()
-									batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", cand.ID, err2))
-									batchStatus.Unlock()
-								}
-							}
-						}
+			sem := make(chan struct{}, maxConcurrent)
+			results := make(chan batchResult, len(batches))
+			rateLimitHit := false
+
+			var wg sync.WaitGroup
+			for idx, b := range batches {
+				if rateLimitHit {
+					break
+				}
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(bIdx int, batch []models.Candidate) {
+					defer wg.Done()
+					defer func() { <-sem }()
+					ctx := context.Background()
+					if batchFunc != nil {
+						analyses, err := batchFunc(ctx, batch)
+						results <- batchResult{analyses: analyses, batch: batch, err: err, batchIdx: bIdx}
 					} else {
-						for j, a := range analyses {
-							processedCount++
-							if a == nil {
+						var analyses []*models.Analysis
+						for i := range batch {
+							a, err := analyzeFunc(ctx, &batch[i])
+							if err != nil {
+								results <- batchResult{err: err, batch: batch[i : i+1], batchIdx: bIdx}
+								if isRateLimited(err) {
+									return
+								}
 								continue
 							}
-							if err2 := SaveAnalysis(ctx, pool, a); err2 != nil {
+							analyses = append(analyses, a)
+						}
+						results <- batchResult{analyses: analyses, batch: batch, err: nil, batchIdx: bIdx}
+					}
+				}(idx, b)
+			}
+
+			// Close results after all goroutines finish
+			go func() {
+				wg.Wait()
+				close(results)
+			}()
+
+			processedCount := 0
+			for r := range results {
+				if r.err != nil {
+					if isRateLimited(r.err) {
+						rateLimitHit = true
+						batchStatus.Lock()
+						batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("rate limit hit at batch %d: %v", r.batchIdx, r.err))
+						batchStatus.Unlock()
+					} else {
+						// Fall back: process individually
+						ctx := context.Background()
+						for i := range r.batch {
+							a, err2 := analyzeFunc(ctx, &r.batch[i])
+							processedCount++
+							if err2 != nil {
 								batchStatus.Lock()
-								batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", batch[j].ID, err2))
+								batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", r.batch[i].ID, err2))
+								batchStatus.Unlock()
+								continue
+							}
+							if err2 = SaveAnalysis(ctx, pool, a); err2 != nil {
+								batchStatus.Lock()
+								batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", r.batch[i].ID, err2))
 								batchStatus.Unlock()
 							}
 						}
 					}
 				} else {
-					// No batch function — process individually
-					for _, cand := range batch {
-						a, err := analyzeFunc(ctx, &cand)
+					ctx := context.Background()
+					for j, a := range r.analyses {
 						processedCount++
-						if err != nil {
-							batchStatus.Lock()
-							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", cand.ID, err))
-							batchStatus.Unlock()
-							if isRateLimited(err) {
-								stopped = true
-								break
-							}
+						if a == nil || j >= len(r.batch) {
 							continue
 						}
-						if err = SaveAnalysis(ctx, pool, a); err != nil {
+						if err2 := SaveAnalysis(ctx, pool, a); err2 != nil {
 							batchStatus.Lock()
-							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", cand.ID, err))
+							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", r.batch[j].ID, err2))
 							batchStatus.Unlock()
 						}
 					}
 				}
-
 				batchStatus.Lock()
 				batchStatus.Processed = processedCount
 				batchStatus.Unlock()
-				log.Printf("Processed batch %d-%d/%d", i+1, end, len(candidates))
-
-				if stopped {
-					log.Printf("Batch stopped early: rate limit hit after %d/%d candidates", processedCount, len(candidates))
-					break
-				}
 			}
 		}()
 
 		c.JSON(202, gin.H{"message": "batch analysis started", "count": len(candidates)})
+	}
+}
+
+// AITextGenerators maps provider names to a raw text-generation function
+type AITextGenerators map[string]func(ctx context.Context, systemPrompt, userMsg string) (string, error)
+
+// AIRecommendRequest is the body for POST /candidates/ai-recommend
+type AIRecommendRequest struct {
+	CandidateIDs []int `json:"candidate_ids" binding:"required,min=2"`
+	SelectCount  int   `json:"select_count" binding:"required,min=1"`
+}
+
+// RecommendCandidates picks the best N candidates using AI
+func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvider string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req AIRecommendRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+		if req.SelectCount >= len(req.CandidateIDs) {
+			c.JSON(400, gin.H{"error": "select_count must be less than total candidates"})
+			return
+		}
+
+		ctx := c.Request.Context()
+
+		type candRow struct {
+			ID         int
+			Name       string
+			FinalScore float64
+			Category   string
+			Summary    string
+			Strengths  []string
+			RedFlags   []string
+		}
+		var cands []candRow
+		for _, id := range req.CandidateIDs {
+			var r candRow
+			r.ID = id
+			err := pool.QueryRow(ctx,
+				`SELECT c.full_name, COALESCE(a.final_score,0), COALESCE(a.category,''),
+				        COALESCE(a.summary,''), COALESCE(a.key_strengths,ARRAY[]::text[]), COALESCE(a.red_flags,ARRAY[]::text[])
+				 FROM candidates c LEFT JOIN analyses a ON c.id=a.candidate_id WHERE c.id=$1`, id,
+			).Scan(&r.Name, &r.FinalScore, &r.Category, &r.Summary, &r.Strengths, &r.RedFlags)
+			if err != nil {
+				c.JSON(404, gin.H{"error": fmt.Sprintf("candidate %d not found", id)})
+				return
+			}
+			cands = append(cands, r)
+		}
+
+		providerName := c.Query("provider")
+		if providerName == "" {
+			providerName = defaultProvider
+		}
+		genFn, ok := textGens[providerName]
+		if !ok {
+			c.JSON(400, gin.H{"error": "unknown AI provider: " + providerName})
+			return
+		}
+
+		sysPrompt := fmt.Sprintf(
+			"You are an expert admissions committee member for inVision U. "+
+				"Select the best %d candidates from the list provided. "+
+				"Respond ONLY with a valid JSON object — no text before or after:\n"+
+				`{"selected":[{"index":<0-based>,"reason":"<2 sentences>"}],"overall_reasoning":"<2-3 sentences>"}`,
+			req.SelectCount)
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("From the %d candidates below, pick the top %d:\n\n", len(cands), req.SelectCount))
+		for i, r := range cands {
+			sb.WriteString(fmt.Sprintf("[%d] %s | Score: %.1f | %s\n    %s\n", i, r.Name, r.FinalScore, r.Category, r.Summary))
+			if len(r.Strengths) > 0 {
+				sb.WriteString(fmt.Sprintf("    Strengths: %s\n", strings.Join(r.Strengths, "; ")))
+			}
+			if len(r.RedFlags) > 0 {
+				sb.WriteString(fmt.Sprintf("    Red flags: %s\n", strings.Join(r.RedFlags, "; ")))
+			}
+		}
+
+		responseText, err := genFn(ctx, sysPrompt, sb.String())
+		if err != nil {
+			c.JSON(500, gin.H{"error": "AI failed: " + err.Error()})
+			return
+		}
+
+		var parsed struct {
+			Selected []struct {
+				Index  int    `json:"index"`
+				Reason string `json:"reason"`
+			} `json:"selected"`
+			OverallReasoning string `json:"overall_reasoning"`
+		}
+		if err := json.Unmarshal([]byte(responseText), &parsed); err != nil {
+			c.JSON(500, gin.H{"error": "failed to parse AI response"})
+			return
+		}
+
+		type outItem struct {
+			ID     int     `json:"id"`
+			Name   string  `json:"name"`
+			Score  float64 `json:"score"`
+			Reason string  `json:"reason"`
+		}
+		var out []outItem
+		for _, s := range parsed.Selected {
+			if s.Index < 0 || s.Index >= len(cands) {
+				continue
+			}
+			r := cands[s.Index]
+			out = append(out, outItem{ID: r.ID, Name: r.Name, Score: r.FinalScore, Reason: s.Reason})
+		}
+		c.JSON(200, gin.H{"selected": out, "overall_reasoning": parsed.OverallReasoning})
 	}
 }
 
