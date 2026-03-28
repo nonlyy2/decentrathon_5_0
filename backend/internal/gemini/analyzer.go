@@ -26,9 +26,9 @@ func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candida
 
 func (c *Client) AnalyzeBatch(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error) {
 	userMsg := BuildBatchUserMessage(candidates)
-	fullSystemPrompt := BatchSystemPrompt + "\n\nExpected JSON array schema:\n" + BatchResponseSchema
+	fullSystemPrompt := BatchSystemPrompt + "\n\nExpected JSON array schema (one object per candidate, in order):\n" + BatchResponseSchema
 
-	responseText, err := c.Generate(ctx, fullSystemPrompt, userMsg)
+	responseText, err := c.GenerateLarge(ctx, fullSystemPrompt, userMsg)
 	if err != nil {
 		return nil, fmt.Errorf("gemini batch API error: %w", err)
 	}
