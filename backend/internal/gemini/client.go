@@ -16,7 +16,7 @@ import (
 
 const (
 	BaseURL   = "https://generativelanguage.googleapis.com/v1beta/models"
-	ModelName = "gemini-2.0-flash-lite"
+	ModelName = "gemini-2.5-flash-lite"
 )
 
 type Client struct {
