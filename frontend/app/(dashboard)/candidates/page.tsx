@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CandidateListItem, DashboardStats } from "@/lib/types";
@@ -34,7 +34,6 @@ export default function CandidatesPage() {
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
-  const router = useRouter();
   const { user } = useAuth();
 
   const fetchCounts = useCallback(async () => {
@@ -230,14 +229,20 @@ export default function CandidatesPage() {
               candidates.map((c) => (
                 <TableRow
                   key={c.id}
-                  className="cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() => router.push(`/candidates/${c.id}`)}
+                  className="hover:bg-slate-50 transition-colors relative"
                 >
-                  <TableCell className="font-medium">{c.full_name}</TableCell>
-                  <TableCell>{c.city || "—"}</TableCell>
-                  <TableCell><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
-                  <TableCell><StatusBadge status={c.status} /></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/candidates/${c.id}`}
+                      className="absolute inset-0 z-10"
+                      aria-label={`Open ${c.full_name}`}
+                    />
+                    <span className="relative z-20">{c.full_name}</span>
+                  </TableCell>
+                  <TableCell className="relative z-20">{c.city || "—"}</TableCell>
+                  <TableCell className="relative z-20"><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
+                  <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
+                  <TableCell className="relative z-20 text-sm text-muted-foreground">
                     {new Date(c.created_at).toLocaleDateString()}
                   </TableCell>
                 </TableRow>

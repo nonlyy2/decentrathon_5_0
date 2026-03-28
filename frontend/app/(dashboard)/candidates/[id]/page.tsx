@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFetch } from "@/lib/hooks";
 import api from "@/lib/api";
@@ -12,7 +12,7 @@ import KeyStrengthsRedFlags from "@/components/KeyStrengthsRedFlags";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Loader2 } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -41,18 +41,55 @@ export default function CandidateDetailPage() {
   const router = useRouter();
   const { data: detail, loading, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisFailed, setAnalysisFailed] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [expandedScore, setExpandedScore] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll analysis status while analyzing
+  const startPolling = () => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get(`/candidates/${params.id}/analysis-status`);
+        const { running, failed, error } = res.data;
+        if (!running) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setAnalyzing(false);
+          if (failed) {
+            setAnalysisFailed(true);
+            setAnalysisError(error || "Analysis failed");
+            toast.error("AI analysis failed");
+          } else {
+            setAnalysisFailed(false);
+            setAnalysisError(null);
+            toast.success("Analysis complete");
+            refetch();
+          }
+        }
+      } catch {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setAnalyzing(false);
+      }
+    }, 2000);
+  };
+
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const handleAnalyze = async (force = false) => {
+    setAnalysisFailed(false);
+    setAnalysisError(null);
     setAnalyzing(true);
     try {
       await api.post(`/candidates/${params.id}/analyze${force ? "?force=true" : ""}`);
-      toast.success("Analysis complete");
-      refetch();
+      startPolling();
     } catch {
-      toast.error("Analysis failed");
-    } finally {
       setAnalyzing(false);
+      toast.error("Failed to start analysis");
     }
   };
 
@@ -219,6 +256,32 @@ export default function CandidateDetailPage() {
                 </CardContent>
               </Card>
             </>
+          ) : analysisFailed ? (
+            <Card className="border-red-200">
+              <CardContent className="p-8 text-center">
+                <AlertTriangle className="mx-auto text-red-400 mb-3" size={32} />
+                <p className="text-red-600 font-medium">AI Analyze Failed</p>
+                {analysisError && (
+                  <p className="text-xs text-slate-400 mt-2 max-w-xs mx-auto line-clamp-3">{analysisError}</p>
+                )}
+                <Button
+                  className="mt-4 bg-purple-600 hover:bg-purple-700"
+                  size="sm"
+                  onClick={() => handleAnalyze()}
+                  disabled={analyzing}
+                >
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          ) : analyzing ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Loader2 className="mx-auto text-purple-400 mb-3 animate-spin" size={32} />
+                <p className="text-purple-600 font-medium">Analyzing with AI...</p>
+                <p className="text-sm text-muted-foreground mt-1">This may take 10–30 seconds</p>
+              </CardContent>
+            </Card>
           ) : (
             <Card>
               <CardContent className="p-8 text-center">
