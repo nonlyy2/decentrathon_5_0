@@ -34,14 +34,33 @@ func main() {
 		log.Printf("Warning: failed to seed admin user: %v", err)
 	}
 
-	// Seed candidates if --seed flag
+	// Seed candidates if --seed / --force-seed / --seed-only / --force-seed-only flag
+	seedOnly := false
 	for _, arg := range os.Args[1:] {
-		if arg == "--seed" {
-			if err := seed.SeedCandidates(pool); err != nil {
+		switch arg {
+		case "--seed":
+			if err := seed.SeedCandidates(pool, false); err != nil {
 				log.Printf("Warning: failed to seed candidates: %v", err)
 			}
-			break
+		case "--force-seed":
+			if err := seed.SeedCandidates(pool, true); err != nil {
+				log.Printf("Warning: failed to seed candidates: %v", err)
+			}
+		case "--seed-only":
+			if err := seed.SeedCandidates(pool, false); err != nil {
+				log.Fatalf("Seed failed: %v", err)
+			}
+			seedOnly = true
+		case "--force-seed-only":
+			if err := seed.SeedCandidates(pool, true); err != nil {
+				log.Fatalf("Seed failed: %v", err)
+			}
+			seedOnly = true
 		}
+	}
+	if seedOnly {
+		log.Println("Seed-only mode: exiting.")
+		return
 	}
 
 	// AI clients — create all available providers
@@ -80,6 +99,7 @@ func main() {
 	// Router
 	router := gin.Default()
 	router.Use(middleware.CORSMiddleware(cfg.AllowOrigins))
+	router.Use(middleware.NoCacheMiddleware())
 
 	api := router.Group("/api")
 
