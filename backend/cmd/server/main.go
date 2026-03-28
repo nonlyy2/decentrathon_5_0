@@ -9,8 +9,9 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/database"
 	"github.com/assylkhan/invisionu-backend/internal/gemini"
 	"github.com/assylkhan/invisionu-backend/internal/handlers"
-	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/assylkhan/invisionu-backend/internal/middleware"
+	"github.com/assylkhan/invisionu-backend/internal/models"
+	"github.com/assylkhan/invisionu-backend/internal/ollama"
 	"github.com/assylkhan/invisionu-backend/internal/seed"
 	"github.com/gin-gonic/gin"
 )
@@ -44,13 +45,22 @@ func main() {
 		}
 	}
 
-	// Gemini client
-	var geminiClient *gemini.Client
-	if cfg.GeminiAPIKey != "" {
-		geminiClient = gemini.NewClient(cfg.GeminiAPIKey)
-		log.Println("Gemini API client initialized")
-	} else {
-		log.Println("Warning: GEMINI_API_KEY not set, analysis endpoint will return 503")
+	// AI client — select provider based on AI_PROVIDER env var
+	var analyzeFunc func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
+
+	switch cfg.AIProvider {
+	case "ollama":
+		ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
+		analyzeFunc = ollamaClient.AnalyzeCandidate
+		log.Printf("Ollama client initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
+	default: // "gemini"
+		if cfg.GeminiAPIKey != "" {
+			geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
+			analyzeFunc = geminiClient.AnalyzeCandidate
+			log.Println("Gemini API client initialized")
+		} else {
+			log.Println("Warning: GEMINI_API_KEY not set, analysis endpoint will return 503")
+		}
 	}
 
 	// Router
@@ -76,10 +86,6 @@ func main() {
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
 
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
-		var analyzeFunc func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
-		if geminiClient != nil {
-			analyzeFunc = geminiClient.AnalyzeCandidate
-		}
 		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, analyzeFunc))
 
 		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))

@@ -112,7 +112,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, geminiAnalyze func(ctx context.C
 		}
 
 		if geminiAnalyze == nil {
-			c.JSON(503, gin.H{"error": "Gemini API not configured"})
+			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return
 		}
 
@@ -162,7 +162,7 @@ var batchStatus struct {
 func AnalyzeAllPending(pool *pgxpool.Pool, analyzeFunc func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if analyzeFunc == nil {
-			c.JSON(503, gin.H{"error": "Gemini API not configured"})
+			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return
 		}
 

@@ -12,6 +12,9 @@ type Config struct {
 	JWTSecret    string
 	GeminiAPIKey string
 	AllowOrigins string
+	AIProvider   string // "gemini" or "ollama"
+	OllamaURL    string
+	OllamaModel  string
 }
 
 func Load() *Config {
@@ -22,6 +25,9 @@ func Load() *Config {
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		AllowOrigins: getEnv("ALLOW_ORIGINS", "http://localhost:3000"),
+		AIProvider:   getEnv("AI_PROVIDER", "gemini"),
+		OllamaURL:    getEnv("OLLAMA_URL", "http://localhost:11434"),
+		OllamaModel:  getEnv("OLLAMA_MODEL", "llama3.1:8b"),
 	}
 }
 
