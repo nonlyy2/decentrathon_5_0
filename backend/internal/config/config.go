@@ -12,11 +12,9 @@ type Config struct {
 	JWTSecret    string
 	GeminiAPIKey string
 	AllowOrigins string
-	AIProvider   string // "gemini", "ollama", or "groq"
+	AIProvider   string // "gemini" or "ollama"
 	OllamaURL    string
 	OllamaModel  string
-	GroqAPIKey   string
-	GroqModel    string
 }
 
 func Load() *Config {
@@ -30,8 +28,6 @@ func Load() *Config {
 		AIProvider:   getEnv("AI_PROVIDER", "gemini"),
 		OllamaURL:    getEnv("OLLAMA_URL", "http://localhost:11434"),
 		OllamaModel:  getEnv("OLLAMA_MODEL", "llama3.1:8b"),
-		GroqAPIKey:   getEnv("GROQ_API_KEY", ""),
-		GroqModel:    getEnv("GROQ_MODEL", "llama-3.3-70b-versatile"),
 	}
 }
 

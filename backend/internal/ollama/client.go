@@ -64,6 +64,10 @@ func (c *Client) ModelName() string {
 	return c.model
 }
 
+func (c *Client) GenerateText(ctx context.Context, systemPrompt, userMessage string) (string, error) {
+	return c.Generate(ctx, systemPrompt, userMessage)
+}
+
 func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { LayoutDashboard, Users, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, LogOut, ShieldCheck } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -14,6 +14,7 @@ export default function Sidebar() {
   const navItems = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/candidates", label: t("nav.candidates"), icon: Users },
+    ...(user?.role === "admin" ? [{ href: "/admin", label: t("nav.admin"), icon: ShieldCheck }] : []),
   ];
 
   return (
@@ -44,24 +45,36 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-slate-800 space-y-3">
+
         {/* Language toggle */}
-        <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
-          <button
-            onClick={() => setLang("en")}
-            className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
-              lang === "en" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            🇬🇧 EN
-          </button>
-          <button
-            onClick={() => setLang("ru")}
-            className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
-              lang === "ru" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            🇷🇺 RU
-          </button>
+        <div>
+          <p className="text-xs text-slate-500 mb-1.5 uppercase tracking-wide">Language</p>
+          <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setLang("en")}
+              className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
+                lang === "en" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🇬🇧 EN
+            </button>
+            <button
+              onClick={() => setLang("ru")}
+              className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
+                lang === "ru" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🇷🇺 RU
+            </button>
+            <button
+              onClick={() => setLang("kk")}
+              className={`flex-1 text-xs py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 ${
+                lang === "kk" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🇰🇿 KZ
+            </button>
+          </div>
         </div>
 
         <div className="text-sm text-slate-400 truncate">{user?.email}</div>

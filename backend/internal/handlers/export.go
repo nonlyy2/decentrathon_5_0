@@ -10,6 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func csvHeaders(lang string) []string {
+	switch lang {
+	case "ru":
+		return []string{"ID", "Имя", "Email", "Возраст", "Город", "Школа", "Год выпуска", "Статус", "Дата создания",
+			"Итоговый балл", "Категория", "Риск ИИ", "Модель", "Дата анализа"}
+	case "kk":
+		return []string{"ID", "Аты", "Email", "Жасы", "Қала", "Мектеп", "Бітіру жылы", "Мәртебе", "Жасалған күн",
+			"Қорытынды балл", "Санат", "ЖИ тәуекелі", "Модель", "Талдау күні"}
+	default:
+		return []string{"ID", "Full Name", "Email", "Age", "City", "School", "Graduation Year", "Status", "Created At",
+			"Final Score", "Category", "AI Risk", "Model Used", "Analyzed At"}
+	}
+}
+
 func ExportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
@@ -29,12 +43,16 @@ func ExportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		defer rows.Close()
 
-		c.Header("Content-Type", "text/csv")
+		c.Header("Content-Type", "text/csv; charset=utf-8")
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=candidates_%s.csv", time.Now().Format("2006-01-02")))
+		// UTF-8 BOM so Excel opens Cyrillic correctly
+		c.Writer.Write([]byte{0xEF, 0xBB, 0xBF})
+
+		lang := c.Query("lang")
+		headers := csvHeaders(lang)
 
 		w := csv.NewWriter(c.Writer)
-		w.Write([]string{"ID", "Full Name", "Email", "Age", "City", "School", "Graduation Year", "Status", "Created At",
-			"Final Score", "Category", "AI Risk", "Model Used", "Analyzed At"})
+		w.Write(headers)
 
 		for rows.Next() {
 			var id int
