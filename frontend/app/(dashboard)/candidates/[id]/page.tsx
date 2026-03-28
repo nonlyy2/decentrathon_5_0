@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useFetch } from "@/lib/hooks";
+import { useI18n } from "@/lib/i18n";
 import api from "@/lib/api";
 import { CandidateDetail } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
@@ -30,17 +31,10 @@ const riskColors: Record<string, string> = {
   high: "bg-red-100 text-red-700",
 };
 
-const scoreLabels = [
-  { key: "score_leadership", label: "Leadership", explKey: "explanation_leadership", weight: "25%" },
-  { key: "score_motivation", label: "Motivation", explKey: "explanation_motivation", weight: "25%" },
-  { key: "score_growth", label: "Growth", explKey: "explanation_growth", weight: "20%" },
-  { key: "score_vision", label: "Vision", explKey: "explanation_vision", weight: "15%" },
-  { key: "score_communication", label: "Communication", explKey: "explanation_communication", weight: "15%" },
-];
-
 export default function CandidateDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useI18n();
   const { data: detail, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
@@ -53,6 +47,14 @@ export default function CandidateDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const scoreLabels = [
+    { key: "score_leadership", label: t("score.leadership"), explKey: "explanation_leadership", weight: "25%" },
+    { key: "score_motivation", label: t("score.motivation"), explKey: "explanation_motivation", weight: "25%" },
+    { key: "score_growth", label: t("score.growth"), explKey: "explanation_growth", weight: "20%" },
+    { key: "score_vision", label: t("score.vision"), explKey: "explanation_vision", weight: "15%" },
+    { key: "score_communication", label: t("score.communication"), explKey: "explanation_communication", weight: "15%" },
+  ];
 
   const fetchComments = useCallback(() => {
     api.get(`/candidates/${params.id}/comments`).then((res) => setComments(res.data)).catch(() => {});
@@ -143,7 +145,7 @@ export default function CandidateDetailPage() {
   };
 
   const handleDeleteAnalysis = async () => {
-    if (!confirm("Delete this analysis? The candidate will return to Pending status.")) return;
+    if (!confirm(t("detail.confirm_delete"))) return;
     setDeletingAnalysis(true);
     try {
       await api.delete(`/candidates/${params.id}/analysis`);
@@ -189,7 +191,7 @@ export default function CandidateDetailPage() {
           {a ? (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
-                {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Re-analyzing...</> : "Re-analyze"}
+                {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.re_analyzing")}</> : t("detail.reanalyze")}
               </Button>
               <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={handleDeleteAnalysis} disabled={deletingAnalysis}>
                 {deletingAnalysis ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
@@ -197,7 +199,7 @@ export default function CandidateDetailPage() {
             </div>
           ) : (
             <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => handleAnalyze()} disabled={analyzing}>
-              {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> Analyzing...</> : <><Sparkles size={16} className="mr-2" /> Analyze with AI</>}
+              {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.analyzing")}</> : <><Sparkles size={16} className="mr-2" /> {t("detail.analyze")}</>}
             </Button>
           )}
         </div>
@@ -207,34 +209,34 @@ export default function CandidateDetailPage() {
         {/* Left column — Application data */}
         <div className="space-y-4">
           <Card>
-            <CardHeader><CardTitle className="text-base">Personal Information</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("detail.personal")}</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Email:</span> {detail.email}</div>
-                <div><span className="text-muted-foreground">Age:</span> {detail.age || "—"}</div>
-                <div><span className="text-muted-foreground">City:</span> {detail.city || "—"}</div>
-                <div><span className="text-muted-foreground">School:</span> {detail.school || "—"}</div>
-                <div><span className="text-muted-foreground">Graduation:</span> {detail.graduation_year || "—"}</div>
+                <div><span className="text-muted-foreground">{t("detail.email")}:</span> {detail.email}</div>
+                <div><span className="text-muted-foreground">{t("detail.age")}:</span> {detail.age || "\u2014"}</div>
+                <div><span className="text-muted-foreground">{t("detail.city")}:</span> {detail.city || "\u2014"}</div>
+                <div><span className="text-muted-foreground">{t("detail.school")}:</span> {detail.school || "\u2014"}</div>
+                <div><span className="text-muted-foreground">{t("detail.graduation")}:</span> {detail.graduation_year || "\u2014"}</div>
               </div>
             </CardContent>
           </Card>
 
           {detail.achievements && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Achievements</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("detail.achievements")}</CardTitle></CardHeader>
               <CardContent><p className="text-sm whitespace-pre-wrap">{detail.achievements}</p></CardContent>
             </Card>
           )}
 
           {detail.extracurriculars && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Extracurriculars</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("detail.extracurriculars")}</CardTitle></CardHeader>
               <CardContent><p className="text-sm whitespace-pre-wrap">{detail.extracurriculars}</p></CardContent>
             </Card>
           )}
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Essay</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("detail.essay")}</CardTitle></CardHeader>
             <CardContent>
               <div className="text-sm whitespace-pre-wrap max-h-96 overflow-y-auto leading-relaxed">
                 {detail.essay}
@@ -244,7 +246,7 @@ export default function CandidateDetailPage() {
 
           {detail.motivation_statement && (
             <Card>
-              <CardHeader><CardTitle className="text-base">Motivation Statement</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">{t("detail.motivation")}</CardTitle></CardHeader>
               <CardContent><p className="text-sm whitespace-pre-wrap">{detail.motivation_statement}</p></CardContent>
             </Card>
           )}
@@ -259,10 +261,10 @@ export default function CandidateDetailPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Sparkles size={16} className="text-purple-500" /> AI Analysis
+                      <Sparkles size={16} className="text-purple-500" /> {t("detail.ai_analysis")}
                     </CardTitle>
                     <Badge className={riskColors[a.ai_generated_risk]}>
-                      AI Risk: {a.ai_generated_risk}
+                      {t("detail.ai_risk")}: {a.ai_generated_risk}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -283,11 +285,11 @@ export default function CandidateDetailPage() {
 
               {/* Summary */}
               <Card>
-                <CardHeader><CardTitle className="text-base">Summary</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base">{t("detail.summary")}</CardTitle></CardHeader>
                 <CardContent>
                   <p className="text-sm leading-relaxed text-slate-700">{a.summary}</p>
                   <p className="text-xs text-muted-foreground mt-3">
-                    Analyzed by {a.model_used} on {new Date(a.analyzed_at).toLocaleDateString()}
+                    {t("detail.analyzed_by")} {a.model_used} \u2014 {new Date(a.analyzed_at).toLocaleDateString()}
                   </p>
                 </CardContent>
               </Card>
@@ -296,7 +298,7 @@ export default function CandidateDetailPage() {
 
               {/* Score breakdown */}
               <Card>
-                <CardHeader><CardTitle className="text-base">Score Breakdown</CardTitle></CardHeader>
+                <CardHeader><CardTitle className="text-base">{t("detail.score_breakdown")}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {scoreLabels.map((s) => {
                     const score = a[s.key as keyof typeof a] as number;
@@ -334,7 +336,7 @@ export default function CandidateDetailPage() {
             <Card className="border-red-200">
               <CardContent className="p-8 text-center">
                 <AlertTriangle className="mx-auto text-red-400 mb-3" size={32} />
-                <p className="text-red-600 font-medium">AI Analyze Failed</p>
+                <p className="text-red-600 font-medium">{t("detail.ai_failed")}</p>
                 {analysisError && (
                   <p className="text-xs text-slate-400 mt-2 max-w-xs mx-auto line-clamp-3">{analysisError}</p>
                 )}
@@ -344,7 +346,7 @@ export default function CandidateDetailPage() {
                   onClick={() => handleAnalyze()}
                   disabled={analyzing}
                 >
-                  Retry
+                  {t("detail.retry")}
                 </Button>
               </CardContent>
             </Card>
@@ -352,23 +354,23 @@ export default function CandidateDetailPage() {
             <Card>
               <CardContent className="p-8 text-center">
                 <Loader2 className="mx-auto text-purple-400 mb-3 animate-spin" size={32} />
-                <p className="text-purple-600 font-medium">Analyzing with AI...</p>
-                <p className="text-sm text-muted-foreground mt-1">This may take 10–30 seconds</p>
+                <p className="text-purple-600 font-medium">{t("detail.analyzing")}</p>
+                <p className="text-sm text-muted-foreground mt-1">{t("detail.analyzing_wait")}</p>
               </CardContent>
             </Card>
           ) : (
             <Card>
               <CardContent className="p-8 text-center">
                 <Sparkles className="mx-auto text-slate-300 mb-3" size={32} />
-                <p className="text-muted-foreground">Not yet analyzed</p>
-                <p className="text-sm text-muted-foreground mt-1">Click &quot;Analyze with AI&quot; to generate scores</p>
+                <p className="text-muted-foreground">{t("detail.not_analyzed")}</p>
+                <p className="text-sm text-muted-foreground mt-1">{t("detail.click_analyze")}</p>
               </CardContent>
             </Card>
           )}
 
           {/* Decision panel */}
           <Card>
-            <CardHeader><CardTitle className="text-base">Committee Decision</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t("detail.committee")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <DecisionButtons
                 candidateId={detail.id}
@@ -377,7 +379,7 @@ export default function CandidateDetailPage() {
               />
               {detail.decisions.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">History</p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">{t("detail.history")}</p>
                   {detail.decisions.map((d) => (
                     <div key={d.id} className="flex items-start gap-2 text-sm border-l-2 border-slate-200 pl-3">
                       <div>
@@ -398,13 +400,13 @@ export default function CandidateDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <MessageSquare size={16} /> Comments ({comments.length})
+                <MessageSquare size={16} /> {t("detail.comments")} ({comments.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex gap-2">
                 <Textarea
-                  placeholder="Add a comment..."
+                  placeholder={t("detail.add_comment")}
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   rows={2}

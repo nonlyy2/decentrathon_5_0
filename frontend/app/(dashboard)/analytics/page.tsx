@@ -1,6 +1,7 @@
 "use client";
 
 import { useFetch } from "@/lib/hooks";
+import { useI18n } from "@/lib/i18n";
 import { DashboardStats } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -23,6 +24,13 @@ const SCORE_COLORS: Record<string, string> = {
   "80-100": "#22c55e",
 };
 
+const CATEGORY_KEYS: Record<string, string> = {
+  "Strong Recommend": "cat.strong_recommend",
+  Recommend: "cat.recommend",
+  Borderline: "cat.borderline",
+  "Not Recommended": "cat.not_recommended",
+};
+
 const CATEGORY_COLORS: Record<string, string> = {
   "Strong Recommend": "#22c55e",
   "Recommend": "#3b82f6",
@@ -32,11 +40,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function AnalyticsPage() {
   const { data: stats, loading } = useFetch<DashboardStats>("/stats");
+  const { t } = useI18n();
 
   if (loading || !stats) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Analytics</h1>
+        <h1 className="text-2xl font-bold">{t("analytics.title")}</h1>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
@@ -53,15 +62,15 @@ export default function AnalyticsPage() {
   const pureAnalyzed = stats.analyzed - stats.shortlisted - stats.rejected - stats.waitlisted;
 
   const statusData = [
-    { name: "Pending", value: stats.pending },
-    { name: "Analyzed", value: pureAnalyzed },
-    { name: "Shortlisted", value: stats.shortlisted },
-    { name: "Waitlisted", value: stats.waitlisted },
-    { name: "Rejected", value: stats.rejected },
+    { name: t("status.pending"), value: stats.pending, key: "Pending" },
+    { name: t("status.analyzed"), value: pureAnalyzed, key: "Analyzed" },
+    { name: t("status.shortlisted"), value: stats.shortlisted, key: "Shortlisted" },
+    { name: t("status.waitlisted"), value: stats.waitlisted, key: "Waitlisted" },
+    { name: t("status.rejected"), value: stats.rejected, key: "Rejected" },
   ].filter((d) => d.value > 0);
 
   const categoryData = ["Strong Recommend", "Recommend", "Borderline", "Not Recommended"].map((cat) => ({
-    name: cat,
+    name: t(CATEGORY_KEYS[cat]),
     count: stats.category_counts[cat] || 0,
     color: CATEGORY_COLORS[cat],
   }));
@@ -78,15 +87,15 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Analytics</h1>
+      <h1 className="text-2xl font-bold">{t("analytics.title")}</h1>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Total Applications", value: stats.total_candidates, sub: "all time" },
-          { label: "Analysis Rate", value: `${analysisRate}%`, sub: `${stats.analyzed} analyzed` },
-          { label: "Shortlist Rate", value: `${conversionRate}%`, sub: `${stats.shortlisted} shortlisted` },
-          { label: "Avg AI Score", value: stats.avg_score > 0 ? stats.avg_score.toFixed(1) : "—", sub: "out of 100" },
+          { label: t("analytics.total_apps"), value: stats.total_candidates, sub: t("analytics.all_time") },
+          { label: t("dash.analysis_rate"), value: `${analysisRate}%`, sub: `${stats.analyzed} ${t("analytics.analyzed_sub")}` },
+          { label: t("dash.shortlist_rate"), value: `${conversionRate}%`, sub: `${stats.shortlisted} ${t("analytics.shortlisted_sub")}` },
+          { label: t("dash.avg_score"), value: stats.avg_score > 0 ? stats.avg_score.toFixed(1) : "\u2014", sub: t("analytics.out_of") },
         ].map((item) => (
           <Card key={item.label}>
             <CardContent className="p-4">
@@ -102,7 +111,7 @@ export default function AnalyticsPage() {
         {/* Status distribution pie */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Status Distribution</CardTitle>
+            <CardTitle className="text-base">{t("dash.status_dist")}</CardTitle>
           </CardHeader>
           <CardContent>
             {statusData.length > 0 ? (
@@ -120,7 +129,7 @@ export default function AnalyticsPage() {
                     labelLine={false}
                   >
                     {statusData.map((entry) => (
-                      <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || "#8884d8"} />
+                      <Cell key={entry.key} fill={STATUS_COLORS[entry.key] || "#8884d8"} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -129,7 +138,7 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No data yet
+                {t("dash.no_data")}
               </div>
             )}
           </CardContent>
@@ -138,7 +147,7 @@ export default function AnalyticsPage() {
         {/* Score distribution bar */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Score Distribution</CardTitle>
+            <CardTitle className="text-base">{t("dash.score_dist")}</CardTitle>
           </CardHeader>
           <CardContent>
             {stats.score_distribution.some((b) => b.count > 0) ? (
@@ -157,7 +166,7 @@ export default function AnalyticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No analysis data yet
+                {t("dash.no_analysis")}
               </div>
             )}
           </CardContent>
@@ -166,7 +175,7 @@ export default function AnalyticsPage() {
         {/* Category breakdown bar */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recommendation Categories</CardTitle>
+            <CardTitle className="text-base">{t("dash.categories")}</CardTitle>
           </CardHeader>
           <CardContent>
             {categoryData.some((c) => c.count > 0) ? (
@@ -190,7 +199,7 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No analysis data yet
+                {t("dash.no_analysis")}
               </div>
             )}
           </CardContent>
@@ -199,16 +208,16 @@ export default function AnalyticsPage() {
         {/* Funnel summary */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Admissions Funnel</CardTitle>
+            <CardTitle className="text-base">{t("dash.funnel")}</CardTitle>
           </CardHeader>
           <CardContent className="pt-2">
             <div className="space-y-3">
               {[
-                { label: "Applied", count: stats.total_candidates, color: "bg-slate-400" },
-                { label: "AI Analyzed", count: stats.analyzed, color: "bg-blue-500" },
-                { label: "Shortlisted", count: stats.shortlisted, color: "bg-green-500" },
-                { label: "Waitlisted", count: stats.waitlisted, color: "bg-yellow-500" },
-                { label: "Rejected", count: stats.rejected, color: "bg-red-500" },
+                { label: t("funnel.applied"), count: stats.total_candidates, color: "bg-slate-400" },
+                { label: t("funnel.ai_analyzed"), count: stats.analyzed, color: "bg-blue-500" },
+                { label: t("funnel.shortlisted"), count: stats.shortlisted, color: "bg-green-500" },
+                { label: t("funnel.waitlisted"), count: stats.waitlisted, color: "bg-yellow-500" },
+                { label: t("funnel.rejected"), count: stats.rejected, color: "bg-red-500" },
               ].map((step) => {
                 const pct = stats.total_candidates > 0 ? (step.count / stats.total_candidates) * 100 : 0;
                 return (
