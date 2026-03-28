@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(netstat -ano)",
-      "Bash(findstr \"5432 5433\")",
-      "Bash(powershell.exe -Command \"Start-Service postgresql-x64-18\")"
-    ]
-  }
-}
