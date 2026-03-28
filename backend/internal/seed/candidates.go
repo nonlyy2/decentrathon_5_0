@@ -26,14 +26,20 @@ type seedCandidate struct {
 	MotivationStatement *string
 }
 
-func SeedCandidates(pool *pgxpool.Pool) error {
+func SeedCandidates(pool *pgxpool.Pool, force bool) error {
 	ctx := context.Background()
 
 	var count int
 	pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates`).Scan(&count)
-	if count > 0 {
-		log.Printf("Candidates already seeded (%d found), skipping", count)
+	if count > 0 && !force {
+		log.Printf("Candidates already seeded (%d found), skipping. Use --force-seed to override.", count)
 		return nil
+	}
+	if force && count > 0 {
+		log.Printf("Force-seeding: truncating %d existing candidates...", count)
+		if _, err := pool.Exec(ctx, `TRUNCATE candidates CASCADE`); err != nil {
+			return fmt.Errorf("failed to truncate candidates: %w", err)
+		}
 	}
 
 	candidates := []seedCandidate{
@@ -471,6 +477,8 @@ I dont have achievements to list but I think potential matters more than past ac
 	// Generate additional candidates to reach 100
 	candidates = append(candidates, generateAdditionalCandidates()...)
 
+	inserted := 0
+	failed := 0
 	for _, c := range candidates {
 		_, err := pool.Exec(ctx,
 			`INSERT INTO candidates (full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
@@ -479,11 +487,17 @@ I dont have achievements to list but I think potential matters more than past ac
 			c.Achievements, c.Extracurriculars, c.Essay, c.MotivationStatement,
 		)
 		if err != nil {
-			log.Printf("Failed to seed candidate %s: %v", c.FullName, err)
+			log.Printf("SEED ERROR [%s / %s]: %v", c.FullName, c.Email, err)
+			failed++
+		} else {
+			inserted++
 		}
 	}
 
-	log.Printf("Seeded %d candidates", len(candidates))
+	log.Printf("Seeding complete: %d inserted, %d failed (total attempted: %d)", inserted, failed, len(candidates))
+	if inserted == 0 {
+		return fmt.Errorf("all %d inserts failed — check logs above for details", len(candidates))
+	}
 	return nil
 }
 
