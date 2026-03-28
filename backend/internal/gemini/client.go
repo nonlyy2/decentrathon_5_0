@@ -10,8 +10,6 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -23,7 +21,6 @@ type Client struct {
 	apiKey     string
 	httpClient *http.Client
 	model      string
-	limiter    *rate.Limiter
 }
 
 type GeminiRequest struct {
@@ -66,9 +63,8 @@ func (e *GeminiError) Error() string {
 func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{Timeout: 120 * time.Second},
 		model:      ModelName,
-		limiter:    rate.NewLimiter(rate.Every(4*time.Second), 1),
 	}
 }
 
@@ -83,10 +79,6 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string)
 			case <-ctx.Done():
 				return "", ctx.Err()
 			}
-		}
-
-		if err := c.limiter.Wait(ctx); err != nil {
-			return "", err
 		}
 
 		result, err := c.doGenerate(ctx, systemPrompt, userMessage)

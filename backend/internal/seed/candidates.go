@@ -2,7 +2,10 @@ package seed
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"math/rand"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -465,6 +468,9 @@ I dont have achievements to list but I think potential matters more than past ac
 		},
 	}
 
+	// Generate additional candidates to reach 100
+	candidates = append(candidates, generateAdditionalCandidates()...)
+
 	for _, c := range candidates {
 		_, err := pool.Exec(ctx,
 			`INSERT INTO candidates (full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
@@ -479,4 +485,290 @@ I dont have achievements to list but I think potential matters more than past ac
 
 	log.Printf("Seeded %d candidates", len(candidates))
 	return nil
+}
+
+func generateAdditionalCandidates() []seedCandidate {
+	r := rand.New(rand.NewSource(42)) // deterministic for reproducibility
+
+	firstNames := []struct {
+		name, gender string
+	}{
+		{"Adilkhan", "m"}, {"Nursultan", "m"}, {"Timur", "m"}, {"Samat", "m"}, {"Dias", "m"},
+		{"Azamat", "m"}, {"Baurzhan", "m"}, {"Nurzhan", "m"}, {"Kanat", "m"}, {"Sultan", "m"},
+		{"Zhandos", "m"}, {"Yernur", "m"}, {"Alibek", "m"}, {"Madi", "m"}, {"Ramazan", "m"},
+		{"Aruzhan", "f"}, {"Togzhan", "f"}, {"Symbat", "f"}, {"Nazerke", "f"}, {"Aidana", "f"},
+		{"Moldir", "f"}, {"Akbota", "f"}, {"Zhuldyz", "f"}, {"Karlygash", "f"}, {"Assem", "f"},
+		{"Dana", "f"}, {"Aygerim", "f"}, {"Laura", "f"}, {"Amina", "f"}, {"Darina", "f"},
+		{"Marlen", "m"}, {"Askhat", "m"}, {"Kuanysh", "m"}, {"Olzhas", "m"}, {"Yerzhan", "m"},
+		{"Nurdaulet", "m"}, {"Madiyar", "m"}, {"Anelya", "f"}, {"Zhanerke", "f"}, {"Balnur", "f"},
+	}
+
+	lastNames := []string{
+		"Abilov", "Tastanbekov", "Zhaksylykov", "Kairbekov", "Nurgaliyev",
+		"Omarov", "Doszhanov", "Mukhamedjanov", "Satpayev", "Altynbekov",
+		"Yermekova", "Dossanova", "Berkinbayeva", "Myrzakhmetova", "Tokanova",
+		"Syzdykova", "Abdikerimova", "Nurpeissova", "Ibragimova", "Suleimenov",
+		"Karimov", "Tulepov", "Zhumagaliyev", "Baitasov", "Sharipov",
+		"Rakhmanova", "Ospanova", "Tastemirova", "Kasymova", "Amirova",
+		"Zhunisov", "Kenzhebayev", "Abdullayev", "Smagulova", "Serikbayeva",
+		"Kozhakhmetov", "Baytursynov", "Aitkalieva", "Nurmukanova", "Tulegenova",
+	}
+
+	cities := []struct {
+		name, school string
+	}{
+		{"Almaty", "NIS PhM Almaty"}, {"Almaty", "Haileybury Almaty"}, {"Almaty", "KBTU Lyceum"},
+		{"Almaty", "School #134 Almaty"}, {"Almaty", "Republican Physics-Math School"},
+		{"Astana", "NIS Astana"}, {"Astana", "BIL Astana"}, {"Astana", "School #55 Astana"},
+		{"Astana", "Miras International School"}, {"Shymkent", "NIS Shymkent"},
+		{"Shymkent", "School #35 Shymkent"}, {"Aktobe", "NIS Aktobe"},
+		{"Aktobe", "School #12 Aktobe"}, {"Karaganda", "NIS Karaganda"},
+		{"Karaganda", "School #85 Karaganda"}, {"Atyrau", "NIS Atyrau"},
+		{"Atyrau", "School #24 Atyrau"}, {"Pavlodar", "NIS Pavlodar"},
+		{"Kostanay", "NIS Kostanay"}, {"Semey", "School #1 Semey"},
+		{"Aktau", "School #14 Aktau"}, {"Taldykorgan", "School #5 Taldykorgan"},
+		{"Oral", "School #3 Oral"}, {"Taraz", "NIS Taraz"},
+		{"Kyzylorda", "School #7 Kyzylorda"}, {"Turkestan", "School #2 Turkestan"},
+		{"Ekibastuz", "School #11 Ekibastuz"}, {"Temirtau", "School #6 Temirtau"},
+	}
+
+	type essayTemplate struct {
+		category     string // "strong", "recommend", "borderline", "not_recommended"
+		achievements string
+		extras       string
+		essay        string
+		motivation   string
+	}
+
+	templates := []essayTemplate{
+		// STRONG RECOMMEND templates
+		{
+			category:     "strong",
+			achievements: "Founded a free tutoring program serving 150+ students across the region. National science olympiad gold medalist. Published research on renewable energy solutions in a youth science journal.",
+			extras:       "President of school STEM club (2 years). Organizer of regional hackathon. Volunteer at local hospital.",
+			essay: `When I was 15, I noticed something troubling: students in my city were failing science not because they lacked ability, but because they lacked access to quality instruction. Our school had one physics teacher for 400 students. Tutoring centers charged more than most families could afford.
+
+So I started teaching. Every Saturday morning in the school library, then in community centers, then online. What began with 5 students grew to over 150 across multiple locations. I recruited top students as volunteer tutors, created a curriculum, and built a simple website to coordinate schedules.
+
+The hardest part was convincing parents. Many didn't believe a teenager could teach effectively. I invited them to observe sessions. When they saw their children solving problems they'd struggled with for months, the skepticism disappeared.
+
+My research on renewable energy emerged from a question one of my students asked: "Why doesn't %s use more solar power?" I didn't know the answer, so we investigated together. That investigation turned into a published paper analyzing solar potential in our region.
+
+I want to join inVision U because I've learned to build educational programs from scratch, but I need to learn how to make them sustainable. I want to understand how inDrive built systems that scale — because I want to do the same for education access.`,
+			motivation: "Education access is the defining challenge of our generation in Central Asia. I want inVision U to help me build solutions that last beyond my personal effort.",
+		},
+		{
+			category:     "strong",
+			achievements: "Created a mobile app for connecting local farmers with urban buyers (1000+ downloads). Winner of national innovation competition. Led a team of 8 developers in building school management software.",
+			extras:       "Tech lead at school coding club. Mentor at regional startup incubator. Active open-source contributor.",
+			essay: `My grandmother sells apples from her garden in a village 200km from %s. Every season, middlemen buy her entire harvest at a fraction of the market price. She has no choice — she has no way to reach city buyers directly.
+
+This injustice drove me to build FarmConnect, an app that connects farmers directly with urban consumers. I taught myself React Native, built a backend in Node.js, and launched the app in three months. The first version was buggy and ugly, but it worked. My grandmother made 3x more selling through the app than through middlemen.
+
+Now FarmConnect has over 1000 downloads and serves 50 farmers in our region. The technical challenges were significant — spotty rural internet, farmers who aren't tech-savvy, payment integration in a cash-heavy economy. Each obstacle taught me to design for real constraints, not ideal conditions.
+
+Leading a team of 8 developers for our school management software was a different kind of challenge. I learned that the hardest part of building software isn't writing code — it's aligning people around a shared vision and making decisions when there's no clear right answer.
+
+inVision U is where I want to be because I've proven I can build technology that helps people. Now I need to learn how to build a company around it.`,
+			motivation: "Technology should serve the people who need it most, not just those who can afford it. inVision U's mission aligns with everything I'm building toward.",
+		},
+		// RECOMMEND templates
+		{
+			category:     "recommend",
+			achievements: "Regional science olympiad medalist. Built a school library catalog system. Active volunteer at children's education center.",
+			extras:       "Science club vice-president. Cross-country running. Community tutoring.",
+			essay: `I've always been the person who notices inefficiencies. When our school librarian spent hours manually tracking books, I built a simple catalog system using Python and SQLite. When I saw younger kids struggling with math at the community center, I started tutoring twice a week.
+
+These aren't revolutionary achievements. I know that. But each one taught me something. The library system taught me that even simple technology can save someone hours of tedious work. Tutoring taught me patience — when a 10-year-old doesn't understand fractions, you can't just explain it faster. You need to find a different way in.
+
+The science olympiad pushed me academically in ways school classes don't. Competing against the best students in the region showed me how much I still have to learn. I placed well, but the students who beat me were operating at a level I want to reach.
+
+I'm applying to inVision U because I want to be surrounded by people who are better than me — people who will push me to grow. In %s, I'm often the most technically capable person in the room. That's comfortable, but it's not how you improve.`,
+			motivation: "I want to grow beyond what my current environment can offer. inVision U's community of driven students is what I need to reach my potential.",
+		},
+		{
+			category:     "recommend",
+			achievements: "Created a social media campaign for environmental awareness (3000+ reach). School debate champion. Completed online data science course.",
+			extras:       "Debate team captain. Environmental club. Volunteer translator.",
+			essay: `The environmental campaign I ran on social media started as a school project and turned into something bigger. I posted daily facts about pollution in Kazakhstan, created infographics about water scarcity, and organized an online pledge for reducing plastic use. Over 3,000 people engaged with the content.
+
+What surprised me was how many people didn't know basic facts about environmental issues in their own country. The Aral Sea disaster, air pollution in major cities, soil degradation from industrial farming — these are well-documented problems, but most young people I spoke with knew very little about them.
+
+Debate taught me to argue both sides of an issue. It's a skill that sounds adversarial but is actually about empathy — understanding why someone disagrees with you. My best debate performances came when I could genuinely see the strength in my opponent's position.
+
+I've been learning data science because I believe data-driven decision making is the future of environmental policy. My online course taught me Python, pandas, and basic machine learning. I'm not an expert yet, but I can see how these tools could help analyze environmental data.
+
+I want to study at inVision U because it combines technology, leadership, and real-world impact — the three things I'm most passionate about.`,
+			motivation: "Environmental challenges need tech-savvy leaders. inVision U can help me become one.",
+		},
+		{
+			category:     "recommend",
+			achievements: "Organized a coding workshop for 60 students. School math team member. Interned at a local tech startup.",
+			extras:       "Coding club founder. Track and field. Youth volunteer corps.",
+			essay: `My summer internship at a small tech startup in %s was eye-opening. I went in expecting to write code all day. Instead, I spent most of my time in meetings, reviewing user feedback, and helping with customer support. The founder told me: "We don't build what we want to build. We build what users need."
+
+That lesson shaped how I approach everything now. When I organized a coding workshop at school, I didn't teach what I thought was cool — I surveyed students first. They wanted to learn how to build personal websites and simple games, not algorithms. So that's what we taught. 60 students attended, and many continued coding afterward.
+
+Being on the math team taught me discipline. You can't cram for math competitions — understanding builds slowly through consistent practice. I apply the same principle to coding: a little bit every day compounds into real skill.
+
+I want to attend inVision U because the startup experience showed me what's possible, and now I want the skills to build something of my own.`,
+			motivation: "I've seen how startups work from the inside, and I want to learn how to build one that solves real problems.",
+		},
+		{
+			category:     "recommend",
+			achievements: "Won school innovation fair. Built a Telegram bot for student announcements. Peer tutor in physics and math.",
+			extras:       "Innovation club. Badminton team. School newspaper contributor.",
+			essay: `The Telegram bot I built for our school sends daily announcements, schedule changes, and exam reminders to 300 students. Before the bot, information spread through word of mouth, which meant half the school missed important updates. Now everyone gets the same information at the same time.
+
+Building it was straightforward technically — Python with the Telegram API. The hard part was adoption. Students installed it but didn't check notifications. I added a daily quiz feature with small prizes, and engagement tripled. This taught me that useful isn't enough — you also need to be engaging.
+
+The innovation fair project was a prototype for a smart waste bin that sorts recyclables using image recognition. We trained a basic model on photos of common waste items. The accuracy was only 70%, but the concept won because the judges saw practical potential.
+
+Tutoring physics and math gives me joy because it forces me to truly understand concepts. You can't explain something clearly if your own understanding is fuzzy. Every student I tutor makes me a better learner.
+
+inVision U attracts the kind of people I want to learn alongside — builders who care about impact.`,
+			motivation: "I build tools that solve everyday problems. inVision U will help me think bigger and build better.",
+		},
+		// BORDERLINE templates
+		{
+			category:     "borderline",
+			achievements: "Participated in school science fair. Learning to code online. Average academic standing.",
+			extras:       "Football team. Occasional volunteering. Interested in technology.",
+			essay: `I'm not going to pretend I have a long list of achievements. I don't. What I have is curiosity and determination. I've been learning to code through free online courses for the past six months. Progress is slow, but I'm sticking with it.
+
+My science fair project was a simple weather display using an Arduino. It didn't win anything, but building it felt amazing. Taking something from an idea to a working device — even a simple one — showed me what's possible.
+
+I come from a family where nobody went to university. My parents work hard to provide for us, and they support my dream of getting higher education, even though they don't fully understand what computer science is.
+
+I want inVision U to be the place where I figure out what I'm capable of. I know I'm not the strongest applicant, but I believe in my ability to work hard and grow. Sometimes all you need is the right environment and a chance.`,
+			motivation: "I need an opportunity to prove myself. My background doesn't reflect my potential.",
+		},
+		{
+			category:     "borderline",
+			achievements: "School English competition participant. Helped organize charity event. Self-studying web development.",
+			extras:       "English club. Some charity work. Self-study.",
+			essay: `I've been interested in technology for as long as I can remember, but opportunities in %s are limited. There are no coding bootcamps, no tech meetups, no mentors. I learn everything from the internet.
+
+Last year, I helped organize a charity event for a local orphanage. We collected books, clothes, and school supplies. It wasn't a huge event, but seeing the children's faces when they received new backpacks made all the organizing worthwhile.
+
+In the English competition, I made it to the city finals but didn't place. The experience was valuable though — it showed me that my English is good enough to compete but needs improvement. I've been watching English YouTube channels daily to get better.
+
+I'm self-studying web development and can build basic websites. It's frustrating sometimes — when you get stuck on a bug with no one to ask, it can take days to solve what a mentor could explain in minutes.
+
+I'm applying to inVision U because I want access to the mentorship and community that I've been missing.`,
+			motivation: "Limited resources shouldn't limit dreams. I want inVision U to give me the tools I lack.",
+		},
+		{
+			category:     "borderline",
+			achievements: "Good grades in STEM subjects. Created a blog about technology trends. Participated in online hackathon.",
+			extras:       "Tech blog. Online coding communities. Reading.",
+			essay: `I write a blog about technology trends in Kazakhstan. It has about 200 regular readers — mostly my classmates and their friends. I cover topics like how AI is changing different industries, new startups in Central Asia, and tech career paths.
+
+Writing the blog forces me to research and understand topics deeply. When I wrote about blockchain, I went down a rabbit hole that lasted two weeks. I emerged with a much clearer understanding of the technology and its potential applications in our region.
+
+I participated in an online hackathon where our team built a concept for a student mental health app. We didn't finish the prototype in time, but the experience of working with strangers from different countries under a tight deadline was valuable.
+
+My grades in STEM subjects are good, but I know grades alone don't make someone a good candidate. I want to do more — build things, lead projects, make an impact. I just haven't had the right platform yet.
+
+inVision U could be that platform for me.`,
+			motivation: "I understand technology but haven't yet applied it to real problems. inVision U can bridge that gap.",
+		},
+		// NOT RECOMMENDED templates
+		{
+			category:     "not_recommended",
+			achievements: "No significant achievements.",
+			extras:       "Social media. Gaming.",
+			essay: `I want to study at inVision U because it is free and has good education. I like technology and computers. I spend a lot of time online and I think I could be good at programming if I learned it properly. I dont have many achievements but I think university is where you start achieving things not before. Please consider my application.`,
+			motivation: "Free education and good career opportunities.",
+		},
+		{
+			category:     "not_recommended",
+			achievements: "Participated in school event. Below average grades.",
+			extras:       "Social media. Hanging out with friends.",
+			essay: `In an era of unprecedented technological advancement, the imperative for quality education has never been more pronounced. I am writing to express my fervent desire to join the esteemed inVision U program, which I believe represents the apogee of educational excellence in the Central Asian region.
+
+My journey, though perhaps not adorned with conventional accolades, has been characterized by an unwavering commitment to personal growth and a profound appreciation for the transformative power of knowledge. I am confident that the synergistic interplay between my innate curiosity and inVision U's world-class curriculum will yield exceptional outcomes.
+
+I eagerly anticipate the opportunity to contribute to and benefit from the dynamic intellectual ecosystem at inVision U.`,
+			motivation: "I am driven by an insatiable thirst for knowledge and a deep commitment to leveraging technology for societal betterment.",
+		},
+		{
+			category:     "not_recommended",
+			achievements: "Nothing specific.",
+			extras:       "TikTok content creation. Gaming tournaments.",
+			essay: `im applying because my friend told me about this university and the scholarship sounds really good. i dont really know what i want to study but technology seems interesting. i make tiktok videos sometimes and some of them got a few thousand views so i think i understand social media and digital stuff.
+
+i know i should probably write more about my achievements but honestly i havent done much yet. high school is boring and i cant wait to be done with it. university will be different i think.
+
+give me a chance and i wont disappoint you.`,
+			motivation: "want to try something new and the scholarship is a good deal",
+		},
+	}
+
+	var additional []seedCandidate
+	usedNames := make(map[string]bool)
+	idx := 0
+
+	// Target distribution: ~10 strong, ~25 recommend, ~20 borderline, ~16 not_recommended = 71
+	distribution := []struct {
+		category string
+		count    int
+	}{
+		{"strong", 10},
+		{"recommend", 25},
+		{"borderline", 20},
+		{"not_recommended", 16},
+	}
+
+	for _, dist := range distribution {
+		// Collect templates for this category
+		var catTemplates []essayTemplate
+		for _, t := range templates {
+			if t.category == dist.category {
+				catTemplates = append(catTemplates, t)
+			}
+		}
+
+		for i := 0; i < dist.count; i++ {
+			// Pick a unique name
+			var fullName, email string
+			for {
+				fn := firstNames[r.Intn(len(firstNames))]
+				ln := lastNames[r.Intn(len(lastNames))]
+				fullName = fn.name + " " + ln
+				if !usedNames[fullName] {
+					usedNames[fullName] = true
+					email = fmt.Sprintf("%s.%s.%d@mail.com",
+						strings.ToLower(fn.name), strings.ToLower(ln)[:3], idx+30)
+					break
+				}
+			}
+
+			city := cities[r.Intn(len(cities))]
+			tmpl := catTemplates[i%len(catTemplates)]
+			age := 17 + r.Intn(2)
+
+			essay := fmt.Sprintf(tmpl.essay, city.name)
+			// Remove excess %s if template doesn't use city
+			if !strings.Contains(tmpl.essay, "%s") {
+				essay = tmpl.essay
+			}
+
+			additional = append(additional, seedCandidate{
+				FullName:            fullName,
+				Email:               email,
+				Age:                 ptrInt(age),
+				City:                ptr(city.name),
+				School:              ptr(city.school),
+				GraduationYear:      ptrInt(2026),
+				Achievements:        ptr(tmpl.achievements),
+				Extracurriculars:    ptr(tmpl.extras),
+				Essay:               essay,
+				MotivationStatement: ptr(tmpl.motivation),
+			})
+			idx++
+		}
+	}
+
+	return additional
 }

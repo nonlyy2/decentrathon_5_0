@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { CandidateListItem, DashboardStats } from "@/lib/types";
@@ -13,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download } from "lucide-react";
 
 const STATUS_TABS = [
   { value: "all", label: "All" },
@@ -25,12 +26,14 @@ const STATUS_TABS = [
 ];
 
 export default function CandidatesPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState("all");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(0);
+  const [status, setStatus] = useState(searchParams.get("status") || "all");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
+  const [page, setPage] = useState(Number(searchParams.get("page")) || 0);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
@@ -39,11 +42,60 @@ export default function CandidatesPage() {
   const [deleting, setDeleting] = useState(false);
   const [provider, setProvider] = useState<string>("");
   const [providers, setProviders] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState("created_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState(searchParams.get("sort") || "created_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">((searchParams.get("order") as "asc" | "desc") || "desc");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = 20;
   const { user } = useAuth();
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === candidates.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(candidates.map((c) => c.id)));
+    }
+  };
+
+  const handleBulkDecision = async (decision: string) => {
+    if (selectedIds.size === 0) return;
+    setBulkAction(decision);
+    try {
+      const res = await api.post("/candidates/bulk-decision", {
+        candidate_ids: Array.from(selectedIds),
+        decision,
+      });
+      toast.success(res.data.message);
+      setSelectedIds(new Set());
+      fetchCandidates();
+      fetchCounts();
+    } catch {
+      toast.error("Failed to apply bulk action");
+    } finally {
+      setBulkAction(null);
+    }
+  };
+
+  // Sync state to URL params
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (status !== "all") params.set("status", status);
+    if (search) params.set("search", search);
+    if (page > 0) params.set("page", String(page));
+    if (sortBy !== "created_at") params.set("sort", sortBy);
+    if (sortOrder !== "desc") params.set("order", sortOrder);
+    const qs = params.toString();
+    router.replace(`/candidates${qs ? `?${qs}` : ""}`, { scroll: false });
+  }, [status, search, page, sortBy, sortOrder, router]);
 
   useEffect(() => {
     api.get("/ai-providers").then((res) => {
@@ -119,6 +171,9 @@ export default function CandidatesPage() {
         const res = await api.get("/analyze-all/status");
         const { running, processed, total, errors } = res.data;
         setBatchProgress({ done: processed, total });
+        // Refresh list to show newly analyzed candidates in real-time
+        fetchCandidates();
+        fetchCounts();
         if (!running) {
           clearInterval(pollRef.current!);
           pollRef.current = null;
@@ -133,8 +188,6 @@ export default function CandidatesPage() {
           } else {
             toast.warning(`Batch done: ${successCount} analyzed, ${errCount} failed`);
           }
-          fetchCandidates();
-          fetchCounts();
         }
       } catch {
         clearInterval(pollRef.current!);
@@ -226,6 +279,24 @@ export default function CandidatesPage() {
               </Button>
               <Button
                 variant="outline"
+                onClick={async () => {
+                  try {
+                    const res = await api.get("/candidates/export/csv", { responseType: "blob" });
+                    const url = window.URL.createObjectURL(new Blob([res.data]));
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `candidates_${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                  } catch {
+                    toast.error("Failed to export CSV");
+                  }
+                }}
+              >
+                <Download size={14} className="mr-1" /> Export CSV
+              </Button>
+              <Button
+                variant="outline"
                 className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                 onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
                 disabled={batchRunning}
@@ -273,10 +344,44 @@ export default function CandidatesPage() {
         />
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg px-4 py-2">
+          <span className="text-sm font-medium text-purple-700">{selectedIds.size} selected</span>
+          <div className="flex gap-2">
+            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("shortlist")}>
+              {bulkAction === "shortlist" ? <Loader2 size={14} className="animate-spin mr-1" /> : null} Shortlist
+            </Button>
+            <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("waitlist")}>
+              Waitlist
+            </Button>
+            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("reject")}>
+              Reject
+            </Button>
+          </div>
+          {selectedIds.size >= 2 && (
+            <Button size="sm" variant="outline" onClick={() => router.push(`/compare?ids=${Array.from(selectedIds).join(",")}`)}>
+              Compare ({selectedIds.size})
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="ml-auto text-slate-500">
+            Clear
+          </Button>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  checked={candidates.length > 0 && selectedIds.size === candidates.length}
+                  onChange={toggleSelectAll}
+                  className="rounded border-slate-300"
+                />
+              </TableHead>
               <SortableHead column="full_name" label="Name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>City</TableHead>
               <SortableHead column="final_score" label="Score" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
@@ -287,17 +392,17 @@ export default function CandidatesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {loading && candidates.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: 8 }).map((_, j) => (
                     <TableCell key={j}><div className="h-4 bg-slate-200 rounded animate-pulse w-24" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No candidates found
                 </TableCell>
               </TableRow>
@@ -305,8 +410,16 @@ export default function CandidatesPage() {
               candidates.map((c) => (
                 <TableRow
                   key={c.id}
-                  className="hover:bg-slate-50 transition-colors relative"
+                  className={`hover:bg-slate-50 transition-colors relative ${selectedIds.has(c.id) ? "bg-purple-50" : ""}`}
                 >
+                  <TableCell className="relative z-20">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelect(c.id)}
+                      className="rounded border-slate-300"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">
                     <Link
                       href={`/candidates/${c.id}`}
