@@ -86,6 +86,7 @@ func main() {
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
 
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
+		protected.GET("/candidates/:id/analysis-status", handlers.GetCandidateAnalysisStatus())
 		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, analyzeFunc))
 
 		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))

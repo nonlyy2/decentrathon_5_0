@@ -116,37 +116,63 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, geminiAnalyze func(ctx context.C
 			return
 		}
 
-		analysis, err := geminiAnalyze(c.Request.Context(), &candidate)
+		// Check if already running
+		if raw, ok := candidateAnalyses.Load(candidateID); ok {
+			if raw.(candidateAnalysisState).Running {
+				c.JSON(409, gin.H{"error": "analysis already running"})
+				return
+			}
+		}
+
+		// Mark as running and return immediately — analysis runs in background
+		candidateAnalyses.Store(candidateID, candidateAnalysisState{Running: true})
+		c.JSON(202, gin.H{"message": "analysis started"})
+
+		go func(cand models.Candidate) {
+			ctx := context.Background()
+			analysis, err := geminiAnalyze(ctx, &cand)
+			if err != nil {
+				log.Printf("Analysis failed for candidate %d: %v", cand.ID, err)
+				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: err.Error()})
+				return
+			}
+			if err := SaveAnalysis(ctx, pool, analysis); err != nil {
+				log.Printf("Save failed for candidate %d: %v", cand.ID, err)
+				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: "failed to save analysis"})
+				return
+			}
+			candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: false})
+			log.Printf("Analysis completed for candidate %d", cand.ID)
+		}(candidate)
+	}
+}
+
+// Per-candidate async analysis tracking
+type candidateAnalysisState struct {
+	Running bool
+	Failed  bool
+	ErrMsg  string
+}
+
+var candidateAnalyses sync.Map // map[int]candidateAnalysisState
+
+func GetCandidateAnalysisStatus() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
-			c.JSON(502, gin.H{"error": "AI analysis failed: " + err.Error()})
+			c.JSON(400, gin.H{"error": "invalid candidate id"})
 			return
 		}
-
-		if err := SaveAnalysis(c.Request.Context(), pool, analysis); err != nil {
-			c.JSON(500, gin.H{"error": "failed to save analysis"})
+		if raw, ok := candidateAnalyses.Load(candidateID); ok {
+			state := raw.(candidateAnalysisState)
+			c.JSON(200, gin.H{
+				"running": state.Running,
+				"failed":  state.Failed,
+				"error":   state.ErrMsg,
+			})
 			return
 		}
-
-		// Reload saved analysis
-		var saved models.Analysis
-		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id, candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
-			 final_score, category, ai_generated_risk, incomplete_flag,
-			 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
-			 summary, key_strengths, red_flags, analyzed_at, model_used
-			 FROM analyses WHERE candidate_id = $1`, candidateID,
-		).Scan(&saved.ID, &saved.CandidateID, &saved.ScoreLeadership, &saved.ScoreMotivation,
-			&saved.ScoreGrowth, &saved.ScoreVision, &saved.ScoreCommunication,
-			&saved.FinalScore, &saved.Category, &saved.AIGeneratedRisk, &saved.IncompleteFlag,
-			&saved.ExplanationLeadership, &saved.ExplanationMotivation, &saved.ExplanationGrowth,
-			&saved.ExplanationVision, &saved.ExplanationCommunication,
-			&saved.Summary, &saved.KeyStrengths, &saved.RedFlags, &saved.AnalyzedAt, &saved.ModelUsed)
-
-		if err != nil {
-			_ = err
-		}
-
-		c.JSON(http.StatusOK, saved)
+		c.JSON(200, gin.H{"running": false, "failed": false, "error": ""})
 	}
 }
 
