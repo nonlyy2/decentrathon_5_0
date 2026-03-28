@@ -128,18 +128,8 @@ const ResponseSchema = `{
   "red_flags": ["<flag 1>"] or []
 }`
 
-func BuildBatchUserMessage(candidates []models.Candidate) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Evaluate the following %d candidates. Return a JSON array with exactly %d objects in order.\n\n", len(candidates), len(candidates)))
-	for i, c := range candidates {
-		sb.WriteString(fmt.Sprintf("=== CANDIDATE %d ===\n", i+1))
-		sb.WriteString(BuildUserMessage(&c))
-		sb.WriteString("\n")
-	}
-	return sb.String()
-}
-
-func BuildUserMessage(c *models.Candidate) string {
+// buildCandidateData formats candidate data only, without any response instruction.
+func buildCandidateData(c *models.Candidate) string {
 	var sb strings.Builder
 	sb.WriteString("=== CANDIDATE APPLICATION ===\n\n")
 	sb.WriteString(fmt.Sprintf("Full Name: %s\n", c.FullName))
@@ -182,6 +172,20 @@ func BuildUserMessage(c *models.Candidate) string {
 	}
 
 	sb.WriteString("\n\n=== END APPLICATION ===\n")
-	sb.WriteString("\nPlease evaluate this candidate and respond with the JSON schema provided.")
+	return sb.String()
+}
+
+func BuildUserMessage(c *models.Candidate) string {
+	return buildCandidateData(c) + "\nPlease evaluate this candidate and respond with the JSON schema provided."
+}
+
+func BuildBatchUserMessage(candidates []models.Candidate) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Evaluate the following %d candidates. Return a JSON array with exactly %d objects in the same order. Do NOT add any text before or after the JSON array.\n\n", len(candidates), len(candidates)))
+	for i, c := range candidates {
+		sb.WriteString(fmt.Sprintf("=== CANDIDATE %d ===\n", i+1))
+		sb.WriteString(buildCandidateData(&c))
+		sb.WriteString("\n")
+	}
 	return sb.String()
 }

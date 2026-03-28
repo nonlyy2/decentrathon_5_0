@@ -69,6 +69,14 @@ func NewClient(apiKey string) *Client {
 }
 
 func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string) (string, error) {
+	return c.generate(ctx, systemPrompt, userMessage, 4096)
+}
+
+func (c *Client) GenerateLarge(ctx context.Context, systemPrompt, userMessage string) (string, error) {
+	return c.generate(ctx, systemPrompt, userMessage, 8192)
+}
+
+func (c *Client) generate(ctx context.Context, systemPrompt, userMessage string, maxTokens int) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
@@ -81,7 +89,7 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string)
 			}
 		}
 
-		result, err := c.doGenerate(ctx, systemPrompt, userMessage)
+		result, err := c.doGenerate(ctx, systemPrompt, userMessage, maxTokens)
 		if err == nil {
 			return result, nil
 		}
@@ -94,7 +102,7 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string)
 	return "", fmt.Errorf("gemini failed after 3 attempts: %w", lastErr)
 }
 
-func (c *Client) doGenerate(ctx context.Context, systemPrompt, userMessage string) (string, error) {
+func (c *Client) doGenerate(ctx context.Context, systemPrompt, userMessage string, maxTokens int) (string, error) {
 	url := fmt.Sprintf("%s/%s:generateContent?key=%s", BaseURL, c.model, c.apiKey)
 
 	reqBody := GeminiRequest{
@@ -103,7 +111,7 @@ func (c *Client) doGenerate(ctx context.Context, systemPrompt, userMessage strin
 		GenerationConfig: GenerationConfig{
 			Temperature:      0.3,
 			TopP:             0.95,
-			MaxOutputTokens:  4096,
+			MaxOutputTokens:  maxTokens,
 			ResponseMimeType: "application/json",
 		},
 	}
