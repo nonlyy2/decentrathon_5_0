@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultURL   = "http://localhost:11434"
-	DefaultModel = "qwen2.5:3b"
+	DefaultModel = "mistral:7b"
 )
 
 type Client struct {
@@ -118,9 +118,9 @@ func (c *Client) doGenerate(ctx context.Context, systemPrompt, userMessage strin
 		Format: "json",
 		Stream: false,
 		Options: Options{
-			Temperature: 0.3,
+			Temperature: 0.1,
 			TopP:        0.95,
-			NumPredict:  2048,
+			NumPredict:  4096,
 		},
 	}
 
