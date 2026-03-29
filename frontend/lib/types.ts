@@ -64,6 +64,49 @@ export interface Decision {
   decided_at: string;
 }
 
+export interface InterviewAnalysis {
+  score_leadership: number;
+  score_grit: number;
+  score_authenticity: number;
+  score_motivation: number;
+  score_vision: number;
+  final_score: number;
+  category: string;
+  consistency_score: number;
+  style_match_score: number;
+  suspicion_flags: string[];
+  summary: string;
+  strengths: string[];
+  concerns: string[];
+  analyzed_at: string;
+  model_used: string;
+}
+
+export interface InterviewStatus {
+  status: string;
+  invite_status?: string;
+  invite_token?: string;
+  interview?: {
+    id: number;
+    status: string;
+    language: string;
+    questions_asked: number;
+    started_at: string;
+    completed_at: string | null;
+  };
+  analysis?: InterviewAnalysis;
+  combined_score?: number;
+}
+
+export interface InterviewMessage {
+  role: string;
+  content: string;
+  message_type: string;
+  voice_duration_sec: number;
+  response_time_sec: number;
+  created_at: string;
+}
+
 export interface CandidateDetail extends Candidate {
   analysis: Analysis | null;
   decisions: Decision[];

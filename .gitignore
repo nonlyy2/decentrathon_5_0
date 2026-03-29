@@ -11,3 +11,5 @@ node_modules/
 .next/
 
 claude/
+
+.telegram_readme.md

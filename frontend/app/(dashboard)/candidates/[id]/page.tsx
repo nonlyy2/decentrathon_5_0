@@ -6,7 +6,7 @@ import { useFetch } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n";
 import { useAIProvider } from "@/lib/aiProvider";
 import api from "@/lib/api";
-import { CandidateDetail } from "@/lib/types";
+import { CandidateDetail, InterviewStatus, InterviewMessage } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreRadar from "@/components/ScoreRadar";
 import DecisionButtons from "@/components/DecisionButtons";
@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -47,6 +47,14 @@ export default function CandidateDetailPage() {
   const [postingComment, setPostingComment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Interview (Stage 2)
+  const [interviewData, setInterviewData] = useState<InterviewStatus | null>(null);
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [transcript, setTranscript] = useState<InterviewMessage[]>([]);
+
   const scoreLabels = [
     { key: "score_leadership", label: t("score.leadership"), explKey: "explanation_leadership", weight: "25%" },
     { key: "score_motivation", label: t("score.motivation"), explKey: "explanation_motivation", weight: "25%" },
@@ -60,6 +68,47 @@ export default function CandidateDetailPage() {
   }, [params.id]);
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
+
+  // Fetch interview status
+  const fetchInterview = useCallback(() => {
+    api.get(`/candidates/${params.id}/interview`).then((res) => setInterviewData(res.data)).catch(() => {});
+  }, [params.id]);
+
+  useEffect(() => { fetchInterview(); }, [fetchInterview]);
+
+  const handleSendInvite = async () => {
+    setSendingInvite(true);
+    try {
+      const res = await api.post(`/candidates/${params.id}/telegram-invite`);
+      setInviteLink(res.data.deep_link);
+      toast.success("Invite created!");
+      fetchInterview();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to create invite";
+      toast.error(msg);
+    } finally {
+      setSendingInvite(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      toast.success(t("interview.copied"));
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  };
+
+  const handleViewTranscript = async () => {
+    try {
+      const res = await api.get(`/candidates/${params.id}/interview/messages`);
+      setTranscript(res.data);
+      setShowTranscript(true);
+    } catch {
+      toast.error("Failed to load transcript");
+    }
+  };
 
   const handlePostComment = async () => {
     if (!newComment.trim()) return;
