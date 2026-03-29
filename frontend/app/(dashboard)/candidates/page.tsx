@@ -1,24 +1,29 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
+import { useAIProvider } from "@/lib/aiProvider";
 import { CandidateListItem, DashboardStats } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreBadge from "@/components/ScoreBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Play, Square, Download, Trash2 } from "lucide-react";
 
 export default function CandidatesPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { provider, setProvider } = useAIProvider();
+  const { user } = useAuth();
+
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -30,8 +35,16 @@ export default function CandidatesPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">((searchParams.get("order") as "asc" | "desc") || "desc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
+
+  // Admin controls state
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const limit = 20;
-  const { user } = useAuth();
 
   const STATUS_TABS = [
     { value: "all", label: t("cand.all") },
@@ -74,6 +87,107 @@ export default function CandidatesPage() {
       toast.error("Failed to apply bulk action");
     } finally {
       setBulkAction(null);
+    }
+  };
+
+  // Batch analysis polling
+  const startBatchPoll = useCallback(() => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get("/analyze-all/status");
+        const { running, processed, total, errors } = res.data;
+        setBatchProgress({ done: processed, total });
+        if (!running) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setBatchRunning(false);
+          setBatchProgress(null);
+          const errCount = Array.isArray(errors) ? errors.length : 0;
+          const ok = processed - errCount;
+          if (errCount === 0) toast.success(`Batch complete: ${ok}/${processed} analyzed`);
+          else if (ok === 0) toast.error(`Batch failed: all ${errCount} errored`);
+          else toast.warning(`Batch done: ${ok} analyzed, ${errCount} failed`);
+          fetchCandidates();
+          fetchCounts();
+        }
+      } catch {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setBatchRunning(false);
+      }
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  // Check if batch is already running on mount
+  useEffect(() => {
+    api.get("/analyze-all/status").then((res) => {
+      if (res.data.running) {
+        setBatchRunning(true);
+        setBatchProgress({ done: res.data.processed, total: res.data.total });
+        startBatchPoll();
+      }
+    }).catch(() => {});
+  }, [startBatchPoll]);
+
+  const handleAnalyzeAll = async () => {
+    try {
+      const qs = provider ? `?provider=${provider}` : "";
+      const res = await api.post(`/analyze-all${qs}`);
+      if (!res.data.count) {
+        toast.info("No pending candidates to analyze");
+        return;
+      }
+      toast.success(`Analysis started for ${res.data.count} candidates`);
+      setBatchRunning(true);
+      setBatchProgress({ done: 0, total: res.data.count });
+      startBatchPoll();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg ? `Error: ${msg}` : "Failed to start batch analysis");
+    }
+  };
+
+  const handleStopBatch = async () => {
+    try {
+      await api.post("/analyze-all/stop");
+      toast.info("Stopping batch analysis...");
+    } catch {
+      toast.error("Failed to stop batch");
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const res = await api.get(`/candidates/export/csv?lang=${lang}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `candidates_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to export CSV");
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    try {
+      const res = await api.delete("/analyses");
+      toast.success(`Deleted ${res.data.deleted} analyses`);
+      setDeleteDialogOpen(false);
+      setDeleteConfirmText("");
+      fetchCandidates();
+      fetchCounts();
+    } catch {
+      toast.error("Failed to delete analyses");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -150,19 +264,80 @@ export default function CandidatesPage() {
   };
 
   const totalPages = Math.ceil(total / limit);
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("cand.title")}</h1>
-        <div className="flex items-center gap-3">
-          {user?.role === "admin" && (
-            <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>
-              {t("nav.admin")}
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            {/* Provider toggle */}
+            <div className="flex items-center gap-1 bg-slate-100 border rounded-lg p-1">
+              <button
+                onClick={() => setProvider("gemini")}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  provider === "gemini" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                ☁ Gemini
+              </button>
+              <button
+                onClick={() => setProvider("ollama")}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  provider === "ollama" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                ⚙ Ollama
+              </button>
+            </div>
+
+            {/* Analyze All / Stop */}
+            {batchRunning ? (
+              <div className="flex items-center gap-2">
+                {batchProgress && (
+                  <span className="text-xs text-purple-600 font-medium">
+                    {batchProgress.done}/{batchProgress.total}
+                  </span>
+                )}
+                <Button size="sm" variant="destructive" onClick={handleStopBatch}>
+                  <Square size={14} className="mr-1" /> {t("cand.stop")}
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={handleAnalyzeAll}>
+                <Play size={14} className="mr-1" /> {t("cand.analyze_all")}
+              </Button>
+            )}
+
+            {/* Export CSV */}
+            <Button size="sm" variant="outline" onClick={handleExportCSV}>
+              <Download size={14} className="mr-1" /> {t("cand.export")}
             </Button>
-          )}
-        </div>
+
+            {/* Reset Analyses */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+              onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
+              disabled={batchRunning}
+            >
+              <Trash2 size={14} className="mr-1" /> {t("cand.reset")}
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Batch progress bar */}
+      {batchRunning && batchProgress && (
+        <div className="w-full bg-slate-200 rounded-full h-1.5">
+          <div
+            className="bg-purple-500 h-1.5 rounded-full transition-all"
+            style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%` }}
+          />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1 border-b">
         {STATUS_TABS.map((tab) => {
@@ -284,7 +459,7 @@ export default function CandidatesPage() {
                     />
                     <span className="relative z-20">{c.full_name}</span>
                   </TableCell>
-                  <TableCell className="relative z-20">{c.city || "\u2014"}</TableCell>
+                  <TableCell className="relative z-20">{c.city || "—"}</TableCell>
                   <TableCell className="relative z-20"><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
                   <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
@@ -297,10 +472,10 @@ export default function CandidatesPage() {
                         <div>{new Date(c.analyzed_at).toLocaleDateString()}</div>
                         <div className="text-xs">{new Date(c.analyzed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
                       </>
-                    ) : "\u2014"}
+                    ) : "—"}
                   </TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
-                    {c.model_used ? c.model_used.replace(/^(gemini|ollama)\//, "") : "\u2014"}
+                    {c.model_used ? c.model_used.replace(/^(gemini|ollama)\//, "") : "—"}
                   </TableCell>
                 </TableRow>
               ))
@@ -325,6 +500,34 @@ export default function CandidatesPage() {
         </div>
       )}
 
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">{t("del.title")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">{t("del.desc")}</p>
+          <p className="text-sm text-slate-500 mt-2">
+            {t("del.confirm")} <span className="font-mono font-bold text-red-600">{"удалить"}</span>:
+          </p>
+          <Input
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="удалить"
+            className="mt-1"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>{t("del.cancel")}</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={deleteConfirmText !== "удалить" || deleting}
+              onClick={handleDeleteAll}
+            >
+              {deleting ? <><Loader2 size={14} className="animate-spin mr-2" />{t("del.deleting")}</> : t("del.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

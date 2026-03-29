@@ -19,6 +19,7 @@ type GeminiAnalysisResponse struct {
 	FinalScore               float64  `json:"final_score"`
 	Category                 string   `json:"category"`
 	AIGeneratedRisk          string   `json:"ai_generated_risk"`
+	AIGeneratedScore         int      `json:"ai_generated_score"`
 	IncompleteFlag           bool     `json:"incomplete_flag"`
 	ExplanationLeadership    string   `json:"explanation_leadership"`
 	ExplanationMotivation    string   `json:"explanation_motivation"`
@@ -60,9 +61,8 @@ func ParseBatchAnalysisResponse(jsonStr string, expected int) ([]*GeminiAnalysis
 			float64(resp.ScoreVision)*0.15+
 			float64(resp.ScoreCommunication)*0.15)*100) / 100
 		resp.Category = scoreToCategory(resp.FinalScore)
-		if resp.AIGeneratedRisk != "low" && resp.AIGeneratedRisk != "medium" && resp.AIGeneratedRisk != "high" {
-			resp.AIGeneratedRisk = "low"
-		}
+		resp.AIGeneratedScore = clamp(resp.AIGeneratedScore, 0, 100)
+		resp.AIGeneratedRisk = aiScoreToRisk(resp.AIGeneratedScore)
 		if resp.KeyStrengths == nil {
 			resp.KeyStrengths = []string{}
 		}
@@ -96,10 +96,9 @@ func ParseAnalysisResponse(jsonStr string) (*GeminiAnalysisResponse, error) {
 	// Recalculate category
 	resp.Category = scoreToCategory(resp.FinalScore)
 
-	// Validate ai_generated_risk
-	if resp.AIGeneratedRisk != "low" && resp.AIGeneratedRisk != "medium" && resp.AIGeneratedRisk != "high" {
-		resp.AIGeneratedRisk = "low"
-	}
+	// Clamp and derive AI detection
+	resp.AIGeneratedScore = clamp(resp.AIGeneratedScore, 0, 100)
+	resp.AIGeneratedRisk = aiScoreToRisk(resp.AIGeneratedScore)
 
 	// Ensure slices are not nil
 	if resp.KeyStrengths == nil {
@@ -123,6 +122,7 @@ func ToAnalysis(resp *GeminiAnalysisResponse, candidateID int) *models.Analysis 
 		FinalScore:               resp.FinalScore,
 		Category:                 resp.Category,
 		AIGeneratedRisk:          resp.AIGeneratedRisk,
+		AIGeneratedScore:         resp.AIGeneratedScore,
 		IncompleteFlag:           resp.IncompleteFlag,
 		ExplanationLeadership:    resp.ExplanationLeadership,
 		ExplanationMotivation:    resp.ExplanationMotivation,
@@ -145,6 +145,17 @@ func clamp(val, min, max int) int {
 		return max
 	}
 	return val
+}
+
+func aiScoreToRisk(score int) string {
+	switch {
+	case score >= 66:
+		return "high"
+	case score >= 36:
+		return "medium"
+	default:
+		return "low"
+	}
 }
 
 func scoreToCategory(score float64) string {

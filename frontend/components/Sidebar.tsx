@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { LayoutDashboard, Users, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, LogOut } from "lucide-react";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -14,7 +14,6 @@ export default function Sidebar() {
   const navItems = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/candidates", label: t("nav.candidates"), icon: Users },
-    ...(user?.role === "admin" ? [{ href: "/admin", label: t("nav.admin"), icon: ShieldCheck }] : []),
   ];
 
   return (

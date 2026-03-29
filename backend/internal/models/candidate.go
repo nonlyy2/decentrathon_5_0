@@ -6,6 +6,8 @@ type Candidate struct {
 	ID                  int       `json:"id"`
 	FullName            string    `json:"full_name"`
 	Email               string    `json:"email"`
+	Phone               *string   `json:"phone"`
+	Telegram            *string   `json:"telegram"`
 	Age                 *int      `json:"age"`
 	City                *string   `json:"city"`
 	School              *string   `json:"school"`
@@ -41,6 +43,8 @@ type CandidateDetail struct {
 type CreateCandidateRequest struct {
 	FullName            string  `json:"full_name" binding:"required"`
 	Email               string  `json:"email" binding:"required,email"`
+	Phone               *string `json:"phone"`
+	Telegram            *string `json:"telegram"`
 	Age                 *int    `json:"age"`
 	City                *string `json:"city"`
 	School              *string `json:"school"`

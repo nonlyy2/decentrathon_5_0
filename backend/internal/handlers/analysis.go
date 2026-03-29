@@ -48,13 +48,13 @@ func GetAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 		var analysis models.Analysis
 		err = pool.QueryRow(c.Request.Context(),
 			`SELECT id, candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
-			 final_score, category, ai_generated_risk, incomplete_flag,
+			 final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0), incomplete_flag,
 			 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
 			 summary, key_strengths, red_flags, analyzed_at, model_used
 			 FROM analyses WHERE candidate_id = $1`, candidateID,
 		).Scan(&analysis.ID, &analysis.CandidateID, &analysis.ScoreLeadership, &analysis.ScoreMotivation,
 			&analysis.ScoreGrowth, &analysis.ScoreVision, &analysis.ScoreCommunication,
-			&analysis.FinalScore, &analysis.Category, &analysis.AIGeneratedRisk, &analysis.IncompleteFlag,
+			&analysis.FinalScore, &analysis.Category, &analysis.AIGeneratedRisk, &analysis.AIGeneratedScore, &analysis.IncompleteFlag,
 			&analysis.ExplanationLeadership, &analysis.ExplanationMotivation, &analysis.ExplanationGrowth,
 			&analysis.ExplanationVision, &analysis.ExplanationCommunication,
 			&analysis.Summary, &analysis.KeyStrengths, &analysis.RedFlags, &analysis.AnalyzedAt, &analysis.ModelUsed)
@@ -119,13 +119,13 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
-		 final_score, category, ai_generated_risk, incomplete_flag,
+		 final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
 		 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
 		 summary, key_strengths, red_flags, model_used)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
 		analysis.CandidateID, analysis.ScoreLeadership, analysis.ScoreMotivation, analysis.ScoreGrowth,
 		analysis.ScoreVision, analysis.ScoreCommunication, analysis.FinalScore, analysis.Category,
-		analysis.AIGeneratedRisk, analysis.IncompleteFlag,
+		analysis.AIGeneratedRisk, analysis.AIGeneratedScore, analysis.IncompleteFlag,
 		analysis.ExplanationLeadership, analysis.ExplanationMotivation, analysis.ExplanationGrowth,
 		analysis.ExplanationVision, analysis.ExplanationCommunication,
 		analysis.Summary, analysis.KeyStrengths, analysis.RedFlags, analysis.ModelUsed)
@@ -173,9 +173,9 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 		// Get candidate
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id, full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
 			 FROM candidates WHERE id = $1`, candidateID,
-		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Age, &candidate.City,
+		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
 			&candidate.Essay, &candidate.MotivationStatement, &candidate.CreatedAt, &candidate.Status)
 		if err != nil {
@@ -262,6 +262,8 @@ func GetCandidateAnalysisStatus() gin.HandlerFunc {
 }
 
 // Bulk analysis
+var batchCancel context.CancelFunc
+
 var batchStatus struct {
 	sync.Mutex
 	Running   bool     `json:"running"`
@@ -295,7 +297,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		batchStatus.Unlock()
 
 		rows, err := pool.Query(c.Request.Context(),
-			`SELECT id, full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
 			 FROM candidates WHERE status = 'pending'`)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to query candidates"})
@@ -305,7 +307,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		var candidates []models.Candidate
 		for rows.Next() {
 			var cand models.Candidate
-			if err := rows.Scan(&cand.ID, &cand.FullName, &cand.Email, &cand.Age, &cand.City,
+			if err := rows.Scan(&cand.ID, &cand.FullName, &cand.Email, &cand.Phone, &cand.Telegram, &cand.Age, &cand.City,
 				&cand.School, &cand.GraduationYear, &cand.Achievements, &cand.Extracurriculars,
 				&cand.Essay, &cand.MotivationStatement, &cand.CreatedAt, &cand.Status); err == nil {
 				candidates = append(candidates, cand)
@@ -318,6 +320,9 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 			return
 		}
 
+		ctx, cancel := context.WithCancel(context.Background())
+		batchCancel = cancel
+
 		batchStatus.Lock()
 		batchStatus.Running = true
 		batchStatus.Processed = 0
@@ -326,10 +331,11 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		batchStatus.Unlock()
 
 		const batchSize = 10
-		const maxConcurrent = 3
+		const maxConcurrent = 5
 
 		go func() {
 			defer func() {
+				cancel()
 				batchStatus.Lock()
 				batchStatus.Running = false
 				batchStatus.Unlock()
@@ -352,10 +358,10 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 			}
 
 			type batchResult struct {
-				analyses  []*models.Analysis
-				batch     []models.Candidate
-				err       error
-				batchIdx  int
+				analyses []*models.Analysis
+				batch    []models.Candidate
+				err      error
+				batchIdx int
 			}
 
 			sem := make(chan struct{}, maxConcurrent)
@@ -367,18 +373,31 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 				if rateLimitHit {
 					break
 				}
+				// Check for cancellation
+				select {
+				case <-ctx.Done():
+					batchStatus.Lock()
+					batchStatus.Errors = append(batchStatus.Errors, "batch stopped by user")
+					batchStatus.Unlock()
+					goto done
+				default:
+				}
 				wg.Add(1)
 				sem <- struct{}{}
 				go func(bIdx int, batch []models.Candidate) {
 					defer wg.Done()
 					defer func() { <-sem }()
-					ctx := context.Background()
 					if batchFunc != nil {
 						analyses, err := batchFunc(ctx, batch)
 						results <- batchResult{analyses: analyses, batch: batch, err: err, batchIdx: bIdx}
 					} else {
 						var analyses []*models.Analysis
 						for i := range batch {
+							select {
+							case <-ctx.Done():
+								return
+							default:
+							}
 							a, err := analyzeFunc(ctx, &batch[i])
 							if err != nil {
 								results <- batchResult{err: err, batch: batch[i : i+1], batchIdx: bIdx}
@@ -394,6 +413,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 				}(idx, b)
 			}
 
+		done:
 			// Close results after all goroutines finish
 			go func() {
 				wg.Wait()
@@ -410,8 +430,13 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 						batchStatus.Unlock()
 					} else {
 						// Fall back: process individually
-						ctx := context.Background()
 						for i := range r.batch {
+							select {
+							case <-ctx.Done():
+								processedCount++
+								continue
+							default:
+							}
 							a, err2 := analyzeFunc(ctx, &r.batch[i])
 							processedCount++
 							if err2 != nil {
@@ -428,7 +453,6 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 						}
 					}
 				} else {
-					ctx := context.Background()
 					for j, a := range r.analyses {
 						processedCount++
 						if a == nil || j >= len(r.batch) {
@@ -562,6 +586,22 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			out = append(out, outItem{ID: r.ID, Name: r.Name, Score: r.FinalScore, Reason: s.Reason})
 		}
 		c.JSON(200, gin.H{"selected": out, "overall_reasoning": parsed.OverallReasoning})
+	}
+}
+
+func StopBatch() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		batchStatus.Lock()
+		running := batchStatus.Running
+		batchStatus.Unlock()
+		if !running {
+			c.JSON(200, gin.H{"message": "no batch running"})
+			return
+		}
+		if batchCancel != nil {
+			batchCancel()
+		}
+		c.JSON(200, gin.H{"message": "batch stop requested"})
 	}
 }
 

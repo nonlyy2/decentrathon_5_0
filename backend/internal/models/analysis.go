@@ -13,6 +13,7 @@ type Analysis struct {
 	FinalScore               float64   `json:"final_score"`
 	Category                 string    `json:"category"`
 	AIGeneratedRisk          string    `json:"ai_generated_risk"`
+	AIGeneratedScore         int       `json:"ai_generated_score"`
 	IncompleteFlag           bool      `json:"incomplete_flag"`
 	ExplanationLeadership    string    `json:"explanation_leadership"`
 	ExplanationMotivation    string    `json:"explanation_motivation"`

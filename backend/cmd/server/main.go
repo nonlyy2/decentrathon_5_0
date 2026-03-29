@@ -136,6 +136,7 @@ func main() {
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
 
 		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, batchProviders, defaultProvider))
+		protected.POST("/analyze-all/stop", handlers.StopBatch())
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
 		protected.POST("/candidates/ai-recommend", handlers.RecommendCandidates(pool, textGens, defaultProvider))
 

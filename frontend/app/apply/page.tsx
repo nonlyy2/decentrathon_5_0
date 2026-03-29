@@ -16,7 +16,7 @@ const publicApi = axios.create({
 
 export default function ApplyPage() {
   const [form, setForm] = useState({
-    full_name: "", email: "", age: "", city: "", school: "",
+    full_name: "", email: "", phone: "", telegram: "", age: "", city: "", school: "",
     graduation_year: "", achievements: "", extracurriculars: "",
     essay: "", motivation_statement: "",
   });
@@ -40,6 +40,8 @@ export default function ApplyPage() {
       await publicApi.post("/apply", {
         full_name: form.full_name,
         email: form.email,
+        phone: form.phone || null,
+        telegram: form.telegram || null,
         age: form.age ? parseInt(form.age) : null,
         city: form.city || null,
         school: form.school || null,
@@ -128,6 +130,14 @@ export default function ApplyPage() {
                 <div>
                   <Label className="text-slate-300">Email *</Label>
                   <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} required className="bg-slate-700/50 border-slate-600 text-white" />
+                </div>
+                <div>
+                  <Label className="text-slate-300">Phone</Label>
+                  <Input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="+7 777 123 4567" className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
+                </div>
+                <div>
+                  <Label className="text-slate-300">Telegram</Label>
+                  <Input value={form.telegram} onChange={(e) => update("telegram", e.target.value)} placeholder="@username" className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
                 </div>
                 <div>
                   <Label className="text-slate-300">Age</Label>

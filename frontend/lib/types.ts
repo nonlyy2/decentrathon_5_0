@@ -2,6 +2,8 @@ export interface Candidate {
   id: number;
   full_name: string;
   email: string;
+  phone: string | null;
+  telegram: string | null;
   age: number | null;
   city: string | null;
   school: string | null;
@@ -39,6 +41,7 @@ export interface Analysis {
   final_score: number;
   category: string;
   ai_generated_risk: string;
+  ai_generated_score: number;
   incomplete_flag: boolean;
   explanation_leadership: string;
   explanation_motivation: string;

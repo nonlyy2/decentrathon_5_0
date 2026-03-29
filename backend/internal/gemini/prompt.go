@@ -54,10 +54,25 @@ Score based on: structure of thought, ability to explain complex ideas simply, c
 - 0-39: Incoherent, very poor communication
 
 AI-GENERATED TEXT DETECTION:
-Evaluate the essay and motivation statement for signs of AI generation:
-- "low": Natural writing style, personal voice, specific details unlikely to be AI-generated
-- "medium": Some sections feel generic or polished beyond the candidate's apparent level, mixed signals
-- "high": Formulaic structure, generic inspirational language, lack of specific personal details, suspiciously polished prose inconsistent with other application elements
+Evaluate the essay and motivation statement for signs of AI generation. Provide BOTH a percentage score AND a risk level.
+
+ai_generated_score (0-100): Probability that the text was AI-generated. Use these signals:
+- Perplexity analysis: AI text tends to have low perplexity (predictable word choices). Human text is more varied and surprising.
+- Burstiness: Humans write with varying sentence lengths and complexity. AI tends to be uniform.
+- Vocabulary diversity: AI often uses a narrow set of "sophisticated" words repeatedly (e.g., "delve", "tapestry", "multifaceted", "foster", "leverage", "beacon", "embark", "resonate").
+- Personal specificity: Real essays contain very specific personal details (exact names, dates, places, emotions). AI text tends to be generic.
+- Structural patterns: AI tends to use parallel structure, numbered lists, and formulaic transitions excessively.
+- Tonal consistency: AI maintains an unnaturally consistent "inspirational" or "professional" tone throughout.
+- Error patterns: Some human-like errors (typos, grammar mistakes, casual language) actually indicate human authorship.
+
+Score guide:
+- 0-20: Almost certainly human-written. Strong personal voice, specific details, natural imperfections.
+- 21-40: Likely human-written with some polished sections.
+- 41-60: Mixed signals. Some sections feel AI-assisted, others feel authentic.
+- 61-80: Likely AI-generated. Generic language, formulaic structure, lacks personal specifics.
+- 81-100: Almost certainly AI-generated. All classic AI hallmarks present.
+
+ai_generated_risk: Derived from score — "low" (0-35), "medium" (36-65), "high" (66-100)
 
 IMPORTANT RULES:
 - Be fair and unbiased. Do not penalize for imperfect English if the candidate is clearly a non-native speaker.
@@ -88,6 +103,7 @@ const BatchResponseSchema = `[
     "final_score": <float>,
     "category": "<Strong Recommend|Recommend|Borderline|Not Recommended>",
     "ai_generated_risk": "<low|medium|high>",
+    "ai_generated_score": <int 0-100>,
     "incomplete_flag": <bool>,
     "explanation_leadership": "<2-3 sentences>",
     "explanation_motivation": "<2-3 sentences>",
@@ -117,6 +133,7 @@ const ResponseSchema = `{
   "final_score": <float, weighted average>,
   "category": "<Strong Recommend|Recommend|Borderline|Not Recommended>",
   "ai_generated_risk": "<low|medium|high>",
+  "ai_generated_score": <int 0-100, probability of AI generation>,
   "incomplete_flag": <bool>,
   "explanation_leadership": "<2-3 sentences with specific evidence>",
   "explanation_motivation": "<2-3 sentences with specific evidence>",

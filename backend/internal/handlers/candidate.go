@@ -20,12 +20,12 @@ func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		var candidate models.Candidate
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-			 RETURNING id, full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status`,
-			req.FullName, req.Email, req.Age, req.City, req.School, req.GraduationYear,
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			 RETURNING id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status`,
+			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
 			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement,
-		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Age, &candidate.City,
+		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
 			&candidate.Essay, &candidate.MotivationStatement, &candidate.CreatedAt, &candidate.Status)
 
@@ -57,10 +57,10 @@ func SubmitApplication(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		var id int
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending')
 			 RETURNING id`,
-			req.FullName, req.Email, req.Age, req.City, req.School, req.GraduationYear,
+			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
 			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement,
 		).Scan(&id)
 
@@ -173,9 +173,9 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 		// Get candidate
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id, full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
 			 FROM candidates WHERE id = $1`, id,
-		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Age, &candidate.City,
+		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
 			&candidate.Essay, &candidate.MotivationStatement, &candidate.CreatedAt, &candidate.Status)
 
@@ -193,13 +193,13 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 		var analysis models.Analysis
 		err = pool.QueryRow(c.Request.Context(),
 			`SELECT id, candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
-			 final_score, category, ai_generated_risk, incomplete_flag,
+			 final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0), incomplete_flag,
 			 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
 			 summary, key_strengths, red_flags, analyzed_at, model_used
 			 FROM analyses WHERE candidate_id = $1`, id,
 		).Scan(&analysis.ID, &analysis.CandidateID, &analysis.ScoreLeadership, &analysis.ScoreMotivation,
 			&analysis.ScoreGrowth, &analysis.ScoreVision, &analysis.ScoreCommunication,
-			&analysis.FinalScore, &analysis.Category, &analysis.AIGeneratedRisk, &analysis.IncompleteFlag,
+			&analysis.FinalScore, &analysis.Category, &analysis.AIGeneratedRisk, &analysis.AIGeneratedScore, &analysis.IncompleteFlag,
 			&analysis.ExplanationLeadership, &analysis.ExplanationMotivation, &analysis.ExplanationGrowth,
 			&analysis.ExplanationVision, &analysis.ExplanationCommunication,
 			&analysis.Summary, &analysis.KeyStrengths, &analysis.RedFlags, &analysis.AnalyzedAt, &analysis.ModelUsed)

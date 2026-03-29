@@ -211,10 +211,12 @@ export default function CandidateDetailPage() {
             <CardContent>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">{t("detail.email")}:</span> {detail.email}</div>
-                <div><span className="text-muted-foreground">{t("detail.age")}:</span> {detail.age || "\u2014"}</div>
-                <div><span className="text-muted-foreground">{t("detail.city")}:</span> {detail.city || "\u2014"}</div>
-                <div><span className="text-muted-foreground">{t("detail.school")}:</span> {detail.school || "\u2014"}</div>
-                <div><span className="text-muted-foreground">{t("detail.graduation")}:</span> {detail.graduation_year || "\u2014"}</div>
+                <div><span className="text-muted-foreground">{t("detail.phone")}:</span> {detail.phone || "—"}</div>
+                <div><span className="text-muted-foreground">{t("detail.telegram")}:</span> {detail.telegram || "—"}</div>
+                <div><span className="text-muted-foreground">{t("detail.age")}:</span> {detail.age || "—"}</div>
+                <div><span className="text-muted-foreground">{t("detail.city")}:</span> {detail.city || "—"}</div>
+                <div><span className="text-muted-foreground">{t("detail.school")}:</span> {detail.school || "—"}</div>
+                <div><span className="text-muted-foreground">{t("detail.graduation")}:</span> {detail.graduation_year || "—"}</div>
               </div>
             </CardContent>
           </Card>
@@ -261,9 +263,11 @@ export default function CandidateDetailPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <Sparkles size={16} className="text-purple-500" /> {t("detail.ai_analysis")}
                     </CardTitle>
-                    <Badge className={riskColors[a.ai_generated_risk]}>
-                      {t("detail.ai_risk")}: {a.ai_generated_risk}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={riskColors[a.ai_generated_risk]}>
+                        {t("detail.ai_risk")}: {a.ai_generated_score}%
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">

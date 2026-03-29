@@ -13,14 +13,14 @@ import (
 func csvHeaders(lang string) []string {
 	switch lang {
 	case "ru":
-		return []string{"ID", "Имя", "Email", "Возраст", "Город", "Школа", "Год выпуска", "Статус", "Дата создания",
-			"Итоговый балл", "Категория", "Риск ИИ", "Модель", "Дата анализа"}
+		return []string{"ID", "Имя", "Email", "Телефон", "Telegram", "Возраст", "Город", "Школа", "Год выпуска", "Статус", "Дата создания",
+			"Итоговый балл", "Категория", "Риск ИИ", "ИИ %", "Модель", "Дата анализа"}
 	case "kk":
-		return []string{"ID", "Аты", "Email", "Жасы", "Қала", "Мектеп", "Бітіру жылы", "Мәртебе", "Жасалған күн",
-			"Қорытынды балл", "Санат", "ЖИ тәуекелі", "Модель", "Талдау күні"}
+		return []string{"ID", "Аты", "Email", "Телефон", "Telegram", "Жасы", "Қала", "Мектеп", "Бітіру жылы", "Мәртебе", "Жасалған күн",
+			"Қорытынды балл", "Санат", "ЖИ тәуекелі", "ЖИ %", "Модель", "Талдау күні"}
 	default:
-		return []string{"ID", "Full Name", "Email", "Age", "City", "School", "Graduation Year", "Status", "Created At",
-			"Final Score", "Category", "AI Risk", "Model Used", "Analyzed At"}
+		return []string{"ID", "Full Name", "Email", "Phone", "Telegram", "Age", "City", "School", "Graduation Year", "Status", "Created At",
+			"Final Score", "Category", "AI Risk", "AI %", "Model Used", "Analyzed At"}
 	}
 }
 
@@ -29,11 +29,12 @@ func ExportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 		ctx := c.Request.Context()
 
 		rows, err := pool.Query(ctx,
-			`SELECT c.id, c.full_name, c.email, COALESCE(c.age::text, ''), COALESCE(c.city, ''),
+			`SELECT c.id, c.full_name, c.email, COALESCE(c.phone, ''), COALESCE(c.telegram, ''),
+			        COALESCE(c.age::text, ''), COALESCE(c.city, ''),
 			        COALESCE(c.school, ''), COALESCE(c.graduation_year::text, ''), c.status, c.created_at,
 			        COALESCE(a.final_score::text, ''), COALESCE(a.category, ''),
-			        COALESCE(a.ai_generated_risk, ''), COALESCE(a.model_used, ''),
-			        COALESCE(a.analyzed_at::text, '')
+			        COALESCE(a.ai_generated_risk, ''), COALESCE(a.ai_generated_score::text, '0'),
+			        COALESCE(a.model_used, ''), COALESCE(a.analyzed_at::text, '')
 			 FROM candidates c
 			 LEFT JOIN analyses a ON c.id = a.candidate_id
 			 ORDER BY c.id`)
@@ -56,19 +57,19 @@ func ExportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		for rows.Next() {
 			var id int
-			var fullName, email, age, city, school, gradYear, status string
+			var fullName, email, phone, telegram, age, city, school, gradYear, status string
 			var createdAt time.Time
-			var finalScore, category, risk, model, analyzedAt string
+			var finalScore, category, risk, aiScore, model, analyzedAt string
 
-			if err := rows.Scan(&id, &fullName, &email, &age, &city, &school, &gradYear, &status, &createdAt,
-				&finalScore, &category, &risk, &model, &analyzedAt); err != nil {
+			if err := rows.Scan(&id, &fullName, &email, &phone, &telegram, &age, &city, &school, &gradYear, &status, &createdAt,
+				&finalScore, &category, &risk, &aiScore, &model, &analyzedAt); err != nil {
 				continue
 			}
 
 			w.Write([]string{
-				fmt.Sprintf("%d", id), fullName, email, age, city, school, gradYear, status,
+				fmt.Sprintf("%d", id), fullName, email, phone, telegram, age, city, school, gradYear, status,
 				createdAt.Format("2006-01-02"),
-				finalScore, category, risk, model, analyzedAt,
+				finalScore, category, risk, aiScore, model, analyzedAt,
 			})
 		}
 
