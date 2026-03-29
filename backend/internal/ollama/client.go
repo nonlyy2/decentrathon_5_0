@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultURL   = "http://localhost:11434"
-	DefaultModel = "qwen2.5:3b"
+	DefaultModel = "mistral:7b"
 )
 
 type Client struct {
