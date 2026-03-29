@@ -20,14 +20,14 @@ func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		var candidate models.Candidate
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-			 RETURNING id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status`,
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+			 RETURNING id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status`,
 			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
-			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement,
+			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
-			&candidate.Essay, &candidate.MotivationStatement, &candidate.CreatedAt, &candidate.Status)
+			&candidate.Essay, &candidate.MotivationStatement, &candidate.Disability, &candidate.CreatedAt, &candidate.Status)
 
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -57,11 +57,11 @@ func SubmitApplication(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		var id int
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending')
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending')
 			 RETURNING id`,
 			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
-			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement,
+			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability,
 		).Scan(&id)
 
 		if err != nil {
@@ -173,11 +173,11 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 		// Get candidate
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status
 			 FROM candidates WHERE id = $1`, id,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
-			&candidate.Essay, &candidate.MotivationStatement, &candidate.CreatedAt, &candidate.Status)
+			&candidate.Essay, &candidate.MotivationStatement, &candidate.Disability, &candidate.CreatedAt, &candidate.Status)
 
 		if err != nil {
 			c.JSON(404, gin.H{"error": "candidate not found"})

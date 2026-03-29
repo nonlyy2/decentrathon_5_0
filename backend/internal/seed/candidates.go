@@ -16,6 +16,8 @@ func ptrInt(i int) *int    { return &i }
 type seedCandidate struct {
 	FullName            string
 	Email               string
+	Phone               *string
+	Telegram            *string
 	Age                 *int
 	City                *string
 	School              *string
@@ -45,7 +47,7 @@ func SeedCandidates(pool *pgxpool.Pool, force bool) error {
 	candidates := []seedCandidate{
 		// === STRONG RECOMMEND (5) ===
 		{
-			FullName: "Aigerim Suleimenova", Email: "aigerim.s@mail.com",
+			FullName: "Aigerim Suleimenova", Email: "aigerim.s@mail.com", Phone: ptr("+7 707 123 4567"), Telegram: ptr("@aigerim_s"),
 			Age: ptrInt(17), City: ptr("Almaty"), School: ptr("NIS PhM Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Founded 'CodeGirls KZ' — a free coding bootcamp for girls in rural Kazakhstan, trained 200+ students across 8 regions. Won 1st place at NURIS National Science Fair 2025. Published research on air quality monitoring using IoT sensors in Eurasian Journal of Applied Sciences."),
 			Extracurriculars: ptr("President of School Debate Club (3 years). Volunteer at SOS Children's Villages Almaty. Organizer of TEDxYouth@NIS Almaty 2025."),
@@ -61,7 +63,7 @@ I want to join inVision U because I've learned to build things from nothing, but
 			MotivationStatement: ptr("I believe education is the most powerful equalizer, and I want to spend my life proving it. inVision U represents exactly the kind of bold, mission-driven thinking that I want to be part of."),
 		},
 		{
-			FullName: "Daulet Kenzhebaev", Email: "daulet.k@mail.com",
+			FullName: "Daulet Kenzhebaev", Email: "daulet.k@mail.com", Phone: ptr("+7 701 987 6543"), Telegram: ptr("@daulet_kz"),
 			Age: ptrInt(18), City: ptr("Astana"), School: ptr("BIL Astana"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Created 'EcoTrack' — a waste sorting app used by 3 apartment complexes in Astana (500+ users). National Math Olympiad bronze medalist 2024. Led a team of 6 to build a school library management system used by 12 schools."),
 			Extracurriculars: ptr("Captain of school basketball team. Mentor at Astana Hub startup incubator for teens. Volunteer translator for UNHCR Kazakhstan."),
@@ -77,7 +79,7 @@ I want to join inVision U because I'm obsessed with solving real problems, and I
 			MotivationStatement: ptr("I want to build technology that serves communities, not just consumers. inVision U's focus on creating leaders who drive change aligns perfectly with my path."),
 		},
 		{
-			FullName: "Madina Orazova", Email: "madina.o@mail.com",
+			FullName: "Madina Orazova", Email: "madina.o@mail.com", Phone: ptr("+7 705 456 7890"), Telegram: ptr("@madina_or"),
 			Age: ptrInt(17), City: ptr("Shymkent"), School: ptr("NIS ChB Shymkent"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Organized city-wide blood donation drive that collected 150+ units. Regional debate champion 2024-2025. Created a mentorship program connecting university students with high schoolers in Turkestan region — 80 pairs matched."),
 			Extracurriculars: ptr("Founder and president of Youth Civic Engagement Club. Volunteer at local women's shelter. Writer for school newspaper (published 30+ articles)."),
@@ -93,7 +95,7 @@ This is what I want to study at inVision U — not just how to build products, b
 			MotivationStatement: ptr("I want to learn how to combine empathy with innovation. inVision U's mission of creating changemakers resonates deeply with my belief that real impact starts with understanding people."),
 		},
 		{
-			FullName: "Arman Tulegenov", Email: "arman.t@mail.com",
+			FullName: "Arman Tulegenov", Email: "arman.t@mail.com", Phone: ptr("+7 702 111 2233"), Telegram: ptr("@arman_t"),
 			Age: ptrInt(18), City: ptr("Almaty"), School: ptr("KBTU Lyceum"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Built and sold a Telegram bot for restaurant reservations (2000+ users, sold for $500). National Physics Olympiad silver 2025. Completed Google's Android Development certification at age 16."),
 			Extracurriculars: ptr("Open source contributor (3 merged PRs on popular Kotlin libraries). Organizer of AlmatyJS meetup for young developers. Tutor at local orphanage teaching basic computer skills."),
@@ -109,7 +111,7 @@ I want inVision U to help me bridge these two worlds — the technical excellenc
 			MotivationStatement: ptr("I believe the best technology is built by people who understand both code and community. inVision U can help me become that kind of builder."),
 		},
 		{
-			FullName: "Zhanna Bektursynova", Email: "zhanna.b@mail.com",
+			FullName: "Zhanna Bektursynova", Email: "zhanna.b@mail.com", Phone: ptr("+7 708 333 4455"), Telegram: ptr("@zhanna_bek"),
 			Age: ptrInt(17), City: ptr("Aktobe"), School: ptr("Daryn School Aktobe"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Won national essay competition on climate change (1st place among 3000 entries). Founded school recycling program that diverted 2 tons of waste in first year. Selected for FLEX exchange program finalist (top 3%)."),
 			Extracurriculars: ptr("Editor-in-chief of school literary magazine. Regional volleyball champion. Volunteer English teacher at community center."),
@@ -128,7 +130,7 @@ I want to attend inVision U because I've proven that impact doesn't require a bi
 		},
 		// === RECOMMEND (10) ===
 		{
-			FullName: "Nurlan Akhmetov", Email: "nurlan.a@mail.com",
+			FullName: "Nurlan Akhmetov", Email: "nurlan.a@mail.com", Phone: ptr("+7 700 555 6677"), Telegram: ptr("@nurlan_a"),
 			Age: ptrInt(17), City: ptr("Karaganda"), School: ptr("NIS Karaganda"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Regional math olympiad winner 2024. Created a study group platform used by 50 students. Volunteer at local animal shelter."),
 			Extracurriculars: ptr("Chess club captain. Photography club. Participated in Model UN."),
@@ -142,7 +144,7 @@ I want to join inVision U because I'm good at solving problems on paper, but I w
 			MotivationStatement: ptr("I want to combine my analytical skills with real-world impact. inVision U can teach me how to translate mathematical thinking into practical solutions."),
 		},
 		{
-			FullName: "Kamila Sagynbaeva", Email: "kamila.s@mail.com",
+			FullName: "Kamila Sagynbaeva", Email: "kamila.s@mail.com", Phone: ptr("+7 706 777 8899"), Telegram: ptr("@kamila_sg"),
 			Age: ptrInt(18), City: ptr("Almaty"), School: ptr("Haileybury Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Organized a charity concert that raised 500,000 KZT for children's hospital. School student council vice-president. Completed Stanford's online Machine Learning course."),
 			Extracurriculars: ptr("Piano (Grade 8 ABRSM). Debate team. Volunteer at Red Crescent."),
@@ -156,7 +158,7 @@ I've also been exploring machine learning through Stanford's online course. I fi
 			MotivationStatement: ptr("I'm drawn to inVision U because it values action over credentials. I've learned more from organizing a concert than from any textbook."),
 		},
 		{
-			FullName: "Bekzat Nurmagambetov", Email: "bekzat.n@mail.com",
+			FullName: "Bekzat Nurmagambetov", Email: "bekzat.n@mail.com", Phone: ptr("+7 771 222 3344"), Telegram: ptr("@bekzat_n"),
 			Age: ptrInt(17), City: ptr("Astana"), School: ptr("NIS Astana"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Built a weather monitoring station for school using Arduino. Regional informatics olympiad 3rd place. Completed freeCodeCamp full-stack certification."),
 			Extracurriculars: ptr("Robotics club member. School newspaper tech columnist. Volunteer at Astana Marathon."),
@@ -170,7 +172,7 @@ What I lack is direction. I know I can build things, but I'm not sure what to bu
 			MotivationStatement: ptr("I'm a builder looking for a purpose. inVision U's focus on creating changemakers can help me channel my technical skills toward meaningful problems."),
 		},
 		{
-			FullName: "Dinara Ospanova", Email: "dinara.o@mail.com",
+			FullName: "Dinara Ospanova", Email: "dinara.o@mail.com", Phone: ptr("+7 747 444 5566"), Telegram: ptr("@dinara_osp"),
 			Age: ptrInt(17), City: ptr("Pavlodar"), School: ptr("School #17 Pavlodar"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Created an Instagram page teaching Kazakh history with 5,000 followers. Won regional creative writing competition. Organized school career day with 10 local professionals."),
 			Extracurriculars: ptr("School drama club lead actress. Art club. Volunteer reader at children's library."),
@@ -186,7 +188,7 @@ I want to learn at inVision U how to combine storytelling with technology to mak
 			MotivationStatement: ptr("I believe that how you tell a story matters as much as the story itself. inVision U can help me learn how to scale impactful storytelling with technology."),
 		},
 		{
-			FullName: "Tamerlan Yessimov", Email: "tamerlan.y@mail.com",
+			FullName: "Tamerlan Yessimov", Email: "tamerlan.y@mail.com", Phone: ptr("+7 778 666 7788"), Telegram: ptr("@tamerlan_y"),
 			Age: ptrInt(18), City: ptr("Almaty"), School: ptr("Republican Physics-Math School"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("National programming olympiad participant (top 20). Built a chess engine in Python. Research assistant at IITU machine learning lab."),
 			Extracurriculars: ptr("Competitive programming club. Online tutor for math. Runner (completed Almaty half-marathon)."),
@@ -202,7 +204,7 @@ I want to attend inVision U to bridge the gap between theoretical problem-solvin
 			MotivationStatement: ptr("I'm strong technically but I need to develop my ability to identify problems worth solving. inVision U's entrepreneurial focus is what I need."),
 		},
 		{
-			FullName: "Aisha Muratova", Email: "aisha.m@mail.com",
+			FullName: "Aisha Muratova", Email: "aisha.m@mail.com", Phone: ptr("+7 703 888 9900"), Telegram: ptr("@aisha_m"),
 			Age: ptrInt(17), City: ptr("Shymkent"), School: ptr("Nazarbayev Intellectual School Shymkent"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Founded a peer tutoring network connecting 30 tutors with 100 students. Regional English olympiad gold. Selected for UNESCO Youth Forum Kazakhstan delegate."),
 			Extracurriculars: ptr("Student council president. Debate team captain. Volunteer at SOS Children's Village."),
@@ -216,7 +218,7 @@ As a UNESCO Youth Forum delegate, I learned that solutions that work in one cont
 			MotivationStatement: ptr("I've learned that real leadership is about creating systems, not being in charge. inVision U can help me think systemically about the problems I care about."),
 		},
 		{
-			FullName: "Yerbol Satybaldiev", Email: "yerbol.s@mail.com",
+			FullName: "Yerbol Satybaldiev", Email: "yerbol.s@mail.com", Phone: ptr("+7 709 111 0011"), Telegram: ptr("@yerbol_sat"),
 			Age: ptrInt(18), City: ptr("Atyrau"), School: ptr("School #24 Atyrau"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Created a YouTube channel teaching physics in Kazakh (8,000 subscribers). Built simple educational games for younger students. Regional physics olympiad participant."),
 			Extracurriculars: ptr("School physics lab assistant. Basketball team. Volunteer at elderly care home."),
@@ -232,7 +234,7 @@ I want inVision U to help me turn this YouTube channel into something bigger —
 			MotivationStatement: ptr("Education in your mother tongue is a right, not a privilege. I want inVision U to help me scale my work beyond YouTube."),
 		},
 		{
-			FullName: "Saltanat Rakhimova", Email: "saltanat.r@mail.com",
+			FullName: "Saltanat Rakhimova", Email: "saltanat.r@mail.com", Phone: ptr("+7 775 222 3300"), Telegram: ptr("@saltanat_r"),
 			Age: ptrInt(17), City: ptr("Kostanay"), School: ptr("NIS Kostanay"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Created a school mental health awareness campaign reaching 800 students. Regional biology olympiad silver. Published article on teen stress in local newspaper."),
 			Extracurriculars: ptr("Peer counselor. Book club organizer. Volunteer at Red Cross."),
@@ -248,7 +250,7 @@ I learned that systemic change requires both data and empathy, both evidence and
 			MotivationStatement: ptr("I want to build systems that support mental health in communities where the concept itself is stigmatized. inVision U's focus on real-world impact draws me in."),
 		},
 		{
-			FullName: "Rustem Torekulov", Email: "rustem.t@mail.com",
+			FullName: "Rustem Torekulov", Email: "rustem.t@mail.com", Phone: ptr("+7 776 444 5500"), Telegram: ptr("@rustem_t"),
 			Age: ptrInt(17), City: ptr("Almaty"), School: ptr("Lyceum 134 Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Led school science fair that attracted 100+ projects. Internship at local IT company (QA testing). Completed CS50 online course."),
 			Extracurriculars: ptr("Science club president. Football team goalkeeper. Volunteer math tutor."),
@@ -265,7 +267,7 @@ I'm applying to inVision U because I want to learn how to build products and lea
 		},
 		// === BORDERLINE (8) ===
 		{
-			FullName: "Daniyar Aubakirov", Email: "daniyar.a@mail.com",
+			FullName: "Daniyar Aubakirov", Email: "daniyar.a@mail.com", Phone: ptr("+7 704 555 6600"), Telegram: ptr("@daniyar_a"),
 			Age: ptrInt(17), City: ptr("Astana"), School: ptr("School #55 Astana"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Participated in hackathon (didn't win). Good grades in mathematics. Member of school robotics club."),
 			Extracurriculars: ptr("Robotics club. Gaming club. Occasional volunteer."),
@@ -277,7 +279,7 @@ I don't have many big achievements yet, but I am eager to learn and grow. I thin
 			MotivationStatement: ptr("I want to become a successful entrepreneur and create technology that helps people. inVision U can give me the skills and network I need."),
 		},
 		{
-			FullName: "Gulnaz Temirgaliyeva", Email: "gulnaz.t@mail.com",
+			FullName: "Gulnaz Temirgaliyeva", Email: "gulnaz.t@mail.com", Phone: ptr("+7 707 666 7700"), Telegram: ptr("@gulnaz_tem"),
 			Age: ptrInt(18), City: ptr("Semey"), School: ptr("School #1 Semey"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Regional English speech competition 2nd place. Helped organize school sports day. Good academic standing."),
 			Extracurriculars: ptr("English club. School choir. Helped at mother's small business."),
@@ -291,7 +293,7 @@ I want to attend inVision U because I see it as a bridge to opportunities that d
 			MotivationStatement: ptr("I want to use education to create opportunities for people in smaller cities like Semey, where resources are limited but determination is not."),
 		},
 		{
-			FullName: "Miras Serikbayev", Email: "miras.s@mail.com",
+			FullName: "Miras Serikbayev", Email: "miras.s@mail.com", Phone: ptr("+7 701 777 8800"), Telegram: ptr("@miras_ser"),
 			Age: ptrInt(17), City: ptr("Aktau"), School: ptr("School #14 Aktau"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("School basketball team MVP. Basic Python skills (self-taught). Helped organize beach cleanup."),
 			Extracurriculars: ptr("Basketball. Swimming. Some coding projects."),
@@ -307,7 +309,7 @@ I want to come to inVision U because I know I have potential but I need the righ
 			MotivationStatement: ptr("I need a community of driven people to push me to reach my potential. Aktau doesn't have that, but inVision U does."),
 		},
 		{
-			FullName: "Aliya Nurlankyzy", Email: "aliya.n@mail.com",
+			FullName: "Aliya Nurlankyzy", Email: "aliya.n@mail.com", Phone: ptr("+7 705 888 9900"), Telegram: ptr("@aliya_nurlan"),
 			Age: ptrInt(17), City: ptr("Taldykorgan"), School: ptr("School #5 Taldykorgan"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Regional art competition 3rd place. Created handmade jewelry sold at local market. Decent academic performance."),
 			Extracurriculars: ptr("Art club. Handcraft workshop. Occasional community events."),
@@ -321,7 +323,7 @@ I'll be honest — I'm not the strongest student academically. My strength is cr
 			MotivationStatement: ptr("I believe creativity and business sense can create real change, especially for artisans in small cities like mine."),
 		},
 		{
-			FullName: "Olzhas Kurmangaliyev", Email: "olzhas.k@mail.com",
+			FullName: "Olzhas Kurmangaliyev", Email: "olzhas.k@mail.com", Phone: ptr("+7 708 999 0011"), Telegram: ptr("@olzhas_k"),
 			Age: ptrInt(18), City: ptr("Karaganda"), School: ptr("School #85 Karaganda"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Completed online web development course. School event photographer. Participated in local startup weekend."),
 			Extracurriculars: ptr("Photography. Web design hobby projects. Gaming."),
@@ -335,7 +337,7 @@ I want to apply to inVision U because I want to learn how to turn my skills into
 			MotivationStatement: ptr("I have skills but lack direction and mentorship. inVision U can provide both."),
 		},
 		{
-			FullName: "Zarina Yessenova", Email: "zarina.y@mail.com",
+			FullName: "Zarina Yessenova", Email: "zarina.y@mail.com", Phone: ptr("+7 702 000 1122"), Telegram: ptr("@zarina_yes"),
 			Age: ptrInt(17), City: ptr("Shymkent"), School: ptr("School #35 Shymkent"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("School play lead role. Good grades. Helped with family business accounting."),
 			Extracurriculars: ptr("Drama club. Dance. Helping family."),
@@ -349,7 +351,7 @@ Drama club is my escape from the routine of school and the store. Playing differ
 			MotivationStatement: ptr("I want to help small businesses in Kazakhstan compete in the digital age. My family's store taught me the problems; I need inVision U to teach me the solutions."),
 		},
 		{
-			FullName: "Erlan Kazhimov", Email: "erlan.k@mail.com",
+			FullName: "Erlan Kazhimov", Email: "erlan.k@mail.com", Phone: ptr("+7 700 111 2200"), Telegram: ptr("@erlan_kazh"),
 			Age: ptrInt(18), City: ptr("Almaty"), School: ptr("School #125 Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("School sports day organizer. Basic coding knowledge. Average academic performance."),
 			Extracurriculars: ptr("Football. Some coding. Student council member."),
@@ -363,7 +365,7 @@ I'm honest about my limitations — I'm not the smartest student or the most tal
 			MotivationStatement: ptr("inVision U represents a life-changing opportunity for me. I promise to make the most of it and give back to my community."),
 		},
 		{
-			FullName: "Inkar Baimukhanova", Email: "inkar.b@mail.com",
+			FullName: "Inkar Baimukhanova", Email: "inkar.b@mail.com", Phone: ptr("+7 771 333 4400"), Telegram: ptr("@inkar_b"),
 			Age: ptrInt(17), City: ptr("Oral"), School: ptr("School #3 Oral"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Won school English essay competition. Tutored younger students in math. Participated in city volunteering events."),
 			Extracurriculars: ptr("English club. Math tutoring. City volunteering."),
@@ -378,7 +380,7 @@ I want to attend inVision U because I've done everything I can with the resource
 		},
 		// === NOT RECOMMENDED (7) ===
 		{
-			FullName: "Askar Jumagulov", Email: "askar.j@mail.com",
+			FullName: "Askar Jumagulov", Email: "askar.j@mail.com", Phone: ptr("+7 747 555 6600"), Telegram: ptr("@askar_j"),
 			Age: ptrInt(17), City: ptr("Almaty"), School: ptr("School #78 Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("None significant"),
 			Extracurriculars: ptr("Gaming"),
@@ -387,7 +389,7 @@ I want to attend inVision U because I've done everything I can with the resource
 		},
 		// AI-generated essay (HIGH risk)
 		{
-			FullName: "Sanzhar Omarov", Email: "sanzhar.o@mail.com",
+			FullName: "Sanzhar Omarov", Email: "sanzhar.o@mail.com", Phone: ptr("+7 778 666 7700"), Telegram: ptr("@sanzhar_o"),
 			Age: ptrInt(18), City: ptr("Astana"), School: ptr("School #100 Astana"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Member of school science club. Participated in city quiz tournament."),
 			Extracurriculars: ptr("Science club. Quiz club. Reading."),
@@ -404,7 +406,7 @@ In conclusion, I am confident that my passion for innovation, combined with my t
 		},
 		// AI-generated essay (HIGH risk)
 		{
-			FullName: "Merey Iskakov", Email: "merey.i@mail.com",
+			FullName: "Merey Iskakov", Email: "merey.i@mail.com", Phone: ptr("+7 706 777 8800"), Telegram: ptr("@merey_isk"),
 			Age: ptrInt(17), City: ptr("Almaty"), School: ptr("School #45 Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Good grades. Participated in school olympiad. Member of debate club."),
 			Extracurriculars: ptr("Debate club. Chess. Reading."),
@@ -419,7 +421,7 @@ I am confident that my intellectual curiosity, combined with my commitment to co
 		},
 		// Medium AI risk
 		{
-			FullName: "Nurislam Bekzhanov", Email: "nurislam.b@mail.com",
+			FullName: "Nurislam Bekzhanov", Email: "nurislam.b@mail.com", Phone: ptr("+7 700 888 9900"), Telegram: ptr("@nurislam_b"),
 			Age: ptrInt(17), City: ptr("Shymkent"), School: ptr("School #20 Shymkent"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Participated in a few school events. Average grades."),
 			Extracurriculars: ptr("Football. Sometimes helps at mosque."),
@@ -434,7 +436,7 @@ I hope inVision U will give me the chance to discover what I'm capable of. I pro
 		},
 		// Medium AI risk
 		{
-			FullName: "Ayaulym Serikova", Email: "ayaulym.s@mail.com",
+			FullName: "Ayaulym Serikova", Email: "ayaulym.s@mail.com", Phone: ptr("+7 701 999 0000"), Telegram: ptr("@ayaulym_s"),
 			Age: ptrInt(17), City: ptr("Almaty"), School: ptr("School #60 Almaty"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("School honor roll. Participated in Model UN. Basic website projects."),
 			Extracurriculars: ptr("Model UN. School newspaper. Instagram blogging."),
@@ -449,7 +451,7 @@ I think inVision U is the perfect place for someone like me who has many interes
 		},
 		// Medium AI risk
 		{
-			FullName: "Temirlan Zhumabekov", Email: "temirlan.z@mail.com",
+			FullName: "Temirlan Zhumabekov", Email: "temirlan.z@mail.com", Phone: ptr("+7 775 000 1100"), Telegram: ptr("@temirlan_zh"),
 			Age: ptrInt(18), City: ptr("Kyzylorda"), School: ptr("School #7 Kyzylorda"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Helped organize school concert. Basic English knowledge. Interested in business."),
 			Extracurriculars: ptr("Music. Helping family with shop. Reading business books."),
@@ -461,7 +463,7 @@ I want to learn at inVision U because I see how the world is changing and I don'
 			MotivationStatement: ptr("I want to modernize business in Kyzylorda. My father's shop taught me the basics, but I need formal education to go further."),
 		},
 		{
-			FullName: "Darkhan Moldabekov", Email: "darkhan.m@mail.com",
+			FullName: "Darkhan Moldabekov", Email: "darkhan.m@mail.com", Phone: ptr("+7 747 111 2200"), Telegram: ptr("@darkhan_m"),
 			Age: ptrInt(18), City: ptr("Astana"), School: ptr("School #30 Astana"), GraduationYear: ptrInt(2026),
 			Achievements:     ptr("Nothing notable"),
 			Extracurriculars: ptr("Video games. Social media."),
@@ -481,9 +483,9 @@ I dont have achievements to list but I think potential matters more than past ac
 	failed := 0
 	for _, c := range candidates {
 		_, err := pool.Exec(ctx,
-			`INSERT INTO candidates (full_name, email, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')`,
-			c.FullName, c.Email, c.Age, c.City, c.School, c.GraduationYear,
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending')`,
+			c.FullName, c.Email, c.Phone, c.Telegram, c.Age, c.City, c.School, c.GraduationYear,
 			c.Achievements, c.Extracurriculars, c.Essay, c.MotivationStatement,
 		)
 		if err != nil {
@@ -768,9 +770,15 @@ give me a chance and i wont disappoint you.`,
 				essay = tmpl.essay
 			}
 
+			phone := fmt.Sprintf("+7 7%02d %03d %04d", r.Intn(100), r.Intn(1000), r.Intn(10000))
+			nameParts := strings.SplitN(strings.ToLower(fullName), " ", 2)
+			tgUser := fmt.Sprintf("@%s_%s_%d", nameParts[0], nameParts[1][:3], idx+30)
+
 			additional = append(additional, seedCandidate{
 				FullName:            fullName,
 				Email:               email,
+				Phone:               ptr(phone),
+				Telegram:            ptr(tgUser),
 				Age:                 ptrInt(age),
 				City:                ptr(city.name),
 				School:              ptr(city.school),

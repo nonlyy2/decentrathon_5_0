@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -13,11 +15,35 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/assylkhan/invisionu-backend/internal/ollama"
 	"github.com/assylkhan/invisionu-backend/internal/seed"
+	"github.com/assylkhan/invisionu-backend/internal/telegram_bot"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// #region agent log
+	{
+		type dbg struct {
+			SessionID    string                 `json:"sessionId"`
+			HypothesisID string                 `json:"hypothesisId"`
+			Location     string                 `json:"location"`
+			Message      string                 `json:"message"`
+			Data         map[string]interface{} `json:"data"`
+			Timestamp    int64                  `json:"timestamp"`
+		}
+		if f, err := os.OpenFile("/Users/assylkhan/Desktop/decentrathon/.cursor/debug-d0fa02.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			b, _ := json.Marshal(dbg{SessionID: "d0fa02", HypothesisID: "H1", Location: "main.go:configLoad", Message: "resolved Ollama config after Load",
+				Data: map[string]interface{}{
+					"OLLAMA_MODEL_env_raw": os.Getenv("OLLAMA_MODEL"),
+					"cfg.OllamaModel":      cfg.OllamaModel,
+					"cfg.AIProvider":       cfg.AIProvider,
+				}, Timestamp: time.Now().UnixMilli()})
+			f.Write(append(b, '\n'))
+			f.Close()
+		}
+	}
+	// #endregion
 
 	// Database
 	pool, err := database.Connect(cfg.DatabaseURL)
@@ -144,6 +170,39 @@ func main() {
 		protected.GET("/candidates/export/csv", handlers.ExportCandidatesCSV(pool))
 		protected.POST("/candidates/bulk-decision", handlers.BulkDecision(pool))
 	}
+
+	// Telegram bot (Stage 2 Interview)
+	botUsername := ""
+	if cfg.TelegramBotToken != "" {
+		// Pick the best available text generator for the bot
+		var botTextGen telegram_bot.TextGenerator
+		botModelName := "unknown"
+		if gen, ok := textGens["gemini"]; ok {
+			botTextGen = gen
+			botModelName = gemini.ModelName
+		} else if gen, ok := textGens["ollama"]; ok {
+			botTextGen = gen
+			botModelName = "ollama/" + cfg.OllamaModel
+		}
+
+		if botTextGen != nil {
+			bot, err := telegram_bot.New(cfg, pool, botTextGen, botModelName)
+			if err != nil {
+				log.Printf("Warning: failed to init Telegram bot: %v", err)
+			} else {
+				botUsername = bot.Username()
+				go bot.Start(context.Background())
+				log.Printf("Telegram bot started (@%s)", botUsername)
+			}
+		} else {
+			log.Printf("Warning: no AI provider available for Telegram bot")
+		}
+	}
+
+	// Interview routes (need botUsername for deep link generation)
+	protected.POST("/candidates/:id/telegram-invite", handlers.CreateTelegramInvite(pool, botUsername))
+	protected.GET("/candidates/:id/interview", handlers.GetInterviewStatus(pool))
+	protected.GET("/candidates/:id/interview/messages", handlers.GetInterviewTranscript(pool))
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {

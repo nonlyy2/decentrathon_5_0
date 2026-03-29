@@ -2,8 +2,11 @@ package ollama
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"os"
+	"time"
 
 	"github.com/assylkhan/invisionu-backend/internal/gemini"
 	"github.com/assylkhan/invisionu-backend/internal/models"
@@ -24,7 +27,27 @@ func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candida
 		return nil, fmt.Errorf("ollama response parse failed: %w", err)
 	}
 
-	return toAnalysis(parsed, candidate.ID, "ollama/"+c.ModelName()), nil
+	modelUsed := "ollama/" + c.ModelName()
+	// #region agent log
+	{
+		type dbg struct {
+			SessionID    string                 `json:"sessionId"`
+			HypothesisID string                 `json:"hypothesisId"`
+			Location     string                 `json:"location"`
+			Message      string                 `json:"message"`
+			Data         map[string]interface{} `json:"data"`
+			Timestamp    int64                  `json:"timestamp"`
+		}
+		if f, err := os.OpenFile("/Users/assylkhan/Desktop/decentrathon/.cursor/debug-d0fa02.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			b, _ := json.Marshal(dbg{SessionID: "d0fa02", HypothesisID: "H2", Location: "ollama/analyzer.go:AnalyzeCandidate", Message: "model_used string for persisted analysis",
+				Data: map[string]interface{}{"modelUsed": modelUsed, "clientModelName": c.ModelName()}, Timestamp: time.Now().UnixMilli()})
+			f.Write(append(b, '\n'))
+			f.Close()
+		}
+	}
+	// #endregion
+
+	return toAnalysis(parsed, candidate.ID, modelUsed), nil
 }
 
 // AnalyzeBatch processes each candidate individually for Ollama.

@@ -16,6 +16,7 @@ type Candidate struct {
 	Extracurriculars    *string   `json:"extracurriculars"`
 	Essay               string    `json:"essay"`
 	MotivationStatement *string   `json:"motivation_statement"`
+	Disability          *string   `json:"disability"`
 	CreatedAt           time.Time `json:"created_at"`
 	Status              string    `json:"status"`
 }
@@ -53,4 +54,5 @@ type CreateCandidateRequest struct {
 	Extracurriculars    *string `json:"extracurriculars"`
 	Essay               string  `json:"essay" binding:"required"`
 	MotivationStatement *string `json:"motivation_statement"`
+	Disability          *string `json:"disability"`
 }

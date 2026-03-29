@@ -173,11 +173,11 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 		// Get candidate
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status
 			 FROM candidates WHERE id = $1`, candidateID,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
-			&candidate.Essay, &candidate.MotivationStatement, &candidate.CreatedAt, &candidate.Status)
+			&candidate.Essay, &candidate.MotivationStatement, &candidate.Disability, &candidate.CreatedAt, &candidate.Status)
 		if err != nil {
 			c.JSON(404, gin.H{"error": "candidate not found"})
 			return
