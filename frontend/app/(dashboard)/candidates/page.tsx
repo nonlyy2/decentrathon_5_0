@@ -156,18 +156,6 @@ export default function CandidatesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("cand.title")}</h1>
         <div className="flex items-center gap-3">
-          {batchRunning && batchProgress && (
-            <div className="flex items-center gap-2 text-sm text-purple-600">
-              <Loader2 size={14} className="animate-spin" />
-              <span>Analyzing {batchProgress.done}/{batchProgress.total}</span>
-              <div className="w-24 bg-slate-200 rounded-full h-1.5">
-                <div
-                  className="bg-purple-500 h-1.5 rounded-full transition-all"
-                  style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          )}
           {user?.role === "admin" && (
             <Button variant="outline" size="sm" onClick={() => router.push("/admin")}>
               {t("nav.admin")}
