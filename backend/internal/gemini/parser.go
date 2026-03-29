@@ -147,6 +147,10 @@ func clamp(val, min, max int) int {
 	return val
 }
 
+func AIScoreToRisk(score int) string {
+	return aiScoreToRisk(score)
+}
+
 func aiScoreToRisk(score int) string {
 	switch {
 	case score >= 66:
@@ -156,6 +160,10 @@ func aiScoreToRisk(score int) string {
 	default:
 		return "low"
 	}
+}
+
+func ScoreToCategory(score float64) string {
+	return scoreToCategory(score)
 }
 
 func scoreToCategory(score float64) string {
