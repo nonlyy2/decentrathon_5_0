@@ -129,4 +129,8 @@ export interface DashboardStats {
   avg_score: number;
   score_distribution: { range: string; count: number }[];
   category_counts: Record<string, number>;
+  score_mean: number;
+  score_median: number;
+  dimension_means: Record<string, number>;
+  dimension_distributions: Record<string, { range: string; count: number }[]>;
 }

@@ -81,7 +81,9 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(404, gin.H{"error": "analysis not found"})
 			return
 		}
-		pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1`, candidateID)
+		// Only reset to pending if no committee decision has been made
+		// (candidates with shortlisted/rejected/waitlisted keep their status)
+		pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1 AND status = 'analyzed'`, candidateID)
 		candidateAnalyses.Delete(candidateID)
 		c.JSON(200, gin.H{"message": "analysis deleted"})
 	}
@@ -297,7 +299,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		batchStatus.Unlock()
 
 		rows, err := pool.Query(c.Request.Context(),
-			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status
 			 FROM candidates WHERE status = 'pending'`)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to query candidates"})
@@ -309,7 +311,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 			var cand models.Candidate
 			if err := rows.Scan(&cand.ID, &cand.FullName, &cand.Email, &cand.Phone, &cand.Telegram, &cand.Age, &cand.City,
 				&cand.School, &cand.GraduationYear, &cand.Achievements, &cand.Extracurriculars,
-				&cand.Essay, &cand.MotivationStatement, &cand.CreatedAt, &cand.Status); err == nil {
+				&cand.Essay, &cand.MotivationStatement, &cand.Disability, &cand.CreatedAt, &cand.Status); err == nil {
 				candidates = append(candidates, cand)
 			}
 		}

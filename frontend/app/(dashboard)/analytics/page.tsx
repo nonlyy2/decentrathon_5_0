@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFetch } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n";
 import { DashboardStats } from "@/lib/types";
@@ -238,6 +239,109 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Distribution Graphs */}
+      <DistributionGraphs stats={stats} />
+    </div>
+  );
+}
+
+const DIMENSION_OPTIONS = [
+  { key: "leadership", label: "Leadership" },
+  { key: "motivation", label: "Motivation" },
+  { key: "growth", label: "Growth" },
+  { key: "vision", label: "Vision" },
+  { key: "communication", label: "Communication" },
+];
+
+function DistributionGraphs({ stats }: { stats: DashboardStats }) {
+  const [selectedDim, setSelectedDim] = useState("leadership");
+
+  const dimDist = stats.dimension_distributions?.[selectedDim] || [];
+  const dimMean = stats.dimension_means?.[selectedDim] || 0;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Graph 1: Overall score distribution with mean/median */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Overall Score Distribution</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {stats.score_distribution.some((b) => b.count > 0) ? (
+            <>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={stats.score_distribution} barSize={48}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-6 mt-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span className="text-muted-foreground">Mean: <span className="font-bold text-blue-600">{stats.score_mean.toFixed(1)}</span></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span className="text-muted-foreground">Median: <span className="font-bold text-green-600">{stats.score_median.toFixed(1)}</span></span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Graph 2: Per-dimension distribution with selector */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Dimension Distribution</CardTitle>
+            <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+              {DIMENSION_OPTIONS.map((dim) => (
+                <button
+                  key={dim.key}
+                  onClick={() => setSelectedDim(dim.key)}
+                  className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                    selectedDim === dim.key
+                      ? "bg-purple-600 text-white shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {dim.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {dimDist.length > 0 && dimDist.some((b) => b.count > 0) ? (
+            <>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={dimDist} barSize={32}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" fontSize={11} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-6 mt-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span className="text-muted-foreground">Mean: <span className="font-bold text-blue-600">{dimMean.toFixed(1)}</span></span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

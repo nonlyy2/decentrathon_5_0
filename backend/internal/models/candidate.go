@@ -44,15 +44,15 @@ type CandidateDetail struct {
 type CreateCandidateRequest struct {
 	FullName            string  `json:"full_name" binding:"required"`
 	Email               string  `json:"email" binding:"required,email"`
-	Phone               *string `json:"phone"`
-	Telegram            *string `json:"telegram"`
-	Age                 *int    `json:"age"`
-	City                *string `json:"city"`
-	School              *string `json:"school"`
-	GraduationYear      *int    `json:"graduation_year"`
-	Achievements        *string `json:"achievements"`
-	Extracurriculars    *string `json:"extracurriculars"`
+	Phone               string  `json:"phone" binding:"required"`
+	Telegram            string  `json:"telegram" binding:"required"`
+	Age                 int     `json:"age" binding:"required"`
+	City                string  `json:"city" binding:"required"`
+	School              string  `json:"school" binding:"required"`
+	GraduationYear      int     `json:"graduation_year" binding:"required"`
+	Achievements        string  `json:"achievements" binding:"required"`
+	Extracurriculars    string  `json:"extracurriculars" binding:"required"`
 	Essay               string  `json:"essay" binding:"required"`
-	MotivationStatement *string `json:"motivation_statement"`
+	MotivationStatement string  `json:"motivation_statement" binding:"required"`
 	Disability          *string `json:"disability"`
 }

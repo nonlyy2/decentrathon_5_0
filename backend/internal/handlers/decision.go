@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const reviewThreshold = 4
+
 func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID, err := strconv.Atoi(c.Param("id"))
@@ -34,32 +36,109 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Insert decision
-		var decision models.Decision
+		// Check if this user already voted on this candidate
+		var existingVote int
 		err = pool.QueryRow(c.Request.Context(),
-			`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by)
-			 VALUES ($1, $2, $3, $4)
-			 RETURNING id, candidate_id, decision, notes, decided_by, decided_at`,
-			candidateID, req.Decision, req.Notes, userID,
-		).Scan(&decision.ID, &decision.CandidateID, &decision.Decision, &decision.Notes, &decision.DecidedBy, &decision.DecidedAt)
-
-		if err != nil {
-			c.JSON(500, gin.H{"error": "failed to save decision"})
-			return
+			`SELECT id FROM committee_decisions WHERE candidate_id = $1 AND decided_by = $2`,
+			candidateID, userID).Scan(&existingVote)
+		if err == nil {
+			// User already voted — update their vote
+			_, err = pool.Exec(c.Request.Context(),
+				`UPDATE committee_decisions SET decision = $1, notes = $2, decided_at = NOW()
+				 WHERE candidate_id = $3 AND decided_by = $4`,
+				req.Decision, req.Notes, candidateID, userID)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "failed to update decision"})
+				return
+			}
+		} else {
+			// Insert new decision
+			_, err = pool.Exec(c.Request.Context(),
+				`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by)
+				 VALUES ($1, $2, $3, $4)`,
+				candidateID, req.Decision, req.Notes, userID)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "failed to save decision"})
+				return
+			}
 		}
 
-		// Update candidate status
+		// Count total unique reviewers and tally votes
+		type voteCount struct {
+			Decision string
+			Count    int
+		}
+		rows, err := pool.Query(c.Request.Context(),
+			`SELECT decision, COUNT(*) FROM committee_decisions WHERE candidate_id = $1 GROUP BY decision`,
+			candidateID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to tally votes"})
+			return
+		}
+		defer rows.Close()
+
+		var totalVotes int
+		var votes []voteCount
+		for rows.Next() {
+			var v voteCount
+			if rows.Scan(&v.Decision, &v.Count) == nil {
+				votes = append(votes, v)
+				totalVotes += v.Count
+			}
+		}
+
+		// Determine if consensus reached
 		statusMap := map[string]string{
 			"shortlist": "shortlisted",
 			"reject":    "rejected",
 			"waitlist":  "waitlisted",
 			"review":    "analyzed",
 		}
-		newStatus := statusMap[req.Decision]
-		pool.Exec(c.Request.Context(),
-			`UPDATE candidates SET status = $1 WHERE id = $2`, newStatus, candidateID)
 
-		c.JSON(http.StatusCreated, decision)
+		consensusReached := false
+		var winningDecision string
+		if totalVotes >= reviewThreshold {
+			// Find majority decision
+			maxCount := 0
+			for _, v := range votes {
+				if v.Count > maxCount {
+					maxCount = v.Count
+					winningDecision = v.Decision
+				}
+			}
+			consensusReached = true
+		}
+
+		if consensusReached {
+			newStatus := statusMap[winningDecision]
+			pool.Exec(c.Request.Context(),
+				`UPDATE candidates SET status = $1 WHERE id = $2`, newStatus, candidateID)
+		}
+
+		// Get updated decision list for response
+		decRows, _ := pool.Query(c.Request.Context(),
+			`SELECT cd.id, cd.candidate_id, cd.decision, cd.notes, cd.decided_by, u.email, cd.decided_at
+			 FROM committee_decisions cd
+			 LEFT JOIN users u ON u.id = cd.decided_by
+			 WHERE cd.candidate_id = $1 ORDER BY cd.decided_at DESC`, candidateID)
+		var decisions []models.Decision
+		if decRows != nil {
+			defer decRows.Close()
+			for decRows.Next() {
+				var d models.Decision
+				if decRows.Scan(&d.ID, &d.CandidateID, &d.Decision, &d.Notes, &d.DecidedBy, &d.DecidedByEmail, &d.DecidedAt) == nil {
+					decisions = append(decisions, d)
+				}
+			}
+		}
+
+		c.JSON(http.StatusCreated, gin.H{
+			"decisions":         decisions,
+			"total_reviews":     totalVotes,
+			"required_reviews":  reviewThreshold,
+			"consensus_reached": consensusReached,
+			"winning_decision":  winningDecision,
+		})
 	}
 }
 
@@ -90,6 +169,31 @@ func GetDecisions(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusOK, decisions)
+		// Count votes summary
+		var totalVotes int
+		type voteCount struct {
+			Decision string `json:"decision"`
+			Count    int    `json:"count"`
+		}
+		var voteSummary []voteCount
+		voteRows, err := pool.Query(c.Request.Context(),
+			`SELECT decision, COUNT(*) FROM committee_decisions WHERE candidate_id = $1 GROUP BY decision`, candidateID)
+		if err == nil {
+			defer voteRows.Close()
+			for voteRows.Next() {
+				var v voteCount
+				if voteRows.Scan(&v.Decision, &v.Count) == nil {
+					voteSummary = append(voteSummary, v)
+					totalVotes += v.Count
+				}
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"decisions":        decisions,
+			"vote_summary":     voteSummary,
+			"total_reviews":    totalVotes,
+			"required_reviews": reviewThreshold,
+		})
 	}
 }

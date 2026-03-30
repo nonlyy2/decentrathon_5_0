@@ -144,6 +144,8 @@ func main() {
 		protected.GET("/candidates", handlers.ListCandidates(pool))
 		protected.POST("/candidates", handlers.CreateCandidate(pool))
 		protected.GET("/candidates/:id", handlers.GetCandidate(pool))
+		protected.PATCH("/candidates/:id", handlers.UpdateCandidate(pool))
+		protected.DELETE("/candidates/:id", handlers.DeleteCandidate(pool))
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
 
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))

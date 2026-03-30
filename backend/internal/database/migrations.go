@@ -146,6 +146,9 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			model_used VARCHAR(50)
 		)`,
 
+		// Review system: unique constraint so a user can only vote once per candidate
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_user_candidate ON committee_decisions(candidate_id, decided_by)`,
+
 		`CREATE INDEX IF NOT EXISTS idx_telegram_invites_token ON telegram_invites(token)`,
 		`CREATE INDEX IF NOT EXISTS idx_telegram_invites_chat ON telegram_invites(telegram_chat_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interviews_chat ON interviews(telegram_chat_id)`,

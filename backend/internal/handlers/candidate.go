@@ -228,6 +228,71 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
+func DeleteCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "invalid candidate id"})
+			return
+		}
+		tag, err := pool.Exec(c.Request.Context(), `DELETE FROM candidates WHERE id = $1`, id)
+		if err != nil || tag.RowsAffected() == 0 {
+			c.JSON(404, gin.H{"error": "candidate not found"})
+			return
+		}
+		c.JSON(200, gin.H{"message": "candidate deleted"})
+	}
+}
+
+func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "invalid candidate id"})
+			return
+		}
+
+		var req struct {
+			FullName            string  `json:"full_name" binding:"required"`
+			Email               string  `json:"email" binding:"required,email"`
+			Phone               *string `json:"phone"`
+			Telegram            *string `json:"telegram"`
+			Age                 *int    `json:"age"`
+			City                *string `json:"city"`
+			School              *string `json:"school"`
+			GraduationYear      *int    `json:"graduation_year"`
+			Achievements        *string `json:"achievements"`
+			Extracurriculars    *string `json:"extracurriculars"`
+			Essay               string  `json:"essay" binding:"required"`
+			MotivationStatement *string `json:"motivation_statement"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			HandleValidationError(c, err)
+			return
+		}
+
+		tag, err := pool.Exec(c.Request.Context(),
+			`UPDATE candidates SET full_name=$1, email=$2, phone=$3, telegram=$4, age=$5, city=$6, school=$7,
+			 graduation_year=$8, achievements=$9, extracurriculars=$10, essay=$11, motivation_statement=$12
+			 WHERE id=$13`,
+			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School,
+			req.GraduationYear, req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, id)
+		if err != nil {
+			if isDuplicateKey(err) {
+				c.JSON(409, gin.H{"error": "email already registered"})
+				return
+			}
+			c.JSON(500, gin.H{"error": "failed to update candidate"})
+			return
+		}
+		if tag.RowsAffected() == 0 {
+			c.JSON(404, gin.H{"error": "candidate not found"})
+			return
+		}
+		c.JSON(200, gin.H{"message": "candidate updated"})
+	}
+}
+
 func UpdateCandidateStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.Atoi(c.Param("id"))

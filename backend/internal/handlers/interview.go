@@ -34,7 +34,8 @@ func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFun
 			return
 		}
 
-		if finalScore == nil || *finalScore < 65 {
+		override := c.Query("override") == "true"
+		if !override && (finalScore == nil || *finalScore < 65) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "candidate must have Stage 1 score >= 65 (Recommended or above) to be invited"})
 			return
 		}

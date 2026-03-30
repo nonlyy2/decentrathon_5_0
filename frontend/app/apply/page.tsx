@@ -133,28 +133,28 @@ export default function ApplyPage() {
                   <Input type="email" value={form.email} onChange={(e) => update("email", e.target.value)} required className="bg-slate-700/50 border-slate-600 text-white" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">Phone</Label>
-                  <Input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="+7 777 123 4567" className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
+                  <Label className="text-slate-300">Phone *</Label>
+                  <Input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="+7 777 123 4567" required className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">Telegram</Label>
-                  <Input value={form.telegram} onChange={(e) => update("telegram", e.target.value)} placeholder="@username" className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
+                  <Label className="text-slate-300">Telegram *</Label>
+                  <Input value={form.telegram} onChange={(e) => update("telegram", e.target.value)} placeholder="@username" required className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">Age</Label>
-                  <Input type="number" value={form.age} onChange={(e) => update("age", e.target.value)} className="bg-slate-700/50 border-slate-600 text-white" />
+                  <Label className="text-slate-300">Age *</Label>
+                  <Input type="number" value={form.age} onChange={(e) => update("age", e.target.value)} required className="bg-slate-700/50 border-slate-600 text-white" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">City</Label>
-                  <Input value={form.city} onChange={(e) => update("city", e.target.value)} className="bg-slate-700/50 border-slate-600 text-white" />
+                  <Label className="text-slate-300">City *</Label>
+                  <Input value={form.city} onChange={(e) => update("city", e.target.value)} required className="bg-slate-700/50 border-slate-600 text-white" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">School</Label>
-                  <Input value={form.school} onChange={(e) => update("school", e.target.value)} className="bg-slate-700/50 border-slate-600 text-white" />
+                  <Label className="text-slate-300">School *</Label>
+                  <Input value={form.school} onChange={(e) => update("school", e.target.value)} required className="bg-slate-700/50 border-slate-600 text-white" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">Graduation Year</Label>
-                  <Input type="number" value={form.graduation_year} onChange={(e) => update("graduation_year", e.target.value)} className="bg-slate-700/50 border-slate-600 text-white" />
+                  <Label className="text-slate-300">Graduation Year *</Label>
+                  <Input type="number" value={form.graduation_year} onChange={(e) => update("graduation_year", e.target.value)} required className="bg-slate-700/50 border-slate-600 text-white" />
                 </div>
               </div>
             </div>
@@ -164,12 +164,12 @@ export default function ApplyPage() {
               <h3 className="font-medium mb-3 text-slate-200">Background</h3>
               <div className="space-y-3">
                 <div>
-                  <Label className="text-slate-300">Achievements</Label>
-                  <Textarea rows={3} value={form.achievements} onChange={(e) => update("achievements", e.target.value)} placeholder="List your key achievements..." className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
+                  <Label className="text-slate-300">Achievements *</Label>
+                  <Textarea rows={3} value={form.achievements} onChange={(e) => update("achievements", e.target.value)} placeholder="List your key achievements..." required className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
                 </div>
                 <div>
-                  <Label className="text-slate-300">Extracurricular Activities</Label>
-                  <Textarea rows={3} value={form.extracurriculars} onChange={(e) => update("extracurriculars", e.target.value)} placeholder="Clubs, volunteer work, sports, hobbies..." className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
+                  <Label className="text-slate-300">Extracurricular Activities *</Label>
+                  <Textarea rows={3} value={form.extracurriculars} onChange={(e) => update("extracurriculars", e.target.value)} placeholder="Clubs, volunteer work, sports, hobbies..." required className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500" />
                 </div>
               </div>
             </div>
@@ -193,12 +193,13 @@ export default function ApplyPage() {
 
             {/* Motivation */}
             <div>
-              <Label className="text-slate-300">Motivation Statement</Label>
+              <Label className="text-slate-300">Motivation Statement *</Label>
               <Textarea
                 rows={4}
                 value={form.motivation_statement}
                 onChange={(e) => update("motivation_statement", e.target.value)}
                 placeholder="What motivates you to apply to inVision U?"
+                required
                 className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
               />
             </div>

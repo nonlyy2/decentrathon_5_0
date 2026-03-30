@@ -15,7 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -54,6 +57,20 @@ export default function CandidateDetailPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<InterviewMessage[]>([]);
+
+  // Delete analysis custom modal
+  const [showDeleteAnalysis, setShowDeleteAnalysis] = useState(false);
+  const [deleteAnalysisText, setDeleteAnalysisText] = useState("");
+
+  // Delete candidate modal
+  const [showDeleteCandidate, setShowDeleteCandidate] = useState(false);
+  const [deleteCandidateText, setDeleteCandidateText] = useState("");
+  const [deletingCandidate, setDeletingCandidate] = useState(false);
+
+  // Edit candidate modal
+  const [showEditCandidate, setShowEditCandidate] = useState(false);
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const scoreLabels = [
     { key: "score_leadership", label: t("score.leadership"), explKey: "explanation_leadership", weight: "25%" },
@@ -176,17 +193,89 @@ export default function CandidateDetailPage() {
   };
 
   const handleDeleteAnalysis = async () => {
-    if (!confirm(t("detail.confirm_delete"))) return;
     setDeletingAnalysis(true);
     try {
       await api.delete(`/candidates/${params.id}/analysis`);
       toast.success("Analysis deleted");
       setAnalysisFailed(false);
+      setShowDeleteAnalysis(false);
+      setDeleteAnalysisText("");
       refetch();
     } catch {
       toast.error("Failed to delete analysis");
     } finally {
       setDeletingAnalysis(false);
+    }
+  };
+
+  const handleDeleteCandidate = async () => {
+    setDeletingCandidate(true);
+    try {
+      await api.delete(`/candidates/${params.id}`);
+      toast.success("Candidate deleted");
+      router.push("/candidates");
+    } catch {
+      toast.error("Failed to delete candidate");
+    } finally {
+      setDeletingCandidate(false);
+    }
+  };
+
+  const openEditCandidate = () => {
+    if (!detail) return;
+    setEditForm({
+      full_name: detail.full_name || "",
+      email: detail.email || "",
+      phone: detail.phone || "",
+      telegram: detail.telegram || "",
+      age: detail.age?.toString() || "",
+      city: detail.city || "",
+      school: detail.school || "",
+      graduation_year: detail.graduation_year?.toString() || "",
+      achievements: detail.achievements || "",
+      extracurriculars: detail.extracurriculars || "",
+      essay: detail.essay || "",
+      motivation_statement: detail.motivation_statement || "",
+    });
+    setShowEditCandidate(true);
+  };
+
+  const handleSaveEdit = async () => {
+    setSavingEdit(true);
+    try {
+      await api.patch(`/candidates/${params.id}`, {
+        full_name: editForm.full_name,
+        email: editForm.email,
+        phone: editForm.phone || null,
+        telegram: editForm.telegram || null,
+        age: editForm.age ? parseInt(editForm.age) : null,
+        city: editForm.city || null,
+        school: editForm.school || null,
+        graduation_year: editForm.graduation_year ? parseInt(editForm.graduation_year) : null,
+        achievements: editForm.achievements || null,
+        extracurriculars: editForm.extracurriculars || null,
+        essay: editForm.essay,
+        motivation_statement: editForm.motivation_statement || null,
+      });
+      toast.success("Candidate updated");
+      setShowEditCandidate(false);
+      refetch();
+    } catch {
+      toast.error("Failed to update candidate");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleSkipToStage2 = async () => {
+    try {
+      await api.post(`/candidates/${params.id}/telegram-invite?override=true`);
+      toast.success("Candidate forwarded to Stage 2");
+      fetchInterview();
+      refetch();
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to override";
+      toast.error(msg);
     }
   };
 
@@ -216,6 +305,12 @@ export default function CandidateDetailPage() {
           <StatusBadge status={detail.status} />
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={openEditCandidate}>
+            <Pencil size={14} className="mr-1" /> Edit
+          </Button>
+          <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => { setDeleteCandidateText(""); setShowDeleteCandidate(true); }}>
+            <UserX size={14} className="mr-1" /> Delete
+          </Button>
           {/* Provider toggle */}
           <div className="flex items-center gap-1 bg-slate-100 border rounded-lg p-1">
             <button
@@ -240,7 +335,7 @@ export default function CandidateDetailPage() {
               <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
                 {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.re_analyzing")}</> : t("detail.reanalyze")}
               </Button>
-              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={handleDeleteAnalysis} disabled={deletingAnalysis}>
+              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => setShowDeleteAnalysis(true)} disabled={deletingAnalysis}>
                 {deletingAnalysis ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
               </Button>
             </div>
@@ -486,7 +581,12 @@ export default function CandidateDetailPage() {
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
+                      <Button size="sm" variant="outline" onClick={handleSkipToStage2}>
+                        <SkipForward size={14} className="mr-1" /> Override: Send to Stage 2
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -610,6 +710,124 @@ export default function CandidateDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Delete Analysis Modal */}
+      <Dialog open={showDeleteAnalysis} onOpenChange={(open) => { setShowDeleteAnalysis(open); if (!open) setDeleteAnalysisText(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete AI Analysis</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">This will permanently delete the AI analysis for this candidate. Type <span className="font-bold">delete</span> to confirm.</p>
+          <Input
+            value={deleteAnalysisText}
+            onChange={(e) => setDeleteAnalysisText(e.target.value)}
+            placeholder='Type "delete" to confirm'
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteAnalysis(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteAnalysisText !== "delete" || deletingAnalysis}
+              onClick={handleDeleteAnalysis}
+            >
+              {deletingAnalysis ? <Loader2 size={14} className="animate-spin mr-1" /> : <Trash2 size={14} className="mr-1" />}
+              Delete Analysis
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Candidate Modal */}
+      <Dialog open={showDeleteCandidate} onOpenChange={(open) => { setShowDeleteCandidate(open); if (!open) setDeleteCandidateText(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Candidate</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">This will permanently delete this candidate and all their data (analysis, decisions, comments, interview). Type <span className="font-bold">delete</span> to confirm.</p>
+          <Input
+            value={deleteCandidateText}
+            onChange={(e) => setDeleteCandidateText(e.target.value)}
+            placeholder='Type "delete" to confirm'
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteCandidate(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteCandidateText !== "delete" || deletingCandidate}
+              onClick={handleDeleteCandidate}
+            >
+              {deletingCandidate ? <Loader2 size={14} className="animate-spin mr-1" /> : <UserX size={14} className="mr-1" />}
+              Delete Candidate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Candidate Modal */}
+      <Dialog open={showEditCandidate} onOpenChange={setShowEditCandidate}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Candidate</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm">Full Name *</Label>
+              <Input value={editForm.full_name || ""} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">Email *</Label>
+              <Input value={editForm.email || ""} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">Phone</Label>
+              <Input value={editForm.phone || ""} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">Telegram</Label>
+              <Input value={editForm.telegram || ""} onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">Age</Label>
+              <Input type="number" value={editForm.age || ""} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">City</Label>
+              <Input value={editForm.city || ""} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">School</Label>
+              <Input value={editForm.school || ""} onChange={(e) => setEditForm({ ...editForm, school: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-sm">Graduation Year</Label>
+              <Input type="number" value={editForm.graduation_year || ""} onChange={(e) => setEditForm({ ...editForm, graduation_year: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm">Achievements</Label>
+            <Textarea rows={2} value={editForm.achievements || ""} onChange={(e) => setEditForm({ ...editForm, achievements: e.target.value })} />
+          </div>
+          <div>
+            <Label className="text-sm">Extracurriculars</Label>
+            <Textarea rows={2} value={editForm.extracurriculars || ""} onChange={(e) => setEditForm({ ...editForm, extracurriculars: e.target.value })} />
+          </div>
+          <div>
+            <Label className="text-sm">Essay *</Label>
+            <Textarea rows={4} value={editForm.essay || ""} onChange={(e) => setEditForm({ ...editForm, essay: e.target.value })} />
+          </div>
+          <div>
+            <Label className="text-sm">Motivation Statement</Label>
+            <Textarea rows={3} value={editForm.motivation_statement || ""} onChange={(e) => setEditForm({ ...editForm, motivation_statement: e.target.value })} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditCandidate(false)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit || !editForm.full_name || !editForm.email || !editForm.essay}>
+              {savingEdit ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
