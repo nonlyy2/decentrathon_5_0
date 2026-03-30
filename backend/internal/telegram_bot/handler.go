@@ -241,7 +241,7 @@ func (b *Bot) handleVoiceMessage(ctx context.Context, chatID int64, session *act
 	responseTime := int(time.Since(session.LastBotMsgTime).Seconds())
 	session.mu.Unlock()
 
-	// Check if whisper is available
+	// Check if Alem STT is available
 	if b.whisper == nil {
 		b.sendMessage(chatID, "Voice messages are not supported at the moment. Please send a text message.")
 		return
@@ -352,7 +352,7 @@ func (b *Bot) generateAndSendQuestion(ctx context.Context, chatID int64, session
 // finishInterview sends the closing message and triggers async evaluation.
 func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *activeSession) {
 	session.mu.Lock()
-	if session.State == StateClosing || session.State == StateEvaluating || session.State == StateCompleted {
+	if session.State == StateEvaluating || session.State == StateCompleted {
 		session.mu.Unlock()
 		return
 	}

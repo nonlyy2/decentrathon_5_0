@@ -269,7 +269,8 @@ export default function CandidateDetailPage() {
 
   const handleSkipToStage2 = async () => {
     try {
-      await api.post(`/candidates/${params.id}/telegram-invite?override=true`);
+      const res = await api.post(`/candidates/${params.id}/telegram-invite?override=true`);
+      setInviteLink(res.data.deep_link);
       toast.success("Candidate forwarded to Stage 2");
       fetchInterview();
       refetch();
@@ -582,31 +583,55 @@ export default function CandidateDetailPage() {
                   ) : (
                     <div className="space-y-2">
                       <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
-                      <Button size="sm" variant="outline" onClick={handleSkipToStage2}>
-                        <SkipForward size={14} className="mr-1" /> Override: Send to Stage 2
-                      </Button>
+                      {inviteLink ? (
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-slate-100 px-2 py-1 rounded flex-1 truncate">{inviteLink}</code>
+                          <Button size="sm" variant="outline" onClick={handleCopyLink}>
+                            {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={handleSkipToStage2}>
+                          <SkipForward size={14} className="mr-1" /> Override: Send to Stage 2
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{interviewData.interview?.status || interviewData.status}</Badge>
-                    {interviewData.interview && (
-                      <span className="text-xs text-muted-foreground">
-                        {interviewData.interview.questions_asked} questions asked
-                      </span>
-                    )}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{interviewData.interview?.status || interviewData.status}</Badge>
+                      {interviewData.interview && (
+                        <span className="text-xs text-muted-foreground">
+                          {interviewData.interview.questions_asked} questions asked
+                        </span>
+                      )}
+                    </div>
+                    <Button size="sm" variant="ghost" className="text-xs text-muted-foreground h-7 px-2" onClick={fetchInterview}>
+                      ↻ Refresh
+                    </Button>
                   </div>
 
-                  {/* Interview analysis results */}
+                  {/* Evaluating state */}
+                  {(interviewData.interview?.status === "active" || interviewData.interview?.status === "evaluating") &&
+                   !interviewData.analysis && (
+                    <div className="flex items-center gap-2 text-sm text-purple-600 bg-purple-50 rounded-lg p-3">
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Interview in progress — AI analysis will appear here once complete.</span>
+                    </div>
+                  )}
+
+                  {/* Interview AI analysis */}
                   {interviewData.analysis && (
-                    <div className="space-y-2 bg-slate-50 rounded-lg p-3">
+                    <div className="space-y-3 bg-slate-50 rounded-lg p-3">
+                      {/* Score grid */}
                       <div className="grid grid-cols-5 gap-2 text-center">
                         {[
                           { label: "Leadership", score: interviewData.analysis.score_leadership },
                           { label: "Grit", score: interviewData.analysis.score_grit },
-                          { label: "Authenticity", score: interviewData.analysis.score_authenticity },
+                          { label: "Authentic", score: interviewData.analysis.score_authenticity },
                           { label: "Motivation", score: interviewData.analysis.score_motivation },
                           { label: "Vision", score: interviewData.analysis.score_vision },
                         ].map((s) => (
@@ -616,6 +641,8 @@ export default function CandidateDetailPage() {
                           </div>
                         ))}
                       </div>
+
+                      {/* Final score + category */}
                       <div className="flex items-center justify-between pt-2 border-t">
                         <div>
                           <span className="text-sm font-medium">Interview Score: </span>
@@ -623,16 +650,71 @@ export default function CandidateDetailPage() {
                         </div>
                         <Badge className={categoryColors[interviewData.analysis.category] || ""}>{interviewData.analysis.category}</Badge>
                       </div>
+
+                      {/* Summary */}
                       {interviewData.analysis.summary && (
-                        <p className="text-sm text-slate-600 mt-1">{interviewData.analysis.summary}</p>
+                        <p className="text-sm text-slate-600">{interviewData.analysis.summary}</p>
                       )}
+
+                      {/* Consistency + style match */}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="bg-white rounded p-2 text-center border">
+                          <p className="text-xs text-muted-foreground">Essay Consistency</p>
+                          <p className="text-base font-bold">{interviewData.analysis.consistency_score}</p>
+                          <div className="w-full bg-slate-100 rounded-full h-1 mt-1">
+                            <div className="h-1 rounded-full bg-blue-400" style={{ width: `${interviewData.analysis.consistency_score}%` }} />
+                          </div>
+                        </div>
+                        <div className="bg-white rounded p-2 text-center border">
+                          <p className="text-xs text-muted-foreground">Style Match</p>
+                          <p className="text-base font-bold">{interviewData.analysis.style_match_score}</p>
+                          <div className="w-full bg-slate-100 rounded-full h-1 mt-1">
+                            <div className="h-1 rounded-full bg-green-400" style={{ width: `${interviewData.analysis.style_match_score}%` }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Strengths */}
+                      {interviewData.analysis.strengths && interviewData.analysis.strengths.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-green-700 mb-1">✓ Strengths</p>
+                          <ul className="space-y-1">
+                            {interviewData.analysis.strengths.map((s, i) => (
+                              <li key={i} className="text-xs text-slate-700 flex items-start gap-1">
+                                <span className="text-green-500 mt-0.5">•</span>{s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Concerns */}
+                      {interviewData.analysis.concerns && interviewData.analysis.concerns.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-amber-700 mb-1">⚠ Concerns</p>
+                          <ul className="space-y-1">
+                            {interviewData.analysis.concerns.map((c, i) => (
+                              <li key={i} className="text-xs text-slate-700 flex items-start gap-1">
+                                <span className="text-amber-500 mt-0.5">•</span>{c}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Suspicion flags */}
                       {interviewData.analysis.suspicion_flags && interviewData.analysis.suspicion_flags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
+                        <div className="flex flex-wrap gap-1 pt-1 border-t">
+                          <span className="text-xs text-orange-600 font-medium w-full">Anti-cheat flags:</span>
                           {interviewData.analysis.suspicion_flags.map((f, i) => (
                             <Badge key={i} variant="outline" className="text-xs text-orange-600 border-orange-300">{f}</Badge>
                           ))}
                         </div>
                       )}
+
+                      <p className="text-xs text-muted-foreground pt-1 border-t">
+                        Analyzed by {interviewData.analysis.model_used} — {new Date(interviewData.analysis.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
                     </div>
                   )}
 

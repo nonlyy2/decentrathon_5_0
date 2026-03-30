@@ -8,35 +8,63 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os/exec"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// WhisperClient handles audio transcription via OpenAI Whisper API.
-type WhisperClient struct {
+// AlemSTTClient handles audio transcription via Alem Plus speech-to-text API.
+type AlemSTTClient struct {
 	apiKey     string
 	httpClient *http.Client
 }
 
-// NewWhisperClient creates a Whisper transcription client.
-func NewWhisperClient(apiKey string) *WhisperClient {
-	return &WhisperClient{
+// NewAlemSTTClient creates an Alem Plus speech-to-text transcription client.
+func NewAlemSTTClient(apiKey string) *AlemSTTClient {
+	return &AlemSTTClient{
 		apiKey:     apiKey,
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
-type whisperResponse struct {
+type alemSTTResponse struct {
 	Text string `json:"text"`
 }
 
-// Transcribe sends audio data to OpenAI Whisper API and returns the transcribed text.
-func (w *WhisperClient) Transcribe(ctx context.Context, audioData []byte, language string) (string, error) {
+// convertOGGToWAV converts OGG/Opus audio (from Telegram voice messages) to WAV using ffmpeg.
+// Returns the original data unchanged if ffmpeg is not installed.
+func convertOGGToWAV(oggData []byte) ([]byte, string, error) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		// ffmpeg not available — return original OGG data
+		return oggData, "voice.ogg", nil
+	}
+	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
+		"-i", "pipe:0",
+		"-ar", "16000", "-ac", "1", "-f", "wav",
+		"pipe:1")
+	cmd.Stdin = bytes.NewReader(oggData)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, "", fmt.Errorf("ffmpeg: %v — %s", err, stderr.String())
+	}
+	return stdout.Bytes(), "voice.wav", nil
+}
+
+// Transcribe sends audio data to Alem Plus speech-to-text API and returns the transcribed text.
+func (w *AlemSTTClient) Transcribe(ctx context.Context, audioData []byte, language string) (string, error) {
+	// Alem STT does not yet support OGG — convert to WAV first
+	audioData, filename, err := convertOGGToWAV(audioData)
+	if err != nil {
+		return "", fmt.Errorf("audio conversion: %w", err)
+	}
+
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 
-	part, err := writer.CreateFormFile("file", "voice.ogg")
+	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		return "", fmt.Errorf("create form file: %w", err)
 	}
@@ -44,9 +72,8 @@ func (w *WhisperClient) Transcribe(ctx context.Context, audioData []byte, langua
 		return "", fmt.Errorf("write audio data: %w", err)
 	}
 
-	_ = writer.WriteField("model", "whisper-1")
+	_ = writer.WriteField("model", "speech-to-text")
 	if language != "" {
-		// Map our language codes to Whisper language codes
 		langMap := map[string]string{"en": "en", "ru": "ru", "kz": "kk"}
 		if code, ok := langMap[language]; ok {
 			_ = writer.WriteField("language", code)
@@ -54,7 +81,7 @@ func (w *WhisperClient) Transcribe(ctx context.Context, audioData []byte, langua
 	}
 	writer.Close()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/audio/transcriptions", &body)
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://llm.alem.ai/v1/audio/transcriptions", &body)
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
@@ -63,7 +90,7 @@ func (w *WhisperClient) Transcribe(ctx context.Context, audioData []byte, langua
 
 	resp, err := w.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("whisper request failed: %w", err)
+		return "", fmt.Errorf("alem stt request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -73,12 +100,12 @@ func (w *WhisperClient) Transcribe(ctx context.Context, audioData []byte, langua
 	}
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("whisper API error (status %d): %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("alem stt API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
-	var result whisperResponse
+	var result alemSTTResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("parse whisper response: %w", err)
+		return "", fmt.Errorf("parse alem stt response: %w", err)
 	}
 
 	return result.Text, nil

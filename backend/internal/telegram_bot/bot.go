@@ -24,7 +24,7 @@ type Bot struct {
 	cfg       *config.Config
 	engine    *InterviewEngine
 	evaluator *Evaluator
-	whisper   *WhisperClient
+	whisper   *AlemSTTClient
 	sessions  sync.Map // chatID (int64) -> *activeSession
 	genText   TextGenerator
 	modelName string
@@ -47,8 +47,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool, textGen TextGenerator, modelNam
 		modelName: modelName,
 	}
 
-	if cfg.WhisperAPIKey != "" {
-		bot.whisper = NewWhisperClient(cfg.WhisperAPIKey)
+	if cfg.AlemSTTAPIKey != "" {
+		bot.whisper = NewAlemSTTClient(cfg.AlemSTTAPIKey)
 	}
 
 	return bot, nil

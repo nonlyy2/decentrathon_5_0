@@ -19,8 +19,7 @@ type Config struct {
 
 	// Telegram bot
 	TelegramBotToken string
-	WhisperAPIKey    string
-	WhisperProvider  string // "openai" or "local"
+	AlemSTTAPIKey    string
 
 	// Interview settings
 	InterviewTimeoutMin   int
@@ -41,8 +40,7 @@ func Load() *Config {
 		OllamaModel:  getEnv("OLLAMA_MODEL", "mistral:7b"),
 
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
-		WhisperAPIKey:    getEnv("WHISPER_API_KEY", ""),
-		WhisperProvider:  getEnv("WHISPER_PROVIDER", "openai"),
+		AlemSTTAPIKey:    getEnv("ALEM_STT_API_KEY", ""),
 
 		InterviewTimeoutMin:   getEnvInt("INTERVIEW_TIMEOUT_MIN", 30),
 		InterviewMinQuestions: getEnvInt("INTERVIEW_MIN_QUESTIONS", 8),
