@@ -12,7 +12,6 @@ import { toast } from "sonner";
 
 interface DecisionButtonsProps {
   candidateId: number;
-  currentStatus: string;
   onDecisionMade: () => void;
 }
 
@@ -35,7 +34,7 @@ const decisionColors: Record<string, string> = {
   review: "bg-blue-100 text-blue-700",
 };
 
-export default function DecisionButtons({ candidateId, currentStatus, onDecisionMade }: DecisionButtonsProps) {
+export default function DecisionButtons({ candidateId, onDecisionMade }: DecisionButtonsProps) {
   const { t } = useI18n();
   const [selected, setSelected] = useState<string | null>(null);
   const [notes, setNotes] = useState("");

@@ -520,7 +520,6 @@ export default function CandidateDetailPage() {
             <CardContent className="space-y-4">
               <DecisionButtons
                 candidateId={detail.id}
-                currentStatus={detail.status}
                 onDecisionMade={refetch}
               />
               {detail.decisions.length > 0 && (
