@@ -18,7 +18,7 @@ export default function ApplyPage() {
   const [form, setForm] = useState({
     full_name: "", email: "", phone: "", telegram: "", age: "", city: "", school: "",
     graduation_year: "", achievements: "", extracurriculars: "",
-    essay: "", motivation_statement: "",
+    essay: "", motivation_statement: "", disability: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -50,6 +50,7 @@ export default function ApplyPage() {
         extracurriculars: form.extracurriculars || null,
         essay: form.essay,
         motivation_statement: form.motivation_statement || null,
+        disability: form.disability || null,
       });
       setSuccess(true);
     } catch (err) {
@@ -176,7 +177,7 @@ export default function ApplyPage() {
             {/* Essay */}
             <div>
               <Label className="text-slate-300">Essay *</Label>
-              <p className="text-xs text-slate-400 mb-2">Tell us about yourself, your experiences, and why you want to join inVision U.</p>
+              <p className="text-xs text-slate-400 mb-2">Tell us about yourself, your experiences, and why you want to join inVision U. Please write in English.</p>
               <Textarea
                 rows={8}
                 value={form.essay}
@@ -198,6 +199,19 @@ export default function ApplyPage() {
                 value={form.motivation_statement}
                 onChange={(e) => update("motivation_statement", e.target.value)}
                 placeholder="What motivates you to apply to inVision U?"
+                className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
+              />
+            </div>
+
+            {/* Disability / Accommodation */}
+            <div>
+              <Label className="text-slate-300">Disability / Accessibility Needs</Label>
+              <p className="text-xs text-slate-400 mb-2">Optional. This information is not used in the essay evaluation and is only used to accommodate your needs during the interview stage.</p>
+              <Textarea
+                rows={2}
+                value={form.disability}
+                onChange={(e) => update("disability", e.target.value)}
+                placeholder="e.g. visual impairment, hearing difficulty, mobility limitation..."
                 className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-500"
               />
             </div>

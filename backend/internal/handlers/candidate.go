@@ -208,15 +208,17 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			detail.Analysis = &analysis
 		}
 
-		// Get decisions
+		// Get decisions with user email
 		rows, err := pool.Query(c.Request.Context(),
-			`SELECT id, candidate_id, decision, notes, decided_by, decided_at
-			 FROM committee_decisions WHERE candidate_id = $1 ORDER BY decided_at DESC`, id)
+			`SELECT cd.id, cd.candidate_id, cd.decision, cd.notes, cd.decided_by, u.email, cd.decided_at
+			 FROM committee_decisions cd
+			 LEFT JOIN users u ON u.id = cd.decided_by
+			 WHERE cd.candidate_id = $1 ORDER BY cd.decided_at DESC`, id)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
 				var d models.Decision
-				if err := rows.Scan(&d.ID, &d.CandidateID, &d.Decision, &d.Notes, &d.DecidedBy, &d.DecidedAt); err == nil {
+				if err := rows.Scan(&d.ID, &d.CandidateID, &d.Decision, &d.Notes, &d.DecidedBy, &d.DecidedByEmail, &d.DecidedAt); err == nil {
 					detail.Decisions = append(detail.Decisions, d)
 				}
 			}

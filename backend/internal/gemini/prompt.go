@@ -74,8 +74,14 @@ Score guide:
 
 ai_generated_risk: Derived from score — "low" (0-35), "medium" (36-65), "high" (66-100)
 
+LANGUAGE REQUIREMENT:
+All application materials MUST be written in English. If significant portions of the essay or motivation statement are written in a non-English language, apply a penalty:
+- Minor non-English phrases (greetings, cultural terms): no penalty
+- Mixed language (>20% non-English): reduce communication score by 15-25 points
+- Mostly non-English (>50%): reduce communication score by 30-50 points and flag as incomplete
+
 IMPORTANT RULES:
-- Be fair and unbiased. Do not penalize for imperfect English if the candidate is clearly a non-native speaker.
+- Be fair and unbiased. Do not penalize for imperfect English grammar if the candidate is clearly a non-native speaker — but content MUST be in English.
 - Focus on SUBSTANCE over polish. A rough but authentic essay is worth more than a polished but generic one.
 - Look for SIGNALS, not achievements. A student who organized a neighborhood cleanup shows more leadership than one who lists "member of student council" without details.
 - Consider the candidate's CONTEXT. Achievements from students in underserved areas may look different but be equally impressive.
@@ -146,17 +152,10 @@ const ResponseSchema = `{
 }`
 
 // buildCandidateData formats candidate data only, without any response instruction.
+// PII (name, email, phone, age, city, telegram) is excluded to prevent bias.
 func buildCandidateData(c *models.Candidate) string {
 	var sb strings.Builder
 	sb.WriteString("=== CANDIDATE APPLICATION ===\n\n")
-	sb.WriteString(fmt.Sprintf("Full Name: %s\n", c.FullName))
-	sb.WriteString(fmt.Sprintf("Email: %s\n", c.Email))
-	if c.Age != nil {
-		sb.WriteString(fmt.Sprintf("Age: %d\n", *c.Age))
-	}
-	if c.City != nil {
-		sb.WriteString(fmt.Sprintf("City: %s\n", *c.City))
-	}
 	if c.School != nil {
 		sb.WriteString(fmt.Sprintf("School: %s\n", *c.School))
 	}

@@ -340,7 +340,7 @@ export default function CandidateDetailPage() {
                 <CardContent>
                   <p className="text-sm leading-relaxed text-slate-700">{a.summary}</p>
                   <p className="text-xs text-muted-foreground mt-3">
-                    {t("detail.analyzed_by")} {a.model_used} \u2014 {new Date(a.analyzed_at).toLocaleDateString()}
+                    {t("detail.analyzed_by")} {a.model_used} {"\u2014"} {new Date(a.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                   </p>
                 </CardContent>
               </Card>
@@ -437,11 +437,130 @@ export default function CandidateDetailPage() {
                         <StatusBadge status={d.decision === "shortlist" ? "shortlisted" : d.decision === "reject" ? "rejected" : d.decision === "waitlist" ? "waitlisted" : "analyzed"} />
                         {d.notes && <p className="text-xs text-slate-500 italic mt-1">{d.notes}</p>}
                         <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(d.decided_at).toLocaleDateString()}
+                          {d.decided_by_email && <span className="font-medium">{d.decided_by_email} — </span>}
+                          {new Date(d.decided_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                         </p>
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Interview — Stage 2 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BotMessageSquare size={16} /> {t("interview.title")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!interviewData || interviewData.status === "not_started" ? (
+                <div className="space-y-3">
+                  {detail.analysis && detail.analysis.final_score >= 65 ? (
+                    <>
+                      <p className="text-sm text-slate-600">{t("interview.eligible")}</p>
+                      {inviteLink ? (
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-slate-100 px-2 py-1 rounded flex-1 truncate">{inviteLink}</code>
+                          <Button size="sm" variant="outline" onClick={handleCopyLink}>
+                            {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700"
+                          disabled={sendingInvite}
+                          onClick={handleSendInvite}
+                        >
+                          {sendingInvite ? <Loader2 size={14} className="animate-spin mr-1" /> : <ExternalLink size={14} className="mr-1" />}
+                          {t("interview.send_invite")}
+                        </Button>
+                      )}
+                      {interviewData?.invite_status && (
+                        <p className="text-xs text-muted-foreground">
+                          Invite status: <span className="font-medium">{interviewData.invite_status}</span>
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{interviewData.interview?.status || interviewData.status}</Badge>
+                    {interviewData.interview && (
+                      <span className="text-xs text-muted-foreground">
+                        {interviewData.interview.questions_asked} questions asked
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Interview analysis results */}
+                  {interviewData.analysis && (
+                    <div className="space-y-2 bg-slate-50 rounded-lg p-3">
+                      <div className="grid grid-cols-5 gap-2 text-center">
+                        {[
+                          { label: "Leadership", score: interviewData.analysis.score_leadership },
+                          { label: "Grit", score: interviewData.analysis.score_grit },
+                          { label: "Authenticity", score: interviewData.analysis.score_authenticity },
+                          { label: "Motivation", score: interviewData.analysis.score_motivation },
+                          { label: "Vision", score: interviewData.analysis.score_vision },
+                        ].map((s) => (
+                          <div key={s.label}>
+                            <p className="text-xs text-muted-foreground">{s.label}</p>
+                            <p className="text-lg font-bold">{s.score}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <div>
+                          <span className="text-sm font-medium">Interview Score: </span>
+                          <span className="text-lg font-bold text-purple-700">{interviewData.analysis.final_score}</span>
+                        </div>
+                        <Badge className={categoryColors[interviewData.analysis.category] || ""}>{interviewData.analysis.category}</Badge>
+                      </div>
+                      {interviewData.analysis.summary && (
+                        <p className="text-sm text-slate-600 mt-1">{interviewData.analysis.summary}</p>
+                      )}
+                      {interviewData.analysis.suspicion_flags && interviewData.analysis.suspicion_flags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {interviewData.analysis.suspicion_flags.map((f, i) => (
+                            <Badge key={i} variant="outline" className="text-xs text-orange-600 border-orange-300">{f}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {interviewData.combined_score && (
+                    <div className="bg-purple-50 rounded-lg p-3 text-center">
+                      <p className="text-xs text-purple-600 uppercase font-medium">{t("interview.combined_score")}</p>
+                      <p className="text-2xl font-bold text-purple-800">{Number(interviewData.combined_score).toFixed(1)}</p>
+                      <p className="text-xs text-purple-500">60% essay + 40% interview</p>
+                    </div>
+                  )}
+
+                  {/* Transcript button */}
+                  <Button size="sm" variant="outline" onClick={handleViewTranscript}>
+                    <Mic size={14} className="mr-1" /> {t("interview.view_transcript")}
+                  </Button>
+
+                  {showTranscript && transcript.length > 0 && (
+                    <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3 bg-white">
+                      {transcript.map((m, i) => (
+                        <div key={i} className={`text-sm ${m.role === "bot" ? "text-blue-700" : "text-slate-800"}`}>
+                          <span className="font-medium text-xs uppercase">{m.role === "bot" ? "Interviewer" : "Candidate"}</span>
+                          {m.message_type === "voice" && <Mic size={10} className="inline ml-1 text-purple-500" />}
+                          <p className="mt-0.5">{m.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

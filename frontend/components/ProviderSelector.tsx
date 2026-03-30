@@ -9,8 +9,8 @@ interface Props {
 }
 
 const providerMeta: Record<string, { label: string; icon: typeof Globe; description: string }> = {
-  gemini: { label: "Gemini", icon: Globe, description: "Cloud" },
-  ollama: { label: "Ollama", icon: MonitorCog, description: "Local" },
+  gemini: { label: "Gemini", icon: Globe, description: "fast" },
+  ollama: { label: "Ollama", icon: MonitorCog, description: "privacy" },
 };
 
 export default function ProviderSelector({ providers, value, onChange }: Props) {

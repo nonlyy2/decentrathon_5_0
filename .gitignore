@@ -1,15 +1,32 @@
+# Environment
 .env
 .env.local
+.env.production
 backend/.env
 
-tasks/
-
-.DS_Store
-*.exe
-tmp/
+# Dependencies
 node_modules/
+
+# Build output
 .next/
+out/
+backend/tmp/
+*.exe
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
+tasks/
 claude/
-
 .telegram_readme.md
+
+# Logs
+*.log

@@ -61,6 +61,7 @@ export interface Decision {
   decision: string;
   notes: string | null;
   decided_by: number;
+  decided_by_email: string | null;
   decided_at: string;
 }
 

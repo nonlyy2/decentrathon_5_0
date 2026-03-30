@@ -3,12 +3,13 @@ package models
 import "time"
 
 type Decision struct {
-	ID          int       `json:"id"`
-	CandidateID int       `json:"candidate_id"`
-	Decision    string    `json:"decision"`
-	Notes       *string   `json:"notes"`
-	DecidedBy   int       `json:"decided_by"`
-	DecidedAt   time.Time `json:"decided_at"`
+	ID             int       `json:"id"`
+	CandidateID    int       `json:"candidate_id"`
+	Decision       string    `json:"decision"`
+	Notes          *string   `json:"notes"`
+	DecidedBy      int       `json:"decided_by"`
+	DecidedByEmail *string   `json:"decided_by_email"`
+	DecidedAt      time.Time `json:"decided_at"`
 }
 
 type CreateDecisionRequest struct {

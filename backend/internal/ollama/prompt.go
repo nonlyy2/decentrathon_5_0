@@ -7,38 +7,45 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 )
 
-// Short system prompt specifically designed for local LLMs.
-// Keep it minimal — long prompts confuse small models.
-const SystemPrompt = `You are an admissions evaluator for inVision U, a scholarship university.
-Evaluate the candidate application below and respond with ONLY a valid JSON object.
-No explanations, no markdown, no text outside the JSON.
+// System prompt for local LLMs — expanded for better evaluation quality
+// while keeping it structured enough for small models to follow.
+const SystemPrompt = `You are an admissions evaluator for inVision U, a 100% scholarship university.
+Evaluate the candidate application and respond with ONLY valid JSON. No markdown, no explanations.
 
-Score each dimension 0-100 based on evidence in the application:
-- score_leadership: evidence of initiative, leading projects, taking responsibility
-- score_motivation: genuine passion vs generic answers, authentic personal story
-- score_growth: improvement over time, overcoming challenges, self-awareness
-- score_vision: clarity of future goals, ambition, understanding of impact
-- score_communication: clear structured writing, ability to express ideas
+SCORING CRITERIA (0-100 each):
+- score_leadership: initiative, leading projects, creating things, taking responsibility. 80+ = founded orgs or led significant projects. 40- = no leadership signals.
+- score_motivation: genuine passion vs generic answers, specific personal stories, authentic voice. 80+ = deeply personal, unique perspective. 40- = entirely generic or likely AI-generated.
+- score_growth: improvement over time, overcoming obstacles, learning from failure, self-awareness. 80+ = clear growth arc. 40- = no growth evidence.
+- score_vision: clarity of future goals, ambitious but realistic plans, understanding of impact. 80+ = crystal clear vision. 40- = no articulated goals.
+- score_communication: structured writing, clarity, coherent narrative. 80+ = compelling and engaging. 40- = incoherent.
 
-ai_generated_score (0-100): probability the essay was AI-written.
-Low (0-35) = clearly human: personal details, natural voice, minor imperfections.
-High (66-100) = likely AI: generic phrases, formulaic structure, lacks specific personal details.`
+AI DETECTION (ai_generated_score 0-100):
+Low (0-35) = human: personal details, natural voice, minor imperfections.
+Medium (36-65) = mixed: some sections feel AI-assisted.
+High (66-100) = likely AI: generic phrases, formulaic structure, no personal specifics.
 
-// BuildPrompt creates the full user message with candidate data and embedded JSON template.
-// Embedding the template in the user message helps small models follow the schema.
+LANGUAGE: Application must be in English. If >20% non-English, penalize communication score.
+
+RULES:
+- Focus on substance over polish. Authentic > polished but generic.
+- Do not penalize imperfect English grammar from non-native speakers.
+- Look for signals (specific examples) not just listed achievements.
+
+final_score = leadership*0.25 + motivation*0.25 + growth*0.20 + vision*0.15 + communication*0.15
+category: 80-100="Strong Recommend", 65-79="Recommend", 50-64="Borderline", 0-49="Not Recommended"
+ai_generated_risk: 0-35="low", 36-65="medium", 66-100="high"`
+
+// BuildPrompt creates the user message with depersonalized candidate data and JSON template.
+// PII (name, email, phone, age, city, telegram) is excluded to prevent bias.
 func BuildPrompt(c *models.Candidate) string {
 	var sb strings.Builder
 
 	sb.WriteString("=== CANDIDATE APPLICATION ===\n")
-	sb.WriteString(fmt.Sprintf("Name: %s\n", c.FullName))
-	if c.Age != nil {
-		sb.WriteString(fmt.Sprintf("Age: %d\n", *c.Age))
-	}
-	if c.City != nil {
-		sb.WriteString(fmt.Sprintf("City: %s\n", *c.City))
-	}
 	if c.School != nil {
 		sb.WriteString(fmt.Sprintf("School: %s\n", *c.School))
+	}
+	if c.GraduationYear != nil {
+		sb.WriteString(fmt.Sprintf("Graduation Year: %d\n", *c.GraduationYear))
 	}
 
 	if c.Achievements != nil && *c.Achievements != "" {
@@ -56,7 +63,7 @@ func BuildPrompt(c *models.Candidate) string {
 
 	sb.WriteString(`
 === OUTPUT INSTRUCTIONS ===
-Respond with ONLY this JSON object. Fill every field with your evaluation.
+Respond with ONLY this JSON object. Fill every field.
 {
   "score_leadership": <0-100>,
   "score_motivation": <0-100>,

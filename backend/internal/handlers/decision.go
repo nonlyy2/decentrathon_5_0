@@ -72,8 +72,10 @@ func GetDecisions(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		rows, err := pool.Query(c.Request.Context(),
-			`SELECT id, candidate_id, decision, notes, decided_by, decided_at
-			 FROM committee_decisions WHERE candidate_id = $1 ORDER BY decided_at DESC`, candidateID)
+			`SELECT cd.id, cd.candidate_id, cd.decision, cd.notes, cd.decided_by, u.email, cd.decided_at
+			 FROM committee_decisions cd
+			 LEFT JOIN users u ON u.id = cd.decided_by
+			 WHERE cd.candidate_id = $1 ORDER BY cd.decided_at DESC`, candidateID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to fetch decisions"})
 			return
@@ -83,7 +85,7 @@ func GetDecisions(pool *pgxpool.Pool) gin.HandlerFunc {
 		decisions := []models.Decision{}
 		for rows.Next() {
 			var d models.Decision
-			if err := rows.Scan(&d.ID, &d.CandidateID, &d.Decision, &d.Notes, &d.DecidedBy, &d.DecidedAt); err == nil {
+			if err := rows.Scan(&d.ID, &d.CandidateID, &d.Decision, &d.Notes, &d.DecidedBy, &d.DecidedByEmail, &d.DecidedAt); err == nil {
 				decisions = append(decisions, d)
 			}
 		}
