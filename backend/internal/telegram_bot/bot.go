@@ -47,8 +47,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool, textGen TextGenerator, modelNam
 		modelName: modelName,
 	}
 
-	if cfg.AlemSTTAPIKey != "" {
-		bot.whisper = NewAlemSTTClient(cfg.AlemSTTAPIKey)
+	if cfg.WhisperAPIKey != "" {
+		bot.whisper = NewAlemSTTClient(cfg.WhisperAPIKey)
 	}
 
 	return bot, nil

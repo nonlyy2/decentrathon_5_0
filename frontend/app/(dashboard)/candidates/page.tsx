@@ -15,7 +15,55 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Play, Square, Download, Trash2 } from "lucide-react";
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Play, Square, Download, Trash2, SlidersHorizontal, X } from "lucide-react";
+
+const MAJORS = [
+  { tag: "Engineering", label: "Engineering" },
+  { tag: "Tech", label: "Tech" },
+  { tag: "Society", label: "Society" },
+  { tag: "Policy Reform", label: "Policy Reform" },
+  { tag: "Art + Media", label: "Art + Media" },
+];
+
+function RangeSlider({
+  label, min, max, step = 1, value, onChange,
+}: {
+  label: string; min: number; max: number; step?: number;
+  value: [number, number]; onChange: (v: [number, number]) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground">{value[0]}–{value[1]}</span>
+      </div>
+      <div className="flex gap-2 items-center">
+        <input
+          type="range"
+          min={min} max={max} step={step}
+          value={value[0]}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (v <= value[1]) onChange([v, value[1]]);
+          }}
+          className="flex-1"
+          aria-label={`${label} minimum`}
+        />
+        <input
+          type="range"
+          min={min} max={max} step={step}
+          value={value[1]}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (v >= value[0]) onChange([value[0], v]);
+          }}
+          className="flex-1"
+          aria-label={`${label} maximum`}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function CandidatesPage() {
   const searchParams = useSearchParams();
@@ -36,6 +84,13 @@ export default function CandidatesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<string | null>(null);
 
+  // Filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [scoreRange, setScoreRange] = useState<[number, number]>([0, 100]);
+  const [ageRange, setAgeRange] = useState<[number, number]>([14, 30]);
+  const [majorFilter, setMajorFilter] = useState("");
+  const hasActiveFilters = scoreRange[0] > 0 || scoreRange[1] < 100 || ageRange[0] > 14 || ageRange[1] < 30 || majorFilter !== "";
+
   // Admin controls state
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
@@ -45,6 +100,7 @@ export default function CandidatesPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const limit = 20;
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin" || user?.role === "tech-admin";
 
   const STATUS_TABS = [
     { value: "all", label: t("cand.all") },
@@ -90,7 +146,6 @@ export default function CandidatesPage() {
     }
   };
 
-  // Batch analysis polling
   const startBatchPoll = useCallback(() => {
     if (pollRef.current) return;
     pollRef.current = setInterval(async () => {
@@ -123,7 +178,6 @@ export default function CandidatesPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  // Check if batch is already running on mount
   useEffect(() => {
     api.get("/analyze-all/status").then((res) => {
       if (res.data.running) {
@@ -138,10 +192,7 @@ export default function CandidatesPage() {
     try {
       const qs = provider ? `?provider=${provider}` : "";
       const res = await api.post(`/analyze-all${qs}`);
-      if (!res.data.count) {
-        toast.info("No pending candidates to analyze");
-        return;
-      }
+      if (!res.data.count) { toast.info("No pending candidates to analyze"); return; }
       toast.success(`Analysis started for ${res.data.count} candidates`);
       setBatchRunning(true);
       setBatchProgress({ done: 0, total: res.data.count });
@@ -191,6 +242,13 @@ export default function CandidatesPage() {
     }
   };
 
+  const resetFilters = () => {
+    setScoreRange([0, 100]);
+    setAgeRange([14, 30]);
+    setMajorFilter("");
+    setPage(0);
+  };
+
   // Sync state to URL params
   useEffect(() => {
     const params = new URLSearchParams();
@@ -215,14 +273,10 @@ export default function CandidatesPage() {
         waitlisted: s.waitlisted,
         rejected: s.rejected,
       });
-    } catch {
-      // counts are non-critical
-    }
+    } catch { /* non-critical */ }
   }, []);
 
-  useEffect(() => {
-    fetchCounts();
-  }, [fetchCounts]);
+  useEffect(() => { fetchCounts(); }, [fetchCounts]);
 
   const fetchCandidates = useCallback(async () => {
     setLoading(true);
@@ -230,6 +284,11 @@ export default function CandidatesPage() {
       const params = new URLSearchParams();
       if (status !== "all") params.set("status", status);
       if (search) params.set("search", search);
+      if (majorFilter) params.set("major", majorFilter);
+      if (scoreRange[0] > 0) params.set("min_score", String(scoreRange[0]));
+      if (scoreRange[1] < 100) params.set("max_score", String(scoreRange[1]));
+      if (ageRange[0] > 14) params.set("min_age", String(ageRange[0]));
+      if (ageRange[1] < 30) params.set("max_age", String(ageRange[1]));
       params.set("limit", String(limit));
       params.set("offset", String(page * limit));
       params.set("sort_by", sortBy);
@@ -243,79 +302,63 @@ export default function CandidatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, search, page, sortBy, sortOrder]);
+  }, [status, search, page, sortBy, sortOrder, scoreRange, ageRange, majorFilter]);
 
-  useEffect(() => {
-    fetchCandidates();
-  }, [fetchCandidates]);
-
-  useEffect(() => {
-    setPage(0);
-  }, [status, search]);
+  useEffect(() => { fetchCandidates(); }, [fetchCandidates]);
+  useEffect(() => { setPage(0); }, [status, search, scoreRange, ageRange, majorFilter]);
 
   const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(column);
-      setSortOrder("desc");
-    }
+    if (sortBy === column) setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    else { setSortBy(column); setSortOrder("desc"); }
     setPage(0);
   };
 
   const totalPages = Math.ceil(total / limit);
-  const isAdmin = user?.role === "admin";
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t("cand.title")}</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-bold text-foreground">{t("cand.title")}</h1>
         {isAdmin && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Provider toggle */}
-            <div className="flex items-center gap-1 bg-slate-100 border rounded-lg p-1">
-              <button
-                onClick={() => setProvider("gemini")}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                  provider === "gemini" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                ☁ Gemini
-              </button>
-              <button
-                onClick={() => setProvider("ollama")}
-                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                  provider === "ollama" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                ⚙ Ollama
-              </button>
+            <div className="flex items-center gap-1 bg-muted border border-border rounded-lg p-1">
+              {["gemini", "ollama"].map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setProvider(p as "gemini" | "ollama")}
+                  className={`text-xs px-2.5 py-1 rounded-md transition-colors capitalize ${
+                    provider === p ? "text-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={provider === p ? { backgroundColor: "#c1f11d", color: "#111" } : undefined}
+                >
+                  {p === "gemini" ? "☁ Gemini" : "⚙ Ollama"}
+                </button>
+              ))}
             </div>
 
-            {/* Analyze All / Stop */}
             {batchRunning ? (
               <div className="flex items-center gap-2">
                 {batchProgress && (
-                  <span className="text-xs text-purple-600 font-medium">
-                    {batchProgress.done}/{batchProgress.total}
-                  </span>
+                  <span className="text-xs text-primary font-medium">{batchProgress.done}/{batchProgress.total}</span>
                 )}
                 <Button size="sm" variant="destructive" onClick={handleStopBatch}>
                   <Square size={14} className="mr-1" /> {t("cand.stop")}
                 </Button>
               </div>
             ) : (
-              <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={handleAnalyzeAll}>
+              <Button
+                size="sm"
+                onClick={handleAnalyzeAll}
+                style={{ backgroundColor: "#c1f11d", color: "#111" }}
+              >
                 <Play size={14} className="mr-1" /> {t("cand.analyze_all")}
               </Button>
             )}
 
-            {/* Export CSV */}
             <Button size="sm" variant="outline" onClick={handleExportCSV}>
               <Download size={14} className="mr-1" /> {t("cand.export")}
             </Button>
-
-            {/* Reset Analyses */}
             <Button
               size="sm"
               variant="outline"
@@ -331,33 +374,38 @@ export default function CandidatesPage() {
 
       {/* Batch progress bar */}
       {batchRunning && batchProgress && (
-        <div className="w-full bg-slate-200 rounded-full h-1.5">
+        <div className="w-full bg-muted rounded-full h-1.5" role="progressbar" aria-valuenow={batchProgress.done} aria-valuemax={batchProgress.total}>
           <div
-            className="bg-purple-500 h-1.5 rounded-full transition-all"
-            style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%` }}
+            className="h-1.5 rounded-full transition-all"
+            style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%`, backgroundColor: "#c1f11d" }}
           />
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1 border-b">
+      {/* Status tabs */}
+      <div className="flex flex-wrap gap-1 border-b border-border" role="tablist" aria-label="Filter by status">
         {STATUS_TABS.map((tab) => {
           const count = counts[tab.value];
           const isActive = status === tab.value;
           return (
             <button
               key={tab.value}
+              role="tab"
+              aria-selected={isActive}
               onClick={() => setStatus(tab.value)}
               className={`px-3 py-2 text-sm font-medium rounded-t-md transition-colors flex items-center gap-1.5 ${
                 isActive
-                  ? "border-b-2 border-purple-600 text-purple-600 bg-purple-50"
-                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                  ? "border-b-2 text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               }`}
+              style={isActive ? { borderBottomColor: "#c1f11d" } : undefined}
             >
               {tab.label}
               {count !== undefined && (
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  isActive ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-500"
-                }`}>
+                <span
+                  className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "text-foreground" : "bg-muted text-muted-foreground"}`}
+                  style={isActive ? { backgroundColor: "#c1f11d", color: "#111" } : undefined}
+                >
                   {count}
                 </span>
               )}
@@ -366,22 +414,85 @@ export default function CandidatesPage() {
         })}
       </div>
 
-      <div className="flex gap-4">
+      {/* Search + Filter toggle */}
+      <div className="flex gap-3 items-center flex-wrap">
         <Input
           placeholder={t("cand.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
+          aria-label="Search candidates"
         />
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          aria-expanded={showFilters}
+          aria-label="Toggle filters"
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+            showFilters || hasActiveFilters
+              ? "border-primary text-foreground font-medium"
+              : "border-border text-muted-foreground hover:border-primary hover:text-foreground"
+          }`}
+          style={showFilters || hasActiveFilters ? { borderColor: "#c1f11d", backgroundColor: "#c1f11d22" } : undefined}
+        >
+          <SlidersHorizontal size={15} />
+          {t("filter.title")}
+          {hasActiveFilters && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full text-foreground" style={{ backgroundColor: "#c1f11d" }}>
+              !
+            </span>
+          )}
+        </button>
+        {hasActiveFilters && (
+          <button
+            onClick={resetFilters}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={14} /> {t("filter.reset")}
+          </button>
+        )}
       </div>
+
+      {/* Filter panel */}
+      {showFilters && (
+        <div className="border border-border rounded-xl p-4 bg-card space-y-4 animate-fade-in" role="region" aria-label="Filter options">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <RangeSlider
+              label={t("filter.score_range")}
+              min={0} max={100}
+              value={scoreRange}
+              onChange={setScoreRange}
+            />
+            <RangeSlider
+              label={t("filter.age_range")}
+              min={14} max={30}
+              value={ageRange}
+              onChange={setAgeRange}
+            />
+            <div>
+              <label className="text-xs font-medium text-foreground block mb-1">{t("filter.major")}</label>
+              <select
+                value={majorFilter}
+                onChange={(e) => setMajorFilter(e.target.value)}
+                aria-label={t("filter.major")}
+                className="w-full bg-background border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">{t("filter.all_majors")}</option>
+                {MAJORS.map((m) => (
+                  <option key={m.tag} value={m.tag}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk action bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg px-4 py-2">
-          <span className="text-sm font-medium text-purple-700">{selectedIds.size} {t("cand.selected")}</span>
+        <div className="flex items-center gap-3 border rounded-lg px-4 py-2 flex-wrap" style={{ backgroundColor: "#c1f11d22", borderColor: "#c1f11d" }}>
+          <span className="text-sm font-medium text-foreground">{selectedIds.size} {t("cand.selected")}</span>
           <div className="flex gap-2">
             <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("shortlist")}>
-              {bulkAction === "shortlist" ? <Loader2 size={14} className="animate-spin mr-1" /> : null} {t("dec.shortlist")}
+              {bulkAction === "shortlist" && <Loader2 size={14} className="animate-spin mr-1" />} {t("dec.shortlist")}
             </Button>
             <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("waitlist")}>
               {t("dec.waitlist")}
@@ -395,22 +506,24 @@ export default function CandidatesPage() {
               {t("cand.compare")} ({selectedIds.size})
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="ml-auto text-slate-500">
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="ml-auto text-muted-foreground">
             {t("cand.clear")}
           </Button>
         </div>
       )}
 
-      <div className="bg-white rounded-lg border overflow-x-auto">
+      {/* Table */}
+      <div className="bg-card rounded-xl border border-border overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
+            <TableRow className="border-border">
               <TableHead className="w-10">
                 <input
                   type="checkbox"
                   checked={candidates.length > 0 && selectedIds.size === candidates.length}
                   onChange={toggleSelectAll}
-                  className="rounded border-slate-300"
+                  className="rounded border-border"
+                  aria-label="Select all candidates"
                 />
               </TableHead>
               <SortableHead column="full_name" label={t("cand.name")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
@@ -425,15 +538,15 @@ export default function CandidatesPage() {
           <TableBody>
             {loading && candidates.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
+                <TableRow key={i} className="border-border">
                   {Array.from({ length: 8 }).map((_, j) => (
-                    <TableCell key={j}><div className="h-4 bg-slate-200 rounded animate-pulse w-24" /></TableCell>
+                    <TableCell key={j}><div className="h-4 bg-muted rounded animate-pulse w-24" /></TableCell>
                   ))}
                 </TableRow>
               ))
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                   {t("cand.no_found")}
                 </TableCell>
               </TableRow>
@@ -441,25 +554,44 @@ export default function CandidatesPage() {
               candidates.map((c) => (
                 <TableRow
                   key={c.id}
-                  className={`hover:bg-slate-50 transition-colors relative ${selectedIds.has(c.id) ? "bg-purple-50" : ""}`}
+                  className={`border-border hover:bg-muted/30 transition-colors relative ${selectedIds.has(c.id) ? "ring-1 ring-inset" : ""}`}
+                  style={selectedIds.has(c.id) ? { backgroundColor: "#c1f11d11" } : undefined}
                 >
                   <TableCell className="relative z-20">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(c.id)}
                       onChange={() => toggleSelect(c.id)}
-                      className="rounded border-slate-300"
+                      className="rounded border-border"
+                      aria-label={`Select ${c.full_name}`}
                     />
                   </TableCell>
                   <TableCell className="font-medium">
-                    <Link
-                      href={`/candidates/${c.id}`}
-                      className="absolute inset-0 z-10"
-                      aria-label={`Open ${c.full_name}`}
-                    />
-                    <span className="relative z-20">{c.full_name}</span>
+                    <Link href={`/candidates/${c.id}`} className="absolute inset-0 z-10" aria-label={`Open ${c.full_name}`} />
+                    <div className="flex items-center gap-2 relative z-20">
+                      {c.photo_url ? (
+                        <img
+                          src={`http://localhost:8080${c.photo_url}`}
+                          alt=""
+                          className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                          style={{ backgroundColor: "#c1f11d", color: "#111" }}
+                          aria-hidden="true"
+                        >
+                          {c.full_name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-sm font-medium text-foreground">{c.full_name}</div>
+                        {c.major && <div className="text-[10px] text-muted-foreground">{c.major}</div>}
+                      </div>
+                    </div>
                   </TableCell>
-                  <TableCell className="relative z-20">{c.city || "—"}</TableCell>
+                  <TableCell className="relative z-20 text-muted-foreground text-sm">{c.city || "—"}</TableCell>
                   <TableCell className="relative z-20"><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
                   <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="relative z-20 text-sm text-muted-foreground">
@@ -484,10 +616,11 @@ export default function CandidatesPage() {
         </Table>
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            {t("cand.showing")} {page * limit + 1}-{Math.min((page + 1) * limit, total)} {t("cand.of")} {total}
+            {t("cand.showing")} {page * limit + 1}–{Math.min((page + 1) * limit, total)} {t("cand.of")} {total}
           </p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0}>
@@ -506,8 +639,8 @@ export default function CandidatesPage() {
           <DialogHeader>
             <DialogTitle className="text-red-600">{t("del.title")}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">{t("del.desc")}</p>
-          <p className="text-sm text-slate-500 mt-2">
+          <p className="text-sm text-muted-foreground">{t("del.desc")}</p>
+          <p className="text-sm text-muted-foreground mt-2">
             {t("del.confirm")} <span className="font-mono font-bold text-red-600">{"удалить"}</span>:
           </p>
           <Input
@@ -540,13 +673,14 @@ function SortableHead({ column, label, sortBy, sortOrder, onSort }: {
     <TableHead>
       <button
         onClick={() => onSort(column)}
-        className="flex items-center gap-1 hover:text-slate-900 transition-colors"
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        aria-label={`Sort by ${label}`}
       >
         {label}
         {active ? (
           sortOrder === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />
         ) : (
-          <ArrowUpDown size={14} className="text-slate-300" />
+          <ArrowUpDown size={14} className="text-muted-foreground/50" />
         )}
       </button>
     </TableHead>

@@ -43,11 +43,49 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // inDriver brand colors (direct access)
+        lime: {
+          brand: "#c1f11d",
+          hover: "#9dd90d",
+          soft: "#edffa0",
+        },
+        sidebar: {
+          bg: "hsl(var(--sidebar-bg))",
+          text: "hsl(var(--sidebar-text))",
+          muted: "hsl(var(--sidebar-muted))",
+          active: "hsl(var(--sidebar-active))",
+          hover: "hsl(var(--sidebar-hover))",
+          border: "hsl(var(--sidebar-border))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      animation: {
+        "slide-in": "slideIn 0.25s cubic-bezier(0.4,0,0.2,1)",
+        "fade-in": "fadeIn 0.2s ease",
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
+      keyframes: {
+        slideIn: {
+          "0%": { transform: "translateX(-8px)", opacity: "0" },
+          "100%": { transform: "translateX(0)", opacity: "1" },
+        },
+        fadeIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
       },
     },
   },

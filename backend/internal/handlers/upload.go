@@ -1,0 +1,207 @@
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+const maxPhotoSize = 5 << 20 // 5 MB
+
+// UploadCandidatePhoto uploads a photo, runs AI detection, saves result
+func UploadCandidatePhoto(pool *pgxpool.Pool, uploadDir, geminiAPIKey string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID := c.Param("id")
+
+		// Parse multipart form
+		if err := c.Request.ParseMultipartForm(maxPhotoSize); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file too large (max 5 MB)"})
+			return
+		}
+
+		file, header, err := c.Request.FormFile("photo")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "photo field is required"})
+			return
+		}
+		defer file.Close()
+
+		// Validate content type
+		contentType := header.Header.Get("Content-Type")
+		if !strings.HasPrefix(contentType, "image/") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "only image files are accepted"})
+			return
+		}
+
+		// Read file bytes
+		fileBytes, err := io.ReadAll(io.LimitReader(file, maxPhotoSize))
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to read file"})
+			return
+		}
+
+		// Save file to disk
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			c.JSON(500, gin.H{"error": "failed to create upload directory"})
+			return
+		}
+
+		ext := filepath.Ext(header.Filename)
+		if ext == "" {
+			ext = ".jpg"
+		}
+		filename := fmt.Sprintf("candidate_%s_%d%s", candidateID, time.Now().UnixNano(), ext)
+		filePath := filepath.Join(uploadDir, filename)
+
+		if err := os.WriteFile(filePath, fileBytes, 0644); err != nil {
+			c.JSON(500, gin.H{"error": "failed to save file"})
+			return
+		}
+
+		photoURL := "/uploads/" + filename
+
+		// Run AI photo detection (async, non-blocking for score)
+		aiFlag := false
+		aiNote := ""
+		if geminiAPIKey != "" {
+			aiFlag, aiNote = detectAIGeneratedPhoto(c.Request.Context(), fileBytes, contentType, geminiAPIKey)
+		}
+
+		// Update candidate record
+		_, err = pool.Exec(c.Request.Context(),
+			`UPDATE candidates SET photo_url = $1, photo_ai_flag = $2, photo_ai_note = $3 WHERE id = $4`,
+			photoURL, aiFlag, nilIfEmpty(aiNote), candidateID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to update candidate"})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"photo_url":    photoURL,
+			"ai_flag":      aiFlag,
+			"ai_note":      aiNote,
+		})
+	}
+}
+
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+type geminiVisionRequest struct {
+	Contents []geminiVisionContent `json:"contents"`
+}
+
+type geminiVisionContent struct {
+	Parts []geminiVisionPart `json:"parts"`
+}
+
+type geminiVisionPart struct {
+	Text       string            `json:"text,omitempty"`
+	InlineData *geminiInlineData `json:"inlineData,omitempty"`
+}
+
+type geminiInlineData struct {
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
+}
+
+type geminiVisionResponse struct {
+	Candidates []struct {
+		Content struct {
+			Parts []struct {
+				Text string `json:"text"`
+			} `json:"parts"`
+		} `json:"content"`
+	} `json:"candidates"`
+}
+
+func detectAIGeneratedPhoto(ctx context.Context, imgBytes []byte, mimeType, apiKey string) (bool, string) {
+	encoded := base64.StdEncoding.EncodeToString(imgBytes)
+
+	prompt := `Analyze this photo and determine if it is AI-generated, digitally manipulated, or contains signs of AI involvement (e.g. GAN artifacts, unnatural skin, blurry backgrounds, wrong facial symmetry, impossible lighting).
+
+Respond ONLY with a JSON object in this exact format:
+{"ai_involved": true/false, "confidence": "low|medium|high", "note": "brief explanation in 1 sentence"}
+
+Do not include any other text.`
+
+	reqBody := geminiVisionRequest{
+		Contents: []geminiVisionContent{
+			{
+				Parts: []geminiVisionPart{
+					{
+						InlineData: &geminiInlineData{
+							MimeType: mimeType,
+							Data:     encoded,
+						},
+					},
+					{Text: prompt},
+				},
+			},
+		},
+	}
+
+	bodyBytes, _ := json.Marshal(reqBody)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", apiKey)
+
+	httpCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(httpCtx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return false, ""
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, ""
+	}
+	defer resp.Body.Close()
+
+	var vr geminiVisionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&vr); err != nil {
+		return false, ""
+	}
+
+	if len(vr.Candidates) == 0 || len(vr.Candidates[0].Content.Parts) == 0 {
+		return false, ""
+	}
+
+	text := strings.TrimSpace(vr.Candidates[0].Content.Parts[0].Text)
+	// Remove possible markdown code fences
+	text = strings.TrimPrefix(text, "```json")
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	text = strings.TrimSpace(text)
+
+	var result struct {
+		AIInvolved bool   `json:"ai_involved"`
+		Confidence string `json:"confidence"`
+		Note       string `json:"note"`
+	}
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
+		return false, ""
+	}
+
+	note := ""
+	if result.AIInvolved {
+		note = fmt.Sprintf("[%s confidence] %s", result.Confidence, result.Note)
+	}
+	return result.AIInvolved, note
+}

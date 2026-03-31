@@ -27,12 +27,20 @@ func SeedAdminUser(pool *pgxpool.Pool) error {
 	}
 
 	_, err = pool.Exec(ctx,
-		`INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3)`,
-		"admin@invisionu.kz", string(hash), "admin")
+		`INSERT INTO users (email, password_hash, role, full_name) VALUES ($1, $2, $3, $4)`,
+		"admin@invisionu.kz", string(hash), "superadmin", "Super Admin")
 	if err != nil {
 		return err
 	}
 
-	log.Println("Default admin user created (admin@invisionu.kz / admin123)")
+	log.Println("Default superadmin user created (admin@invisionu.kz / admin123)")
 	return nil
+}
+
+// EnsureSuperAdminRole upgrades the legacy admin@invisionu.kz to superadmin if needed
+func EnsureSuperAdminRole(pool *pgxpool.Pool) error {
+	ctx := context.Background()
+	_, err := pool.Exec(ctx,
+		`UPDATE users SET role = 'superadmin' WHERE email = 'admin@invisionu.kz' AND role = 'admin'`)
+	return err
 }

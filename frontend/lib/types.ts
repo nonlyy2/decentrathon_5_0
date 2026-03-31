@@ -12,6 +12,12 @@ export interface Candidate {
   extracurriculars: string | null;
   essay: string;
   motivation_statement: string | null;
+  disability: string | null;
+  major: string | null;
+  photo_url: string | null;
+  photo_ai_flag: boolean;
+  photo_ai_note: string | null;
+  keywords: string[];
   created_at: string;
   status: string;
 }
@@ -22,12 +28,16 @@ export interface CandidateListItem {
   email: string;
   city: string | null;
   school: string | null;
+  major: string | null;
   status: string;
   created_at: string;
   final_score: number | null;
   category: string | null;
   analyzed_at: string | null;
   model_used: string | null;
+  photo_url: string | null;
+  photo_ai_flag: boolean;
+  age: number | null;
 }
 
 export interface Analysis {
@@ -116,7 +126,10 @@ export interface CandidateDetail extends Candidate {
 export interface User {
   id: number;
   email: string;
+  full_name: string | null;
   role: string;
+  avatar_url: string | null;
+  created_at?: string;
 }
 
 export interface DashboardStats {
@@ -133,4 +146,11 @@ export interface DashboardStats {
   score_median: number;
   dimension_means: Record<string, number>;
   dimension_distributions: Record<string, { range: string; count: number }[]>;
+}
+
+export interface MajorOption {
+  tag: string;
+  en: string;
+  ru: string;
+  kk: string;
 }

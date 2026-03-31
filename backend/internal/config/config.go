@@ -19,12 +19,23 @@ type Config struct {
 
 	// Telegram bot
 	TelegramBotToken string
-	AlemSTTAPIKey    string
+	WhisperAPIKey    string
+	WhisperProvider  string
 
 	// Interview settings
 	InterviewTimeoutMin   int
 	InterviewMinQuestions int
 	InterviewMaxQuestions int
+
+	// Email (SMTP)
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
+
+	// File uploads
+	UploadDir string
 }
 
 func Load() *Config {
@@ -40,11 +51,20 @@ func Load() *Config {
 		OllamaModel:  getEnv("OLLAMA_MODEL", "mistral:7b"),
 
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
-		AlemSTTAPIKey:    getEnv("ALEM_STT_API_KEY", ""),
+		WhisperAPIKey:    getEnv("WHISPER_API_KEY", ""),
+		WhisperProvider:  getEnv("WHISPER_PROVIDER", "openai"),
 
 		InterviewTimeoutMin:   getEnvInt("INTERVIEW_TIMEOUT_MIN", 30),
 		InterviewMinQuestions: getEnvInt("INTERVIEW_MIN_QUESTIONS", 8),
 		InterviewMaxQuestions: getEnvInt("INTERVIEW_MAX_QUESTIONS", 15),
+
+		SMTPHost:     getEnv("SMTP_HOST", ""),
+		SMTPPort:     getEnvInt("SMTP_PORT", 587),
+		SMTPUser:     getEnv("SMTP_USER", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", "noreply@invisionu.kz"),
+
+		UploadDir: getEnv("UPLOAD_DIR", "./uploads"),
 	}
 }
 

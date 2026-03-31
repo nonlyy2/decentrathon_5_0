@@ -6,7 +6,7 @@ import { useFetch } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n";
 import { useAIProvider } from "@/lib/aiProvider";
 import api from "@/lib/api";
-import { CandidateDetail, InterviewStatus, InterviewMessage } from "@/lib/types";
+import { CandidateDetail, InterviewStatus, InterviewMessage, MajorOption } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreRadar from "@/components/ScoreRadar";
 import DecisionButtons from "@/components/DecisionButtons";
@@ -57,6 +57,12 @@ export default function CandidateDetailPage() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<InterviewMessage[]>([]);
+
+  // Majors
+  const [majors, setMajors] = useState<MajorOption[]>([]);
+  useEffect(() => {
+    api.get("/majors").then((res) => setMajors(res.data || [])).catch(() => {});
+  }, []);
 
   // Delete analysis custom modal
   const [showDeleteAnalysis, setShowDeleteAnalysis] = useState(false);
@@ -236,6 +242,7 @@ export default function CandidateDetailPage() {
       extracurriculars: detail.extracurriculars || "",
       essay: detail.essay || "",
       motivation_statement: detail.motivation_statement || "",
+      major: detail.major || "",
     });
     setShowEditCandidate(true);
   };
@@ -256,6 +263,7 @@ export default function CandidateDetailPage() {
         extracurriculars: editForm.extracurriculars || null,
         essay: editForm.essay,
         motivation_statement: editForm.motivation_statement || null,
+        major: editForm.major || null,
       });
       toast.success("Candidate updated");
       setShowEditCandidate(false);
@@ -354,6 +362,44 @@ export default function CandidateDetailPage() {
           <Card>
             <CardHeader><CardTitle className="text-base">{t("detail.personal")}</CardTitle></CardHeader>
             <CardContent>
+              <div className="flex gap-4 mb-4">
+                {detail.photo_url ? (
+                  <div className="flex-shrink-0">
+                    <img
+                      src={`${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8080"}${detail.photo_url}`}
+                      alt={detail.full_name}
+                      className="w-20 h-20 rounded-lg object-cover border"
+                    />
+                    {detail.photo_ai_flag && (
+                      <div className="flex items-center gap-1 mt-1.5 text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        <AlertTriangle size={11} />
+                        <span className="text-xs font-medium">AI-generated photo</span>
+                      </div>
+                    )}
+                    {detail.photo_ai_note && (
+                      <p className="text-xs text-muted-foreground mt-1 max-w-[80px] truncate" title={detail.photo_ai_note}>
+                        {detail.photo_ai_note}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded-lg bg-slate-100 border flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl font-bold text-slate-400">{detail.full_name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  {detail.major && (
+                    <div className="mb-2">
+                      <span className="inline-block bg-lime-100 text-lime-800 text-xs font-semibold px-2 py-0.5 rounded">
+                        {majors.find((m) => m.tag === detail.major)?.en || detail.major}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-sm text-muted-foreground">{detail.email}</div>
+                  {detail.phone && <div className="text-sm text-muted-foreground">{detail.phone}</div>}
+                  {detail.telegram && <div className="text-sm text-muted-foreground">@{detail.telegram}</div>}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">{t("detail.email")}:</span> {detail.email}</div>
                 <div><span className="text-muted-foreground">{t("detail.phone")}:</span> {detail.phone || "—"}</div>
@@ -362,6 +408,9 @@ export default function CandidateDetailPage() {
                 <div><span className="text-muted-foreground">{t("detail.city")}:</span> {detail.city || "—"}</div>
                 <div><span className="text-muted-foreground">{t("detail.school")}:</span> {detail.school || "—"}</div>
                 <div><span className="text-muted-foreground">{t("detail.graduation")}:</span> {detail.graduation_year || "—"}</div>
+                {detail.major && (
+                  <div><span className="text-muted-foreground">Major:</span> {majors.find((m) => m.tag === detail.major)?.en || detail.major}</div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -884,7 +933,20 @@ export default function CandidateDetailPage() {
               <Input type="number" value={editForm.graduation_year || ""} onChange={(e) => setEditForm({ ...editForm, graduation_year: e.target.value })} />
             </div>
           </div>
-          <div>
+          <div className="col-span-2">
+            <Label className="text-sm">Major / Program</Label>
+            <select
+              className="w-full mt-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={editForm.major || ""}
+              onChange={(e) => setEditForm({ ...editForm, major: e.target.value })}
+            >
+              <option value="">— Not specified —</option>
+              {majors.map((m) => (
+                <option key={m.tag} value={m.tag}>{m.tag} — {m.en}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2">
             <Label className="text-sm">Achievements</Label>
             <Textarea rows={2} value={editForm.achievements || ""} onChange={(e) => setEditForm({ ...editForm, achievements: e.target.value })} />
           </div>

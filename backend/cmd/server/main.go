@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -60,6 +61,10 @@ func main() {
 	if err := seed.SeedAdminUser(pool); err != nil {
 		log.Printf("Warning: failed to seed admin user: %v", err)
 	}
+	// Upgrade legacy admin role to superadmin
+	if err := seed.EnsureSuperAdminRole(pool); err != nil {
+		log.Printf("Warning: failed to upgrade admin role: %v", err)
+	}
 
 	// Seed candidates if --seed / --force-seed / --seed-only / --force-seed-only flag
 	seedOnly := false
@@ -90,93 +95,146 @@ func main() {
 		return
 	}
 
-	// AI clients — create all available providers
-	providers := make(handlers.AIProviders)
+	// AI clients
+	aiProviders := make(handlers.AIProviders)
 	batchProviders := make(handlers.AIBatchProviders)
 	textGens := make(handlers.AITextGenerators)
 
 	if cfg.GeminiAPIKey != "" {
 		geminiClient := gemini.NewClient(cfg.GeminiAPIKey)
-		providers["gemini"] = geminiClient.AnalyzeCandidate
+		aiProviders["gemini"] = geminiClient.AnalyzeCandidate
 		batchProviders["gemini"] = geminiClient.AnalyzeBatch
 		textGens["gemini"] = geminiClient.GenerateText
-		log.Printf("Gemini initialized (model=%s, tier-1, no rate limit)", gemini.ModelName)
+		log.Printf("Gemini initialized (model=%s)", gemini.ModelName)
 	}
 
 	ollamaClient := ollama.NewClient(cfg.OllamaURL, cfg.OllamaModel)
-	providers["ollama"] = ollamaClient.AnalyzeCandidate
+	aiProviders["ollama"] = ollamaClient.AnalyzeCandidate
 	batchProviders["ollama"] = ollamaClient.AnalyzeBatch
 	textGens["ollama"] = ollamaClient.GenerateText
 	if isOllamaAvailable(cfg.OllamaURL) {
 		log.Printf("Ollama initialized (url=%s, model=%s)", cfg.OllamaURL, cfg.OllamaModel)
 	} else {
-		log.Printf("Ollama registered but not reachable at %s — will show in UI, analysis will fail if not running", cfg.OllamaURL)
+		log.Printf("Ollama registered but not reachable at %s", cfg.OllamaURL)
 	}
 
 	defaultProvider := cfg.AIProvider
-	if _, ok := providers[defaultProvider]; !ok {
-		// fallback to whatever is available
-		for k := range providers {
+	if _, ok := aiProviders[defaultProvider]; !ok {
+		for k := range aiProviders {
 			defaultProvider = k
 			break
 		}
 	}
 	log.Printf("Default AI provider: %s", defaultProvider)
 
+	// Email service
+	emailSvc := handlers.NewEmailService(cfg, pool)
+	if emailSvc.Enabled() {
+		log.Printf("Email service initialized (SMTP: %s:%d)", cfg.SMTPHost, cfg.SMTPPort)
+	} else {
+		log.Printf("Email service disabled (SMTP not configured)")
+	}
+
+	// Ensure upload directory
+	if err := os.MkdirAll(cfg.UploadDir, 0755); err != nil {
+		log.Printf("Warning: could not create upload dir %s: %v", cfg.UploadDir, err)
+	}
+
 	// Router
 	router := gin.Default()
 	router.Use(middleware.CORSMiddleware(cfg.AllowOrigins))
 	router.Use(middleware.NoCacheMiddleware())
 
+	// Serve uploaded files
+	router.Static("/uploads", cfg.UploadDir)
+
 	api := router.Group("/api")
 
 	// Public routes
-	api.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-	api.POST("/apply", handlers.SubmitApplication(pool))
+	api.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
+	api.POST("/apply", handlers.SubmitApplication(pool, emailSvc))
 	api.POST("/auth/register", handlers.Register(pool))
 	api.POST("/auth/login", handlers.Login(pool, cfg.JWTSecret))
+	api.GET("/majors", handlers.GetMajors())
+
+	// Public Telegram Mini App status endpoint (validated by initData)
+	api.GET("/tma/status", handlers.GetTMAStatusByChatID(pool, cfg.TelegramBotToken))
 
 	// Protected routes
 	protected := api.Group("/", middleware.AuthRequired(cfg.JWTSecret))
 	{
+		// Candidates — manager+
 		protected.GET("/candidates", handlers.ListCandidates(pool))
 		protected.POST("/candidates", handlers.CreateCandidate(pool))
 		protected.GET("/candidates/:id", handlers.GetCandidate(pool))
 		protected.PATCH("/candidates/:id", handlers.UpdateCandidate(pool))
 		protected.DELETE("/candidates/:id", handlers.DeleteCandidate(pool))
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
+		protected.POST("/candidates/:id/photo", handlers.UploadCandidatePhoto(pool, cfg.UploadDir, cfg.GeminiAPIKey))
 
+		// Analysis
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
 		protected.GET("/candidates/:id/analysis-status", handlers.GetCandidateAnalysisStatus())
 		protected.DELETE("/candidates/:id/analysis", handlers.DeleteAnalysis(pool))
-		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, providers, defaultProvider))
+		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, aiProviders, defaultProvider))
 		protected.DELETE("/analyses", handlers.DeleteAllAnalyses(pool))
 
+		// Decisions
 		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))
 		protected.GET("/candidates/:id/decisions", handlers.GetDecisions(pool))
 
+		// Comments
 		protected.GET("/candidates/:id/comments", handlers.GetComments(pool))
 		protected.POST("/candidates/:id/comments", handlers.AddComment(pool))
 		protected.DELETE("/comments/:commentId", handlers.DeleteComment(pool))
 
+		// Stats / Export / Bulk
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
-
-		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, providers, batchProviders, defaultProvider))
+		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, aiProviders, batchProviders, defaultProvider))
 		protected.POST("/analyze-all/stop", handlers.StopBatch())
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
 		protected.POST("/candidates/ai-recommend", handlers.RecommendCandidates(pool, textGens, defaultProvider))
-
-		protected.GET("/ai-providers", handlers.GetAIProviders(providers, defaultProvider))
+		protected.GET("/ai-providers", handlers.GetAIProviders(aiProviders, defaultProvider))
 		protected.GET("/candidates/export/csv", handlers.ExportCandidatesCSV(pool))
 		protected.POST("/candidates/bulk-decision", handlers.BulkDecision(pool))
+
+		// User management — tech-admin+
+		protected.GET("/users", middleware.TechAdminOrAbove(), handlers.ListUsers(pool))
+		protected.GET("/users/:id", middleware.TechAdminOrAbove(), handlers.GetUser(pool))
+		protected.PATCH("/users/:id", middleware.TechAdminOrAbove(), handlers.UpdateUser(pool))
+		protected.DELETE("/users/:id", middleware.SuperAdminOnly(), handlers.DeleteUser(pool))
+
+		// Profile
+		protected.GET("/profile", handlers.GetProfile(pool))
+		protected.PATCH("/profile", handlers.UpdateProfile(pool))
+
+		// Email (manual trigger) — manager+
+		protected.POST("/candidates/:id/email/shortlist", func(c *gin.Context) {
+			id := c.Param("id")
+			var row struct {
+				Email    string
+				FullName string
+			}
+			if err := pool.QueryRow(c.Request.Context(),
+				`SELECT email, full_name FROM candidates WHERE id = $1`, id).
+				Scan(&row.Email, &row.FullName); err != nil {
+				c.JSON(404, gin.H{"error": "candidate not found"})
+				return
+			}
+			if emailSvc.Enabled() {
+				idInt := 0
+				fmt.Sscan(id, &idInt)
+				go emailSvc.SendShortlistNotification(row.Email, row.FullName, idInt)
+				c.JSON(200, gin.H{"message": "email queued"})
+			} else {
+				c.JSON(503, gin.H{"error": "email service not configured"})
+			}
+		})
 	}
 
 	// Telegram bot (Stage 2 Interview)
 	botUsername := ""
 	if cfg.TelegramBotToken != "" {
-		// Pick the best available text generator for the bot
 		var botTextGen telegram_bot.TextGenerator
 		botModelName := "unknown"
 		if gen, ok := textGens["gemini"]; ok {
@@ -196,12 +254,10 @@ func main() {
 				go bot.Start(context.Background())
 				log.Printf("Telegram bot started (@%s)", botUsername)
 			}
-		} else {
-			log.Printf("Warning: no AI provider available for Telegram bot")
 		}
 	}
 
-	// Interview routes (need botUsername for deep link generation)
+	// Interview routes
 	protected.POST("/candidates/:id/telegram-invite", handlers.CreateTelegramInvite(pool, botUsername))
 	protected.GET("/candidates/:id/interview", handlers.GetInterviewStatus(pool))
 	protected.GET("/candidates/:id/interview/messages", handlers.GetInterviewTranscript(pool))
@@ -212,7 +268,6 @@ func main() {
 	}
 }
 
-// isOllamaAvailable checks if the Ollama service is reachable
 func isOllamaAvailable(baseURL string) bool {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(baseURL + "/api/version")

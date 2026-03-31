@@ -12,13 +12,17 @@ func RunMigrations(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 
 	queries := []string{
+		// ─── Core tables ──────────────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
 			email VARCHAR(255) UNIQUE NOT NULL,
 			password_hash VARCHAR(255) NOT NULL,
-			role VARCHAR(20) NOT NULL DEFAULT 'committee' CHECK (role IN ('admin', 'committee')),
+			full_name VARCHAR(255),
+			role VARCHAR(20) NOT NULL DEFAULT 'manager' CHECK (role IN ('superadmin','tech-admin','auditor','manager','admin','committee')),
+			avatar_url VARCHAR(512),
 			created_at TIMESTAMP DEFAULT NOW()
 		)`,
+
 		`CREATE TABLE IF NOT EXISTS candidates (
 			id SERIAL PRIMARY KEY,
 			full_name VARCHAR(255) NOT NULL,
@@ -34,6 +38,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			created_at TIMESTAMP DEFAULT NOW(),
 			status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','analyzed','shortlisted','rejected','waitlisted'))
 		)`,
+
 		`CREATE TABLE IF NOT EXISTS analyses (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -57,6 +62,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			analyzed_at TIMESTAMP DEFAULT NOW(),
 			model_used VARCHAR(50)
 		)`,
+
 		`CREATE TABLE IF NOT EXISTS committee_decisions (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -65,6 +71,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			decided_by INTEGER REFERENCES users(id),
 			decided_at TIMESTAMP DEFAULT NOW()
 		)`,
+
 		`CREATE TABLE IF NOT EXISTS comments (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -72,23 +79,8 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			content TEXT NOT NULL,
 			created_at TIMESTAMP DEFAULT NOW()
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_comments_candidate ON comments(candidate_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)`,
-		`CREATE INDEX IF NOT EXISTS idx_analyses_candidate ON analyses(candidate_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_analyses_final_score ON analyses(final_score DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_decisions_candidate ON committee_decisions(candidate_id)`,
-		// New columns
-		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
-		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS telegram VARCHAR(100)`,
-		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS ai_generated_score INTEGER DEFAULT 0`,
 
-		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability TEXT`,
-
-		// Stage 2: Telegram interview tables
-		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT`,
-		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS interview_status VARCHAR(20) DEFAULT 'not_invited' CHECK (interview_status IN ('not_invited','invited','in_progress','completed'))`,
-		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS combined_score NUMERIC(5,2)`,
-
+		// ─── Stage 2: Telegram interview ──────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS telegram_invites (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -146,19 +138,87 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			model_used VARCHAR(50)
 		)`,
 
+		// ─── Candidate info-change requests ────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS candidate_change_requests (
+			id SERIAL PRIMARY KEY,
+			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+			field_name VARCHAR(100) NOT NULL,
+			old_value TEXT,
+			new_value TEXT NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+			requested_at TIMESTAMP DEFAULT NOW(),
+			reviewed_by INTEGER REFERENCES users(id),
+			reviewed_at TIMESTAMP,
+			review_note TEXT
+		)`,
+
+		// ─── Email log ────────────────────────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS email_logs (
+			id SERIAL PRIMARY KEY,
+			candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
+			recipient_email VARCHAR(255) NOT NULL,
+			subject VARCHAR(512) NOT NULL,
+			template VARCHAR(50) NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'sent' CHECK (status IN ('sent','failed')),
+			sent_at TIMESTAMP DEFAULT NOW()
+		)`,
+
+		// ─── Indexes ──────────────────────────────────────────────────────────────
+		`CREATE INDEX IF NOT EXISTS idx_comments_candidate ON comments(candidate_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_analyses_candidate ON analyses(candidate_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_analyses_final_score ON analyses(final_score DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_decisions_candidate ON committee_decisions(candidate_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_change_requests_candidate ON candidate_change_requests(candidate_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_change_requests_status ON candidate_change_requests(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_email_logs_candidate ON email_logs(candidate_id)`,
+
+		// ─── ALTER TABLE additions (idempotent) ───────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS telegram VARCHAR(100)`,
+		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS ai_generated_score INTEGER DEFAULT 0`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability TEXT`,
+
+		// Photo + AI detection
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_url VARCHAR(512)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_ai_flag BOOLEAN DEFAULT false`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_ai_note TEXT`,
+
+		// Major selection
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS major VARCHAR(100)`,
+
+		// Keywords (extracted by AI from essay + achievements for fast search)
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS keywords TEXT[]`,
+
+		// Stage 2 interview fields
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS interview_status VARCHAR(20) DEFAULT 'not_invited' CHECK (interview_status IN ('not_invited','invited','in_progress','completed'))`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS combined_score NUMERIC(5,2)`,
+
+		// users: role constraint updated (drop old check, add new)
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512)`,
+
 		// Review system: unique constraint so a user can only vote once per candidate
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_user_candidate ON committee_decisions(candidate_id, decided_by)`,
 
+		// Telegram invite indexes
 		`CREATE INDEX IF NOT EXISTS idx_telegram_invites_token ON telegram_invites(token)`,
 		`CREATE INDEX IF NOT EXISTS idx_telegram_invites_chat ON telegram_invites(telegram_chat_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interviews_chat ON interviews(telegram_chat_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interviews_candidate ON interviews(candidate_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interview_messages_interview ON interview_messages(interview_id)`,
+
+		// GIN index for keyword search
+		`CREATE INDEX IF NOT EXISTS idx_candidates_keywords ON candidates USING GIN(keywords)`,
+
+		// GIN index for full-text search on essay+achievements
+		`CREATE INDEX IF NOT EXISTS idx_candidates_fts ON candidates USING GIN(to_tsvector('english', coalesce(essay,'') || ' ' || coalesce(achievements,'')))`,
 	}
 
 	for _, q := range queries {
 		if _, err := pool.Exec(ctx, q); err != nil {
-			return fmt.Errorf("migration failed: %w", err)
+			return fmt.Errorf("migration failed [%.80s]: %w", q, err)
 		}
 	}
 
