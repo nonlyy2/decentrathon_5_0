@@ -383,3 +383,63 @@ func UpdateCandidateKeywords(pool *pgxpool.Pool, candidateID int, keywords []str
 		`UPDATE candidates SET keywords = $1 WHERE id = $2`, unique, candidateID)
 	return err
 }
+
+// GetSimilarCandidates returns candidates whose score is within ±3% of the given candidate.
+func GetSimilarCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "invalid candidate id"})
+			return
+		}
+
+		// Get this candidate's score
+		var score *float64
+		pool.QueryRow(c.Request.Context(),
+			`SELECT a.final_score FROM analyses a WHERE a.candidate_id = $1`, id).Scan(&score)
+		if score == nil {
+			c.JSON(200, []interface{}{})
+			return
+		}
+
+		margin := *score * 0.03
+		if margin < 1 {
+			margin = 1
+		}
+		lo := *score - margin
+		hi := *score + margin
+
+		rows, err := pool.Query(c.Request.Context(), `
+			SELECT c.id, c.full_name, c.major, a.final_score, a.category, c.status
+			FROM candidates c
+			JOIN analyses a ON a.candidate_id = c.id
+			WHERE c.id != $1 AND a.final_score BETWEEN $2 AND $3
+			ORDER BY ABS(a.final_score - $4) ASC
+			LIMIT 10`, id, lo, hi, *score)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to query similar candidates"})
+			return
+		}
+		defer rows.Close()
+
+		type similarItem struct {
+			ID         int      `json:"id"`
+			FullName   string   `json:"full_name"`
+			Major      *string  `json:"major"`
+			FinalScore float64  `json:"final_score"`
+			Category   string   `json:"category"`
+			Status     string   `json:"status"`
+		}
+		var results []similarItem
+		for rows.Next() {
+			var s similarItem
+			if err := rows.Scan(&s.ID, &s.FullName, &s.Major, &s.FinalScore, &s.Category, &s.Status); err == nil {
+				results = append(results, s)
+			}
+		}
+		if results == nil {
+			results = []similarItem{}
+		}
+		c.JSON(200, results)
+	}
+}

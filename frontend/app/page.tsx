@@ -8,6 +8,34 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
+const FAQ_ITEMS = [
+  {
+    q: "What is inVision U?",
+    a: "inVision U is a 100% scholarship university by inDrive, focused on developing the next generation of tech leaders in Central Asia.",
+  },
+  {
+    q: "How does the application process work?",
+    a: "Submit your application online (essay, achievements, motivation). Our AI evaluates applications in Stage 1. Top candidates are invited to a Telegram-based interview in Stage 2. A committee makes the final decision.",
+  },
+  {
+    q: "What are the available majors?",
+    a: "Creative Engineering, Innovative IT Product Design and Development, Sociology: Leadership and Innovation, Public Policy and Development, and Digital Media and Marketing.",
+  },
+  {
+    q: "Is the interview conducted by a real person?",
+    a: "Stage 2 uses an AI-powered interviewer via Telegram. It asks behavioral questions using the STAR method. You can respond with voice or text messages.",
+  },
+  {
+    q: "How is my application scored?",
+    a: "AI evaluates you on Leadership (25%), Motivation (25%), Growth (20%), Vision (15%), and Communication (15%). Interview adds Grit and Authenticity scores. Combined: 60% essay + 40% interview.",
+  },
+  {
+    q: "Is my data private?",
+    a: "Yes. Your personal information (name, email, age) is excluded from AI analysis. Only your essay and interview responses are evaluated.",
+  },
+];
 
 function LoginPage() {
   const [showAdmin, setShowAdmin] = useState(false);
@@ -16,6 +44,7 @@ function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { login } = useAuth();
   const router = useRouter();
 
@@ -38,7 +67,6 @@ function LoginPage() {
     }
   };
 
-  // Load remembered email on mount
   useEffect(() => {
     const saved = localStorage.getItem("remember_email");
     if (saved) {
@@ -48,43 +76,72 @@ function LoginPage() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-4">
+    <div className="min-h-screen flex flex-col items-center bg-slate-950 p-4">
       {!showAdmin ? (
-        /* Applicant-first landing */
-        <div className="w-full max-w-lg text-center space-y-8">
-          <div>
-            <h1 className="text-4xl font-bold text-purple-400 mb-2">inVision U</h1>
-            <p className="text-slate-400 text-lg">100% Scholarship University by inDrive</p>
+        <div className="w-full max-w-2xl space-y-10 py-12">
+          {/* Hero */}
+          <div className="text-center space-y-3">
+            <h1 className="text-5xl font-bold" style={{ color: "#c1f11d" }}>inVision U</h1>
+            <p className="text-slate-400 text-lg">100% Scholarship University by <span style={{ color: "#c1f11d" }}>inDrive</span></p>
           </div>
 
+          {/* Apply CTA */}
           <Card className="border-slate-800 bg-slate-900">
-            <CardContent className="p-8 space-y-4">
+            <CardContent className="p-8 space-y-4 text-center">
               <h2 className="text-xl font-semibold text-white">Apply Now</h2>
               <p className="text-slate-400 text-sm">
                 Join the next generation of tech leaders in Central Asia.
                 Submit your application for the 2026 cohort.
               </p>
               <Link href="/apply">
-                <Button className="w-full bg-purple-600 hover:bg-purple-700 text-lg py-6">
+                <Button
+                  className="w-full text-lg py-6 font-bold"
+                  style={{ backgroundColor: "#c1f11d", color: "#111" }}
+                >
                   Start Application
                 </Button>
               </Link>
             </CardContent>
           </Card>
 
-          <button
-            onClick={() => setShowAdmin(true)}
-            className="text-slate-600 text-xs hover:text-slate-400 transition-colors"
-          >
-            Admin Panel
-          </button>
+          {/* FAQ Section */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-white text-center">Frequently Asked Questions</h2>
+            <div className="space-y-2">
+              {FAQ_ITEMS.map((item, i) => (
+                <div key={i} className="border border-slate-800 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-center justify-between px-5 py-4 text-left text-white hover:bg-slate-800/50 transition-colors"
+                  >
+                    <span className="text-sm font-medium">{item.q}</span>
+                    {openFaq === i ? <ChevronUp size={16} className="text-slate-400 shrink-0" /> : <ChevronDown size={16} className="text-slate-400 shrink-0" />}
+                  </button>
+                  {openFaq === i && (
+                    <div className="px-5 pb-4 text-sm text-slate-400 animate-fade-in">
+                      {item.a}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="text-slate-600 text-xs hover:text-slate-400 transition-colors"
+            >
+              Admin Panel
+            </button>
+          </div>
         </div>
       ) : (
         /* Admin login form */
-        <div className="w-full max-w-md">
-          <Card className="border-slate-800 bg-slate-900">
+        <div className="w-full max-w-md flex-1 flex items-center justify-center">
+          <Card className="border-slate-800 bg-slate-900 w-full">
             <CardHeader className="text-center">
-              <div className="text-3xl font-bold text-purple-400 mb-1">inVision U</div>
+              <div className="text-3xl font-bold mb-1" style={{ color: "#c1f11d" }}>inVision U</div>
               <CardTitle className="text-slate-300 text-sm font-normal">
                 Admissions Screening Platform
               </CardTitle>
@@ -119,7 +176,8 @@ function LoginPage() {
                     type="checkbox"
                     checked={remember}
                     onChange={(e) => setRemember(e.target.checked)}
-                    className="rounded border-slate-600 bg-slate-800 text-purple-600 focus:ring-purple-500"
+                    className="rounded border-slate-600 bg-slate-800"
+                    style={{ accentColor: "#c1f11d" }}
                   />
                   <Label htmlFor="remember" className="text-slate-400 text-sm cursor-pointer">
                     Remember me
@@ -128,7 +186,8 @@ function LoginPage() {
                 {error && <p className="text-red-400 text-sm">{error}</p>}
                 <Button
                   type="submit"
-                  className="w-full bg-purple-600 hover:bg-purple-700"
+                  className="w-full font-bold"
+                  style={{ backgroundColor: "#c1f11d", color: "#111" }}
                   disabled={loading}
                 >
                   {loading ? "Signing in..." : "Sign In"}

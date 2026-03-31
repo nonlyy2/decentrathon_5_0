@@ -51,7 +51,7 @@ func Load() *Config {
 		OllamaModel:  getEnv("OLLAMA_MODEL", "mistral:7b"),
 
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
-		WhisperAPIKey:    getEnv("WHISPER_API_KEY", ""),
+		WhisperAPIKey:    getEnvMulti("ALEM_STT_API_KEY", "WHISPER_API_KEY", ""),
 		WhisperProvider:  getEnv("WHISPER_PROVIDER", "openai"),
 
 		InterviewTimeoutMin:   getEnvInt("INTERVIEW_TIMEOUT_MIN", 30),
@@ -71,6 +71,16 @@ func Load() *Config {
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvMulti(keys ...string) string {
+	fallback := keys[len(keys)-1]
+	for _, k := range keys[:len(keys)-1] {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
 	}
 	return fallback
 }

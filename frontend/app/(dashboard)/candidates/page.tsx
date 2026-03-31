@@ -18,12 +18,20 @@ import { toast } from "sonner";
 import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Play, Square, Download, Trash2, SlidersHorizontal, X } from "lucide-react";
 
 const MAJORS = [
-  { tag: "Engineering", label: "Engineering" },
-  { tag: "Tech", label: "Tech" },
-  { tag: "Society", label: "Society" },
-  { tag: "Policy Reform", label: "Policy Reform" },
-  { tag: "Art + Media", label: "Art + Media" },
+  { tag: "Engineering", label: "Creative Engineering" },
+  { tag: "Tech", label: "Innovative IT Product Design and Development" },
+  { tag: "Society", label: "Sociology: Leadership and Innovation" },
+  { tag: "Policy Reform", label: "Public Policy and Development" },
+  { tag: "Art + Media", label: "Digital Media and Marketing" },
 ];
+
+const MAJOR_FULL_NAMES: Record<string, string> = {
+  Engineering: "Creative Engineering",
+  Tech: "Innovative IT Product Design and Development",
+  Society: "Sociology: Leadership and Innovation",
+  "Policy Reform": "Public Policy and Development",
+  "Art + Media": "Digital Media and Marketing",
+};
 
 function RangeSlider({
   label, min, max, step = 1, value, onChange,
@@ -99,6 +107,28 @@ export default function CandidatesPage() {
   const [deleting, setDeleting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Auto-accept
+  const [autoAcceptOpen, setAutoAcceptOpen] = useState(false);
+  const [autoAcceptCount, setAutoAcceptCount] = useState("10");
+  const [autoAccepting, setAutoAccepting] = useState(false);
+
+  const handleAutoAccept = async () => {
+    const n = parseInt(autoAcceptCount);
+    if (!n || n < 1) return;
+    setAutoAccepting(true);
+    try {
+      const res = await api.post("/candidates/auto-accept", { count: n });
+      toast.success(res.data.message);
+      setAutoAcceptOpen(false);
+      fetchCandidates();
+      fetchCounts();
+    } catch {
+      toast.error("Failed to auto-accept");
+    } finally {
+      setAutoAccepting(false);
+    }
+  };
+
   const limit = 20;
   const isAdmin = user?.role === "admin" || user?.role === "superadmin" || user?.role === "tech-admin";
 
@@ -146,62 +176,9 @@ export default function CandidatesPage() {
     }
   };
 
-  const startBatchPoll = useCallback(() => {
-    if (pollRef.current) return;
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await api.get("/analyze-all/status");
-        const { running, processed, total, errors } = res.data;
-        setBatchProgress({ done: processed, total });
-        if (!running) {
-          clearInterval(pollRef.current!);
-          pollRef.current = null;
-          setBatchRunning(false);
-          setBatchProgress(null);
-          const errCount = Array.isArray(errors) ? errors.length : 0;
-          const ok = processed - errCount;
-          if (errCount === 0) toast.success(`Batch complete: ${ok}/${processed} analyzed`);
-          else if (ok === 0) toast.error(`Batch failed: all ${errCount} errored`);
-          else toast.warning(`Batch done: ${ok} analyzed, ${errCount} failed`);
-          fetchCandidates();
-          fetchCounts();
-        }
-      } catch {
-        clearInterval(pollRef.current!);
-        pollRef.current = null;
-        setBatchRunning(false);
-      }
-    }, 3000);
-  }, []);
-
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
-
-  useEffect(() => {
-    api.get("/analyze-all/status").then((res) => {
-      if (res.data.running) {
-        setBatchRunning(true);
-        setBatchProgress({ done: res.data.processed, total: res.data.total });
-        startBatchPoll();
-      }
-    }).catch(() => {});
-  }, [startBatchPoll]);
-
-  const handleAnalyzeAll = async () => {
-    try {
-      const qs = provider ? `?provider=${provider}` : "";
-      const res = await api.post(`/analyze-all${qs}`);
-      if (!res.data.count) { toast.info("No pending candidates to analyze"); return; }
-      toast.success(`Analysis started for ${res.data.count} candidates`);
-      setBatchRunning(true);
-      setBatchProgress({ done: 0, total: res.data.count });
-      startBatchPoll();
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-      toast.error(msg ? `Error: ${msg}` : "Failed to start batch analysis");
-    }
-  };
 
   const handleStopBatch = async () => {
     try {
@@ -307,6 +284,59 @@ export default function CandidatesPage() {
   useEffect(() => { fetchCandidates(); }, [fetchCandidates]);
   useEffect(() => { setPage(0); }, [status, search, scoreRange, ageRange, majorFilter]);
 
+  const startBatchPoll = useCallback(() => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.get("/analyze-all/status");
+        const { running, processed, total, errors } = res.data;
+        setBatchProgress({ done: processed, total });
+        if (!running) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setBatchRunning(false);
+          setBatchProgress(null);
+          const errCount = Array.isArray(errors) ? errors.length : 0;
+          const ok = processed - errCount;
+          if (errCount === 0) toast.success(`Batch complete: ${ok}/${processed} analyzed`);
+          else if (ok === 0) toast.error(`Batch failed: all ${errCount} errored`);
+          else toast.warning(`Batch done: ${ok} analyzed, ${errCount} failed`);
+          fetchCandidates();
+          fetchCounts();
+        }
+      } catch {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setBatchRunning(false);
+      }
+    }, 3000);
+  }, [fetchCandidates, fetchCounts]);
+
+  useEffect(() => {
+    api.get("/analyze-all/status").then((res) => {
+      if (res.data.running) {
+        setBatchRunning(true);
+        setBatchProgress({ done: res.data.processed, total: res.data.total });
+        startBatchPoll();
+      }
+    }).catch(() => {});
+  }, [startBatchPoll]);
+
+  const handleAnalyzeAll = async () => {
+    try {
+      const qs = provider ? `?provider=${provider}` : "";
+      const res = await api.post(`/analyze-all${qs}`);
+      if (!res.data.count) { toast.info("No pending candidates to analyze"); return; }
+      toast.success(`Analysis started for ${res.data.count} candidates`);
+      setBatchRunning(true);
+      setBatchProgress({ done: 0, total: res.data.count });
+      startBatchPoll();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg ? `Error: ${msg}` : "Failed to start batch analysis");
+    }
+  };
+
   const handleSort = (column: string) => {
     if (sortBy === column) setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     else { setSortBy(column); setSortOrder("desc"); }
@@ -327,12 +357,13 @@ export default function CandidatesPage() {
                 <button
                   key={p}
                   onClick={() => setProvider(p as "gemini" | "ollama")}
-                  className={`text-xs px-2.5 py-1 rounded-md transition-colors capitalize ${
+                  className={`text-xs px-2.5 py-1 rounded-md transition-all duration-200 ${
                     provider === p ? "text-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                   style={provider === p ? { backgroundColor: "#c1f11d", color: "#111" } : undefined}
                 >
                   {p === "gemini" ? "☁ Gemini" : "⚙ Ollama"}
+                  <span className="text-[10px] opacity-70 ml-1">{p === "gemini" ? "speed" : "privacy"}</span>
                 </button>
               ))}
             </div>
@@ -358,6 +389,14 @@ export default function CandidatesPage() {
 
             <Button size="sm" variant="outline" onClick={handleExportCSV}>
               <Download size={14} className="mr-1" /> {t("cand.export")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setAutoAcceptOpen(true)}
+              className="border-green-300 text-green-700 hover:bg-green-50"
+            >
+              Auto-accept Top N
             </Button>
             <Button
               size="sm"
@@ -455,7 +494,7 @@ export default function CandidatesPage() {
       {/* Filter panel */}
       {showFilters && (
         <div className="border border-border rounded-xl p-4 bg-card space-y-4 animate-fade-in" role="region" aria-label="Filter options">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <RangeSlider
               label={t("filter.score_range")}
               min={0} max={100}
@@ -554,10 +593,10 @@ export default function CandidatesPage() {
               candidates.map((c) => (
                 <TableRow
                   key={c.id}
-                  className={`border-border hover:bg-muted/30 transition-colors relative ${selectedIds.has(c.id) ? "ring-1 ring-inset" : ""}`}
+                  className={`border-border hover:bg-muted/30 transition-colors ${selectedIds.has(c.id) ? "ring-1 ring-inset" : ""}`}
                   style={selectedIds.has(c.id) ? { backgroundColor: "#c1f11d11" } : undefined}
                 >
-                  <TableCell className="relative z-20">
+                  <TableCell>
                     <input
                       type="checkbox"
                       checked={selectedIds.has(c.id)}
@@ -567,8 +606,7 @@ export default function CandidatesPage() {
                     />
                   </TableCell>
                   <TableCell className="font-medium">
-                    <Link href={`/candidates/${c.id}`} className="absolute inset-0 z-10" aria-label={`Open ${c.full_name}`} />
-                    <div className="flex items-center gap-2 relative z-20">
+                    <Link href={`/candidates/${c.id}`} className="flex items-center gap-2 relative z-20 py-1 -my-1 cursor-pointer" aria-label={`Open ${c.full_name}`}>
                       {c.photo_url ? (
                         <img
                           src={`http://localhost:8080${c.photo_url}`}
@@ -585,20 +623,20 @@ export default function CandidatesPage() {
                           {c.full_name.charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-sm font-medium text-foreground">{c.full_name}</div>
-                        {c.major && <div className="text-[10px] text-muted-foreground">{c.major}</div>}
+                        {c.major && <div className="text-[10px] text-muted-foreground truncate">{MAJOR_FULL_NAMES[c.major] || c.major}</div>}
                       </div>
-                    </div>
+                    </Link>
                   </TableCell>
-                  <TableCell className="relative z-20 text-muted-foreground text-sm">{c.city || "—"}</TableCell>
-                  <TableCell className="relative z-20"><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
-                  <TableCell className="relative z-20"><StatusBadge status={c.status} /></TableCell>
-                  <TableCell className="relative z-20 text-sm text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-sm">{c.city || "—"}</TableCell>
+                  <TableCell><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
+                  <TableCell><StatusBadge status={c.status} /></TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
                     <div>{new Date(c.created_at).toLocaleDateString()}</div>
                     <div className="text-xs">{new Date(c.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
                   </TableCell>
-                  <TableCell className="relative z-20 text-sm text-muted-foreground">
+                  <TableCell className="text-sm text-muted-foreground">
                     {c.analyzed_at ? (
                       <>
                         <div>{new Date(c.analyzed_at).toLocaleDateString()}</div>
@@ -606,7 +644,7 @@ export default function CandidatesPage() {
                       </>
                     ) : "—"}
                   </TableCell>
-                  <TableCell className="relative z-20 text-sm text-muted-foreground">
+                  <TableCell className="text-sm text-muted-foreground">
                     {c.model_used ? c.model_used.replace(/^(gemini|ollama)\//, "") : "—"}
                   </TableCell>
                 </TableRow>
@@ -657,6 +695,38 @@ export default function CandidatesPage() {
               onClick={handleDeleteAll}
             >
               {deleting ? <><Loader2 size={14} className="animate-spin mr-2" />{t("del.deleting")}</> : t("del.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto-accept dialog */}
+      <Dialog open={autoAcceptOpen} onOpenChange={setAutoAcceptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Auto-accept Top Candidates</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Automatically shortlist the top N analyzed candidates by AI score. Only candidates with status &quot;analyzed&quot; will be affected.
+          </p>
+          <div className="mt-2">
+            <Input
+              type="number"
+              min={1}
+              value={autoAcceptCount}
+              onChange={(e) => setAutoAcceptCount(e.target.value)}
+              placeholder="Number of candidates"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAutoAcceptOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleAutoAccept}
+              disabled={autoAccepting || !autoAcceptCount || parseInt(autoAcceptCount) < 1}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {autoAccepting ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+              Accept Top {autoAcceptCount || "N"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -22,16 +22,16 @@ import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquar
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
-  "Strong Recommend": "bg-green-100 text-green-800",
-  "Recommend": "bg-blue-100 text-blue-800",
-  "Borderline": "bg-yellow-100 text-yellow-800",
-  "Not Recommended": "bg-red-100 text-red-800",
+  "Strong Recommend": "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  "Recommend": "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
+  "Borderline": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+  "Not Recommended": "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
 };
 
 const riskColors: Record<string, string> = {
-  low: "bg-green-100 text-green-700",
-  medium: "bg-yellow-100 text-yellow-700",
-  high: "bg-red-100 text-red-700",
+  low: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
+  high: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 export default function CandidateDetailPage() {
@@ -63,6 +63,14 @@ export default function CandidateDetailPage() {
   useEffect(() => {
     api.get("/majors").then((res) => setMajors(res.data || [])).catch(() => {});
   }, []);
+
+  // Similar candidates
+  const [similarCandidates, setSimilarCandidates] = useState<{ id: number; full_name: string; major: string | null; final_score: number; category: string; status: string }[]>([]);
+  useEffect(() => {
+    if (detail?.analysis) {
+      api.get(`/candidates/${params.id}/similar`).then((res) => setSimilarCandidates(res.data || [])).catch(() => {});
+    }
+  }, [detail?.analysis, params.id]);
 
   // Delete analysis custom modal
   const [showDeleteAnalysis, setShowDeleteAnalysis] = useState(false);
@@ -321,22 +329,24 @@ export default function CandidateDetailPage() {
             <UserX size={14} className="mr-1" /> Delete
           </Button>
           {/* Provider toggle */}
-          <div className="flex items-center gap-1 bg-slate-100 border rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-muted border border-border rounded-lg p-1">
             <button
               onClick={() => setProvider("gemini")}
-              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                provider === "gemini" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              className={`text-xs px-2.5 py-1 rounded-md transition-all duration-200 ${
+                provider === "gemini" ? "text-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
+              style={provider === "gemini" ? { backgroundColor: "#c1f11d", color: "#111" } : undefined}
             >
-              ☁ Gemini
+              ☁ Gemini <span className="text-[10px] opacity-70">speed</span>
             </button>
             <button
               onClick={() => setProvider("ollama")}
-              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
-                provider === "ollama" ? "bg-purple-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              className={`text-xs px-2.5 py-1 rounded-md transition-all duration-200 ${
+                provider === "ollama" ? "text-foreground font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
               }`}
+              style={provider === "ollama" ? { backgroundColor: "#c1f11d", color: "#111" } : undefined}
             >
-              ⚙ Ollama
+              ⚙ Ollama <span className="text-[10px] opacity-70">privacy</span>
             </button>
           </div>
           {a ? (
@@ -483,7 +493,7 @@ export default function CandidateDetailPage() {
               <Card>
                 <CardHeader><CardTitle className="text-base">{t("detail.summary")}</CardTitle></CardHeader>
                 <CardContent>
-                  <p className="text-sm leading-relaxed text-slate-700">{a.summary}</p>
+                  <p className="text-sm leading-relaxed text-foreground">{a.summary}</p>
                   <p className="text-xs text-muted-foreground mt-3">
                     {t("detail.analyzed_by")} {a.model_used} {"\u2014"} {new Date(a.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                   </p>
@@ -518,7 +528,7 @@ export default function CandidateDetailPage() {
                           </div>
                         </button>
                         {isExpanded && (
-                          <p className="text-xs text-slate-600 mt-1 pl-2 border-l-2 border-purple-200">
+                          <p className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-purple-200 dark:border-purple-700">
                             {explanation}
                           </p>
                         )}
@@ -604,10 +614,10 @@ export default function CandidateDetailPage() {
                 <div className="space-y-3">
                   {detail.analysis && detail.analysis.final_score >= 65 ? (
                     <>
-                      <p className="text-sm text-slate-600">{t("interview.eligible")}</p>
+                      <p className="text-sm text-muted-foreground">{t("interview.eligible")}</p>
                       {inviteLink ? (
                         <div className="flex items-center gap-2">
-                          <code className="text-xs bg-slate-100 px-2 py-1 rounded flex-1 truncate">{inviteLink}</code>
+                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{inviteLink}</code>
                           <Button size="sm" variant="outline" onClick={handleCopyLink}>
                             {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                           </Button>
@@ -634,7 +644,7 @@ export default function CandidateDetailPage() {
                       <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
                       {inviteLink ? (
                         <div className="flex items-center gap-2">
-                          <code className="text-xs bg-slate-100 px-2 py-1 rounded flex-1 truncate">{inviteLink}</code>
+                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{inviteLink}</code>
                           <Button size="sm" variant="outline" onClick={handleCopyLink}>
                             {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                           </Button>
@@ -658,7 +668,7 @@ export default function CandidateDetailPage() {
                         </span>
                       )}
                     </div>
-                    <Button size="sm" variant="ghost" className="text-xs text-muted-foreground h-7 px-2" onClick={fetchInterview}>
+                    <Button size="sm" variant="ghost" className="text-xs text-muted-foreground h-7 px-2" onClick={() => { fetchInterview(); if (showTranscript) handleViewTranscript(); }}>
                       ↻ Refresh
                     </Button>
                   </div>
@@ -666,7 +676,7 @@ export default function CandidateDetailPage() {
                   {/* Evaluating state */}
                   {(interviewData.interview?.status === "active" || interviewData.interview?.status === "evaluating") &&
                    !interviewData.analysis && (
-                    <div className="flex items-center gap-2 text-sm text-purple-600 bg-purple-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3">
                       <Loader2 size={14} className="animate-spin" />
                       <span>Interview in progress — AI analysis will appear here once complete.</span>
                     </div>
@@ -674,7 +684,7 @@ export default function CandidateDetailPage() {
 
                   {/* Interview AI analysis */}
                   {interviewData.analysis && (
-                    <div className="space-y-3 bg-slate-50 rounded-lg p-3">
+                    <div className="space-y-3 bg-muted/50 rounded-lg p-3">
                       {/* Score grid */}
                       <div className="grid grid-cols-5 gap-2 text-center">
                         {[
@@ -702,22 +712,22 @@ export default function CandidateDetailPage() {
 
                       {/* Summary */}
                       {interviewData.analysis.summary && (
-                        <p className="text-sm text-slate-600">{interviewData.analysis.summary}</p>
+                        <p className="text-sm text-foreground">{interviewData.analysis.summary}</p>
                       )}
 
                       {/* Consistency + style match */}
                       <div className="grid grid-cols-2 gap-2 pt-1">
-                        <div className="bg-white rounded p-2 text-center border">
+                        <div className="bg-card rounded p-2 text-center border border-border">
                           <p className="text-xs text-muted-foreground">Essay Consistency</p>
-                          <p className="text-base font-bold">{interviewData.analysis.consistency_score}</p>
-                          <div className="w-full bg-slate-100 rounded-full h-1 mt-1">
+                          <p className="text-base font-bold text-foreground">{interviewData.analysis.consistency_score}</p>
+                          <div className="w-full bg-muted rounded-full h-1 mt-1">
                             <div className="h-1 rounded-full bg-blue-400" style={{ width: `${interviewData.analysis.consistency_score}%` }} />
                           </div>
                         </div>
-                        <div className="bg-white rounded p-2 text-center border">
+                        <div className="bg-card rounded p-2 text-center border border-border">
                           <p className="text-xs text-muted-foreground">Style Match</p>
-                          <p className="text-base font-bold">{interviewData.analysis.style_match_score}</p>
-                          <div className="w-full bg-slate-100 rounded-full h-1 mt-1">
+                          <p className="text-base font-bold text-foreground">{interviewData.analysis.style_match_score}</p>
+                          <div className="w-full bg-muted rounded-full h-1 mt-1">
                             <div className="h-1 rounded-full bg-green-400" style={{ width: `${interviewData.analysis.style_match_score}%` }} />
                           </div>
                         </div>
@@ -729,7 +739,7 @@ export default function CandidateDetailPage() {
                           <p className="text-xs font-semibold text-green-700 mb-1">✓ Strengths</p>
                           <ul className="space-y-1">
                             {interviewData.analysis.strengths.map((s, i) => (
-                              <li key={i} className="text-xs text-slate-700 flex items-start gap-1">
+                              <li key={i} className="text-xs text-foreground flex items-start gap-1">
                                 <span className="text-green-500 mt-0.5">•</span>{s}
                               </li>
                             ))}
@@ -743,7 +753,7 @@ export default function CandidateDetailPage() {
                           <p className="text-xs font-semibold text-amber-700 mb-1">⚠ Concerns</p>
                           <ul className="space-y-1">
                             {interviewData.analysis.concerns.map((c, i) => (
-                              <li key={i} className="text-xs text-slate-700 flex items-start gap-1">
+                              <li key={i} className="text-xs text-foreground flex items-start gap-1">
                                 <span className="text-amber-500 mt-0.5">•</span>{c}
                               </li>
                             ))}
@@ -768,10 +778,10 @@ export default function CandidateDetailPage() {
                   )}
 
                   {interviewData.combined_score && (
-                    <div className="bg-purple-50 rounded-lg p-3 text-center">
-                      <p className="text-xs text-purple-600 uppercase font-medium">{t("interview.combined_score")}</p>
-                      <p className="text-2xl font-bold text-purple-800">{Number(interviewData.combined_score).toFixed(1)}</p>
-                      <p className="text-xs text-purple-500">60% essay + 40% interview</p>
+                    <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center">
+                      <p className="text-xs text-purple-600 dark:text-purple-400 uppercase font-medium">{t("interview.combined_score")}</p>
+                      <p className="text-2xl font-bold text-purple-800 dark:text-purple-300">{Number(interviewData.combined_score).toFixed(1)}</p>
+                      <p className="text-xs text-purple-500 dark:text-purple-400">60% essay + 40% interview</p>
                     </div>
                   )}
 
@@ -781,9 +791,9 @@ export default function CandidateDetailPage() {
                   </Button>
 
                   {showTranscript && transcript.length > 0 && (
-                    <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3 bg-white">
+                    <div className="max-h-64 overflow-y-auto space-y-2 border border-border rounded-lg p-3 bg-card">
                       {transcript.map((m, i) => (
-                        <div key={i} className={`text-sm ${m.role === "bot" ? "text-blue-700" : "text-slate-800"}`}>
+                        <div key={i} className={`text-sm ${m.role === "bot" ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
                           <span className="font-medium text-xs uppercase">{m.role === "bot" ? "Interviewer" : "Candidate"}</span>
                           {m.message_type === "voice" && <Mic size={10} className="inline ml-1 text-purple-500" />}
                           <p className="mt-0.5">{m.content}</p>
@@ -840,6 +850,37 @@ export default function CandidateDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Similar candidates */}
+      {similarCandidates.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Similar Candidates (±3% score)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {similarCandidates.map((sc) => (
+                <button
+                  key={sc.id}
+                  onClick={() => router.push(`/candidates/${sc.id}`)}
+                  className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors text-left"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{sc.full_name}</p>
+                    {sc.major && (
+                      <p className="text-xs text-muted-foreground">{majors.find((m) => m.tag === sc.major)?.en || sc.major}</p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-purple-600 dark:text-purple-400">{sc.final_score.toFixed(1)}</p>
+                    <Badge className={`text-[10px] ${categoryColors[sc.category] || ""}`}>{sc.category}</Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Delete Analysis Modal */}
       <Dialog open={showDeleteAnalysis} onOpenChange={(open) => { setShowDeleteAnalysis(open); if (!open) setDeleteAnalysisText(""); }}>

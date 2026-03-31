@@ -22,7 +22,7 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 
 	// Handle /start command
 	if msg.IsCommand() && msg.Command() == "start" {
-		b.handleStart(ctx, chatID, msg.CommandArguments())
+		b.handleStart(ctx, chatID, msg.CommandArguments(), msg.From)
 		return
 	}
 
@@ -48,8 +48,15 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	}
 }
 
+// normalizeTelegram strips leading @ and lowercases for comparison.
+func normalizeTelegram(tg string) string {
+	tg = strings.TrimSpace(tg)
+	tg = strings.TrimPrefix(tg, "@")
+	return strings.ToLower(tg)
+}
+
 // handleStart processes the /start command with a deep-link token.
-func (b *Bot) handleStart(ctx context.Context, chatID int64, token string) {
+func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from *tgbotapi.User) {
 	token = strings.TrimSpace(token)
 
 	if token == "" {
@@ -92,21 +99,33 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string) {
 		return
 	}
 
-	// Check candidate exists and fetch info including disability
+	// Check candidate exists and fetch info including disability and telegram handle
 	var candidate struct {
 		FullName   string
 		Summary    string
 		Disability *string
+		Telegram   *string
 	}
 	err = b.pool.QueryRow(ctx, `
-		SELECT c.full_name, COALESCE(a.summary, ''), c.disability
+		SELECT c.full_name, COALESCE(a.summary, ''), c.disability, c.telegram
 		FROM candidates c
 		LEFT JOIN analyses a ON a.candidate_id = c.id
-		WHERE c.id = $1`, invite.CandidateID).Scan(&candidate.FullName, &candidate.Summary, &candidate.Disability)
+		WHERE c.id = $1`, invite.CandidateID).Scan(&candidate.FullName, &candidate.Summary, &candidate.Disability, &candidate.Telegram)
 	if err != nil {
 		log.Printf("[TG-BOT] Candidate %d not found: %v", invite.CandidateID, err)
 		b.sendMessage(chatID, "Error looking up your application. Please contact the admissions team.")
 		return
+	}
+
+	// Verify the Telegram username matches the candidate's application
+	if candidate.Telegram != nil && *candidate.Telegram != "" && from != nil {
+		expectedTG := normalizeTelegram(*candidate.Telegram)
+		actualTG := normalizeTelegram(from.UserName)
+		if actualTG == "" || expectedTG != actualTG {
+			log.Printf("[TG-BOT] Username mismatch for candidate %d: expected @%s, got @%s", invite.CandidateID, expectedTG, actualTG)
+			b.sendMessage(chatID, "Your Telegram username does not match the one in your application. Please use the same Telegram account you registered with, or contact the admissions team.")
+			return
+		}
 	}
 
 	// Link the invite

@@ -197,6 +197,8 @@ func main() {
 		protected.GET("/ai-providers", handlers.GetAIProviders(aiProviders, defaultProvider))
 		protected.GET("/candidates/export/csv", handlers.ExportCandidatesCSV(pool))
 		protected.POST("/candidates/bulk-decision", handlers.BulkDecision(pool))
+		protected.POST("/candidates/auto-accept", handlers.AutoAcceptTopN(pool))
+		protected.GET("/candidates/:id/similar", handlers.GetSimilarCandidates(pool))
 
 		// User management — tech-admin+
 		protected.GET("/users", middleware.TechAdminOrAbove(), handlers.ListUsers(pool))

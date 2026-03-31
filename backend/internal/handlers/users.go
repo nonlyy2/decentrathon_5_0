@@ -161,15 +161,30 @@ func GetProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// UpdateProfile — change own full_name or password
+// UpdateProfile — change own full_name, email (superadmin only), or password
 func UpdateProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetInt("user_id")
+		userRole := c.GetString("user_role")
 
 		var req models.UpdateProfileRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
+		}
+
+		// Email change — superadmin only
+		if req.Email != nil {
+			if userRole != "superadmin" && userRole != "admin" {
+				c.JSON(403, gin.H{"error": "only superadmin can change email"})
+				return
+			}
+			_, err := pool.Exec(c.Request.Context(),
+				`UPDATE users SET email = $1 WHERE id = $2`, *req.Email, userID)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "failed to update email (may already be in use)"})
+				return
+			}
 		}
 
 		if req.Password != nil {

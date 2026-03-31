@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFetch } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n";
 import { DashboardStats } from "@/lib/types";
@@ -39,9 +40,18 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Not Recommended": "#ef4444",
 };
 
+const DIMENSION_OPTIONS = [
+  { key: "leadership", label: "Leadership" },
+  { key: "motivation", label: "Motivation" },
+  { key: "growth", label: "Growth" },
+  { key: "vision", label: "Vision" },
+  { key: "communication", label: "Communication" },
+];
+
 export default function DashboardPage() {
   const { data: stats, loading } = useFetch<DashboardStats>("/stats");
   const { t } = useI18n();
+  const [selectedDim, setSelectedDim] = useState("leadership");
 
   if (loading || !stats) {
     return (
@@ -49,7 +59,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold">{t("dash.title")}</h1>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Card key={i}><CardContent className="p-4"><div className="h-16 bg-slate-200 rounded animate-pulse" /></CardContent></Card>
+            <Card key={i}><CardContent className="p-4"><div className="h-16 bg-muted rounded animate-pulse" /></CardContent></Card>
           ))}
         </div>
       </div>
@@ -81,17 +91,20 @@ export default function DashboardPage() {
     : "0";
 
   const statCards = [
-    { label: t("dash.total"), value: stats.total_candidates, icon: <Users size={18} />, color: "text-blue-600 bg-blue-50" },
-    { label: t("dash.pending"), value: stats.pending, icon: <Clock size={18} />, color: "text-slate-600 bg-slate-50" },
-    { label: t("dash.analyzed"), value: stats.analyzed, icon: <CheckCircle size={18} />, color: "text-blue-600 bg-blue-50" },
-    { label: t("dash.shortlisted"), value: stats.shortlisted, icon: <Star size={18} />, color: "text-green-600 bg-green-50" },
-    { label: t("dash.waitlisted"), value: stats.waitlisted, icon: <TrendingUp size={18} />, color: "text-yellow-600 bg-yellow-50" },
-    { label: t("dash.rejected"), value: stats.rejected, icon: <XCircle size={18} />, color: "text-red-600 bg-red-50" },
+    { label: t("dash.total"), value: stats.total_candidates, icon: <Users size={18} />, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30" },
+    { label: t("dash.pending"), value: stats.pending, icon: <Clock size={18} />, color: "text-slate-600 bg-slate-50 dark:bg-slate-800" },
+    { label: t("dash.analyzed"), value: stats.analyzed, icon: <CheckCircle size={18} />, color: "text-blue-600 bg-blue-50 dark:bg-blue-900/30" },
+    { label: t("dash.shortlisted"), value: stats.shortlisted, icon: <Star size={18} />, color: "text-green-600 bg-green-50 dark:bg-green-900/30" },
+    { label: t("dash.waitlisted"), value: stats.waitlisted, icon: <TrendingUp size={18} />, color: "text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30" },
+    { label: t("dash.rejected"), value: stats.rejected, icon: <XCircle size={18} />, color: "text-red-600 bg-red-50 dark:bg-red-900/30" },
   ];
+
+  const dimDist = stats.dimension_distributions?.[selectedDim] || [];
+  const dimMean = stats.dimension_means?.[selectedDim] || 0;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t("dash.title")}</h1>
+      <h1 className="text-2xl font-bold text-foreground">{t("dash.title")}</h1>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -100,7 +113,7 @@ export default function DashboardPage() {
             <CardContent className="p-4 flex items-center gap-3">
               <div className={`p-2 rounded-lg ${s.color}`}>{s.icon}</div>
               <div>
-                <div className="text-2xl font-bold">{s.value}</div>
+                <div className="text-2xl font-bold text-foreground">{s.value}</div>
                 <div className="text-xs text-muted-foreground">{s.label}</div>
               </div>
             </CardContent>
@@ -109,10 +122,10 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-5 text-center">
-            <div className="text-4xl font-bold text-purple-600">
+            <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
               {stats.avg_score > 0 ? stats.avg_score.toFixed(1) : "\u2014"}
             </div>
             <div className="text-sm text-muted-foreground mt-1">{t("dash.avg_score")}</div>
@@ -120,14 +133,22 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardContent className="p-5 text-center">
-            <div className="text-4xl font-bold text-blue-600">{analysisRate}%</div>
+            <div className="text-4xl font-bold text-blue-600 dark:text-blue-400">{analysisRate}%</div>
             <div className="text-sm text-muted-foreground mt-1">{t("dash.analysis_rate")}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5 text-center">
-            <div className="text-4xl font-bold text-green-600">{conversionRate}%</div>
+            <div className="text-4xl font-bold text-green-600 dark:text-green-400">{conversionRate}%</div>
             <div className="text-sm text-muted-foreground mt-1">{t("dash.shortlist_rate")}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 text-center">
+            <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
+              {stats.score_mean > 0 ? stats.score_mean.toFixed(1) : "\u2014"}
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">Median: {stats.score_median > 0 ? stats.score_median.toFixed(1) : "\u2014"}</div>
           </CardContent>
         </Card>
       </div>
@@ -203,14 +224,14 @@ export default function DashboardPage() {
                   const pct = stats.analyzed > 0 ? (cat.count / stats.analyzed) * 100 : 0;
                   return (
                     <div key={cat.name} className="flex items-center gap-3">
-                      <div className="w-36 text-sm truncate">{cat.name}</div>
-                      <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                      <div className="w-36 text-sm truncate text-foreground">{cat.name}</div>
+                      <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
                         <div
                           className="h-5 rounded-full transition-all"
                           style={{ width: `${pct}%`, backgroundColor: cat.color }}
                         />
                       </div>
-                      <div className="w-10 text-sm text-right font-medium">{cat.count}</div>
+                      <div className="w-10 text-sm text-right font-medium text-foreground">{cat.count}</div>
                       <div className="w-12 text-xs text-muted-foreground">{pct.toFixed(0)}%</div>
                     </div>
                   );
@@ -237,19 +258,102 @@ export default function DashboardPage() {
                 const pct = stats.total_candidates > 0 ? (step.count / stats.total_candidates) * 100 : 0;
                 return (
                   <div key={step.label} className="flex items-center gap-3">
-                    <div className="w-28 text-sm">{step.label}</div>
-                    <div className="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden">
+                    <div className="w-28 text-sm text-foreground">{step.label}</div>
+                    <div className="flex-1 bg-muted rounded-full h-5 overflow-hidden">
                       <div
                         className={`h-5 rounded-full transition-all ${step.color}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <div className="w-8 text-sm text-right font-medium">{step.count}</div>
+                    <div className="w-8 text-sm text-right font-medium text-foreground">{step.count}</div>
                     <div className="w-12 text-xs text-muted-foreground">{pct.toFixed(0)}%</div>
                   </div>
                 );
               })}
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Dimension Distribution (from analytics) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Overall Score Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {stats.score_distribution.some((b) => b.count > 0) ? (
+              <>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={stats.score_distribution} barSize={48}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="range" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex items-center justify-center gap-6 mt-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <span className="text-muted-foreground">Mean: <span className="font-bold text-blue-600 dark:text-blue-400">{stats.score_mean.toFixed(1)}</span></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <span className="text-muted-foreground">Median: <span className="font-bold text-green-600 dark:text-green-400">{stats.score_median.toFixed(1)}</span></span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Dimension Distribution</CardTitle>
+              <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+                {DIMENSION_OPTIONS.map((dim) => (
+                  <button
+                    key={dim.key}
+                    onClick={() => setSelectedDim(dim.key)}
+                    className={`text-xs px-2 py-1 rounded-md transition-all duration-200 ${
+                      selectedDim === dim.key
+                        ? "text-foreground font-semibold shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    style={selectedDim === dim.key ? { backgroundColor: "#c1f11d", color: "#111" } : undefined}
+                  >
+                    {dim.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {dimDist.length > 0 && dimDist.some((b) => b.count > 0) ? (
+              <>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={dimDist} barSize={32}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="range" fontSize={11} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex items-center justify-center gap-6 mt-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <span className="text-muted-foreground">Mean: <span className="font-bold text-blue-600 dark:text-blue-400">{dimMean.toFixed(1)}</span></span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+            )}
           </CardContent>
         </Card>
       </div>

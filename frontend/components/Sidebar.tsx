@@ -7,8 +7,8 @@ import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import {
-  LayoutDashboard, Users, LogOut, BarChart2, ChevronLeft,
-  ChevronRight, HelpCircle, UserCog, User, Moon, Sun, Menu,
+  LayoutDashboard, Users, LogOut, ChevronLeft,
+  ChevronRight, UserCog, Moon, Sun, Menu,
 } from "lucide-react";
 
 // Role level helpers
@@ -60,28 +60,10 @@ export default function Sidebar() {
       disabled: auditorOnly, // auditors can see candidates read-only
     },
     {
-      href: "/analytics",
-      label: t("nav.analytics"),
-      icon: BarChart2,
-      show: true,
-    },
-    {
       href: "/users",
       label: t("nav.users"),
       icon: UserCog,
       show: hasLevel(role, "tech-admin"),
-    },
-    {
-      href: "/faq",
-      label: t("nav.faq"),
-      icon: HelpCircle,
-      show: true,
-    },
-    {
-      href: "/profile",
-      label: t("nav.profile"),
-      icon: User,
-      show: true,
     },
   ].filter((item) => item.show);
 
@@ -150,13 +132,25 @@ export default function Sidebar() {
 
       {/* Bottom section */}
       <div className="p-3 border-t border-sidebar-border space-y-2">
-        {/* Role badge */}
-        {!collapsed && (
-          <div className="animate-fade-in px-2 py-1">
-            <p className="text-[11px] text-sidebar-muted truncate">{user?.email}</p>
-            <RoleBadge role={role} />
+        {/* Avatar + Role badge → click to profile */}
+        <Link
+          href="/profile"
+          className={`flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-sidebar-hover transition-colors ${collapsed ? "justify-center" : ""}`}
+          title={collapsed ? t("nav.profile") : undefined}
+        >
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+            style={{ backgroundColor: "#c1f11d", color: "#111" }}
+          >
+            {(user?.full_name || user?.email || "U").charAt(0).toUpperCase()}
           </div>
-        )}
+          {!collapsed && (
+            <div className="animate-fade-in overflow-hidden min-w-0">
+              <p className="text-[11px] text-sidebar-muted truncate">{user?.email}</p>
+              <RoleBadge role={role} />
+            </div>
+          )}
+        </Link>
 
         {/* Language toggle */}
         <div

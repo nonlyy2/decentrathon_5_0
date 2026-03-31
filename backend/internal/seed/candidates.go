@@ -26,6 +26,7 @@ type seedCandidate struct {
 	Extracurriculars    *string
 	Essay               string
 	MotivationStatement *string
+	Major               *string
 }
 
 func SeedCandidates(pool *pgxpool.Pool, force bool) error {
@@ -482,11 +483,18 @@ I dont have achievements to list but I think potential matters more than past ac
 	inserted := 0
 	failed := 0
 	for _, c := range candidates {
+		// Assign a random major if none specified
+		major := c.Major
+		if major == nil {
+			tags := []string{"Engineering", "Tech", "Society", "Policy Reform", "Art + Media"}
+			m := tags[rand.Intn(len(tags))]
+			major = &m
+		}
 		_, err := pool.Exec(ctx,
-			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'pending')`,
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, major, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'pending')`,
 			c.FullName, c.Email, c.Phone, c.Telegram, c.Age, c.City, c.School, c.GraduationYear,
-			c.Achievements, c.Extracurriculars, c.Essay, c.MotivationStatement,
+			c.Achievements, c.Extracurriculars, c.Essay, c.MotivationStatement, major,
 		)
 		if err != nil {
 			log.Printf("SEED ERROR [%s / %s]: %v", c.FullName, c.Email, err)

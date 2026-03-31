@@ -34,10 +34,11 @@ type LoginResponse struct {
 
 type UpdateProfileRequest struct {
 	FullName *string `json:"full_name"`
+	Email    *string `json:"email" binding:"omitempty,email"`
 	Password *string `json:"password" binding:"omitempty,min=6"`
 }
 
 type UpdateUserRequest struct {
-	Role     *string `json:"role" binding:"omitempty,oneof=superadmin tech-admin auditor manager"`
+	Role     *string `json:"role" binding:"omitempty,oneof=superadmin tech-admin auditor manager admin committee"`
 	FullName *string `json:"full_name"`
 }

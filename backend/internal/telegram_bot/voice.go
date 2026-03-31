@@ -33,11 +33,10 @@ type alemSTTResponse struct {
 }
 
 // convertOGGToWAV converts OGG/Opus audio (from Telegram voice messages) to WAV using ffmpeg.
-// Returns the original data unchanged if ffmpeg is not installed.
+// Returns an error if ffmpeg is not installed since Alem STT requires WAV format.
 func convertOGGToWAV(oggData []byte) ([]byte, string, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		// ffmpeg not available — return original OGG data
-		return oggData, "voice.ogg", nil
+		return nil, "", fmt.Errorf("ffmpeg is required for voice message transcription but is not installed")
 	}
 	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
 		"-i", "pipe:0",

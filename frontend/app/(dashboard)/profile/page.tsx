@@ -42,6 +42,7 @@ export default function ProfilePage() {
   const { t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [saving, setSaving] = useState(false);
@@ -50,6 +51,7 @@ export default function ProfilePage() {
     api.get<Profile>("/profile").then((r) => {
       setProfile(r.data);
       setFullName(r.data.full_name ?? "");
+      setEmail(r.data.email);
     }).catch(() => {});
   }, []);
 
@@ -65,8 +67,10 @@ export default function ProfilePage() {
 
     setSaving(true);
     try {
+      const isSuperAdmin = profile?.role === "superadmin" || profile?.role === "admin";
       await api.patch("/profile", {
         full_name: fullName || null,
+        email: isSuperAdmin && email !== profile?.email ? email : undefined,
         password: password || undefined,
       });
       toast.success(t("profile.saved"));
@@ -142,10 +146,19 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* Email (readonly) */}
+          {/* Email — editable for superadmin */}
           <div>
             <Label className="text-sm">{t("profile.email")}</Label>
-            <Input value={profile.email} readOnly className="mt-1 opacity-60 cursor-not-allowed" aria-readonly />
+            {role === "superadmin" || role === "admin" ? (
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1"
+                type="email"
+              />
+            ) : (
+              <Input value={profile.email} readOnly className="mt-1 opacity-60 cursor-not-allowed" aria-readonly />
+            )}
           </div>
         </CardContent>
       </Card>
