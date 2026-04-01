@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,27 +62,63 @@ func (b *Bot) Username() string {
 }
 
 // Start begins the long-polling loop. Blocks until ctx is cancelled.
+// Uses manual polling instead of GetUpdatesChan to gracefully handle 409 conflicts.
 func (b *Bot) Start(ctx context.Context) {
 	log.Printf("[TG-BOT] Starting @%s (long polling)", b.api.Self.UserName)
 
 	// Restore active sessions from DB on startup
 	b.restoreSessions(ctx)
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := b.api.GetUpdatesChan(u)
+	// Clear any stale getUpdates to release previous polling session
+	clearURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=-1&timeout=0", b.api.Token)
+	resp, err := http.Get(clearURL)
+	if err != nil {
+		log.Printf("[TG-BOT] Warning: failed to clear pending updates: %v", err)
+	} else {
+		resp.Body.Close()
+	}
+	time.Sleep(2 * time.Second)
 
 	// Interview timeout checker
 	go b.timeoutChecker(ctx)
+
+	offset := 0
+	conflictErrors := 0
+	const maxConflictErrors = 5
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("[TG-BOT] Shutting down")
-			b.api.StopReceivingUpdates()
 			return
-		case update := <-updates:
+		default:
+		}
+
+		u := tgbotapi.NewUpdate(offset)
+		u.Timeout = 30
+
+		updates, err := b.api.GetUpdates(u)
+		if err != nil {
+			if strings.Contains(err.Error(), "Conflict") || strings.Contains(err.Error(), "409") {
+				conflictErrors++
+				if conflictErrors >= maxConflictErrors {
+					log.Printf("[TG-BOT] Too many 409 conflicts (%d), another bot instance is running. Disabling polling — HTTP server continues.", conflictErrors)
+					return
+				}
+				log.Printf("[TG-BOT] Conflict (%d/%d): another bot instance detected, retrying...", conflictErrors, maxConflictErrors)
+				time.Sleep(3 * time.Second)
+				continue
+			}
+			log.Printf("[TG-BOT] Failed to get updates: %v", err)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+
+		conflictErrors = 0
+		for _, update := range updates {
+			if update.UpdateID >= offset {
+				offset = update.UpdateID + 1
+			}
 			go b.handleUpdate(ctx, update)
 		}
 	}

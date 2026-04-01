@@ -19,6 +19,7 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    command: ["./server", "--force-seed"]
     ports:
       - "8080:8080"
     depends_on:
