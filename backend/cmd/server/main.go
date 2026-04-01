@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,30 +22,10 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// #region agent log
-	{
-		type dbg struct {
-			SessionID    string                 `json:"sessionId"`
-			HypothesisID string                 `json:"hypothesisId"`
-			Location     string                 `json:"location"`
-			Message      string                 `json:"message"`
-			Data         map[string]interface{} `json:"data"`
-			Timestamp    int64                  `json:"timestamp"`
-		}
-		if f, err := os.OpenFile("/Users/assylkhan/Desktop/decentrathon/.cursor/debug-d0fa02.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			b, _ := json.Marshal(dbg{SessionID: "d0fa02", HypothesisID: "H1", Location: "main.go:configLoad", Message: "resolved Ollama config after Load",
-				Data: map[string]interface{}{
-					"OLLAMA_MODEL_env_raw": os.Getenv("OLLAMA_MODEL"),
-					"cfg.OllamaModel":      cfg.OllamaModel,
-					"cfg.AIProvider":       cfg.AIProvider,
-				}, Timestamp: time.Now().UnixMilli()})
-			f.Write(append(b, '\n'))
-			f.Close()
-		}
-	}
-	// #endregion
-
 	// Database
+	if cfg.DatabaseURL == "" {
+		log.Fatal("DATABASE_URL environment variable is not set. Set it to the Railway Postgres connection string.")
+	}
 	pool, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)

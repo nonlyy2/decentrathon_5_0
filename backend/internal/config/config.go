@@ -44,7 +44,8 @@ func Load() *Config {
 		Port: getEnv("PORT", "8080"),
 		// Railway injects DATABASE_URL automatically when a Postgres service is linked.
 		// Falls back to POSTGRES_URL / DATABASE_PUBLIC_URL for other Railway configurations.
-		DatabaseURL:  getEnvMulti("DATABASE_URL", "POSTGRES_URL", "DATABASE_PUBLIC_URL", "postgres://postgres:postgres@localhost:5432/invisionu?sslmode=disable"),
+		// No localhost fallback — the app will fail fast with a clear error if unset.
+		DatabaseURL:  getEnvMulti("DATABASE_URL", "POSTGRES_URL", "DATABASE_PUBLIC_URL", ""),
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
 		AllowOrigins: getEnv("ALLOW_ORIGINS", "*"),
