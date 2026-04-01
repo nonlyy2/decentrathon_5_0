@@ -26,17 +26,22 @@ func NewEvaluator(pool *pgxpool.Pool, genFn func(ctx context.Context, systemProm
 }
 
 type evalResponse struct {
-	ScoreLeadership  int      `json:"score_leadership"`
-	ScoreGrit        int      `json:"score_grit"`
-	ScoreAuthenticity int     `json:"score_authenticity"`
-	ScoreMotivation  int      `json:"score_motivation"`
-	ScoreVision      int      `json:"score_vision"`
-	ConsistencyScore int      `json:"consistency_score"`
-	StyleMatchScore  int      `json:"style_match_score"`
-	SuspicionFlags   []string `json:"suspicion_flags"`
-	Summary          string   `json:"summary"`
-	Strengths        []string `json:"strengths"`
-	Concerns         []string `json:"concerns"`
+	ScoreLeadership        int      `json:"score_leadership"`
+	ScoreGrit              int      `json:"score_grit"`
+	ScoreAuthenticity      int      `json:"score_authenticity"`
+	ScoreMotivation        int      `json:"score_motivation"`
+	ScoreVision            int      `json:"score_vision"`
+	ExplanationLeadership  string   `json:"explanation_leadership"`
+	ExplanationGrit        string   `json:"explanation_grit"`
+	ExplanationAuthenticity string  `json:"explanation_authenticity"`
+	ExplanationMotivation  string   `json:"explanation_motivation"`
+	ExplanationVision      string   `json:"explanation_vision"`
+	ConsistencyScore       int      `json:"consistency_score"`
+	StyleMatchScore        int      `json:"style_match_score"`
+	SuspicionFlags         []string `json:"suspicion_flags"`
+	Summary                string   `json:"summary"`
+	Strengths              []string `json:"strengths"`
+	Concerns               []string `json:"concerns"`
 }
 
 const evalSystemPrompt = `You are an expert evaluator for inVision U scholarship interviews.
@@ -45,12 +50,13 @@ You will receive:
 2. The full interview transcript from Stage 2 (Telegram conversation)
 3. Behavioral signals (response times, message types, flags)
 
-Evaluate the candidate on these dimensions (0-100 each):
-- score_leadership: Evidence of initiative, leading others, taking responsibility. Look for concrete examples.
-- score_grit: Persistence, resilience, handling failure, determination. Did they overcome obstacles?
-- score_authenticity: How genuine are their responses? Do they match the essay? Natural conversation vs scripted?
-- score_motivation: Depth of passion, personal connection, intrinsic vs extrinsic motivation.
-- score_vision: Clarity of future goals, understanding of impact, realistic ambition.
+Evaluate the candidate on these dimensions (0-100 each).
+For EACH dimension, provide a score AND a short explanation (2-3 sentences) justifying the score with specific evidence from the interview:
+- score_leadership + explanation_leadership: Evidence of initiative, leading others, taking responsibility. Look for concrete examples.
+- score_grit + explanation_grit: Persistence, resilience, handling failure, determination. Did they overcome obstacles?
+- score_authenticity + explanation_authenticity: How genuine are their responses? Do they match the essay? Natural conversation vs scripted?
+- score_motivation + explanation_motivation: Depth of passion, personal connection, intrinsic vs extrinsic motivation.
+- score_vision + explanation_vision: Clarity of future goals, understanding of impact, realistic ambition.
 
 Also evaluate:
 - consistency_score (0-100): How well do interview answers match claims made in the essay? High = consistent, Low = contradictions found.
@@ -159,18 +165,24 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 			(interview_id, candidate_id, score_leadership, score_grit, score_authenticity,
 			 score_motivation, score_vision, final_score, category,
 			 consistency_score, style_match_score, suspicion_flags,
-			 summary, strengths, concerns, model_used)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			 summary, strengths, concerns, model_used,
+			 explanation_leadership, explanation_grit, explanation_authenticity,
+			 explanation_motivation, explanation_vision)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 		ON CONFLICT (candidate_id) DO UPDATE SET
 			interview_id=$1, score_leadership=$3, score_grit=$4, score_authenticity=$5,
 			score_motivation=$6, score_vision=$7, final_score=$8, category=$9,
 			consistency_score=$10, style_match_score=$11, suspicion_flags=$12,
-			summary=$13, strengths=$14, concerns=$15, model_used=$16, analyzed_at=NOW()`,
+			summary=$13, strengths=$14, concerns=$15, model_used=$16, analyzed_at=NOW(),
+			explanation_leadership=$17, explanation_grit=$18, explanation_authenticity=$19,
+			explanation_motivation=$20, explanation_vision=$21`,
 		interviewID, candidateID,
 		eval.ScoreLeadership, eval.ScoreGrit, eval.ScoreAuthenticity,
 		eval.ScoreMotivation, eval.ScoreVision, finalScore, category,
 		eval.ConsistencyScore, eval.StyleMatchScore, string(flagsJSON),
 		eval.Summary, eval.Strengths, eval.Concerns, e.modelName,
+		eval.ExplanationLeadership, eval.ExplanationGrit, eval.ExplanationAuthenticity,
+		eval.ExplanationMotivation, eval.ExplanationVision,
 	)
 	if err != nil {
 		return fmt.Errorf("save interview analysis: %w", err)
@@ -213,6 +225,41 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 	}
 
 	return nil
+}
+
+// EvaluateFromDB loads interview data from the database and runs evaluation.
+// Used for force-evaluate and re-evaluate API endpoints.
+func (e *Evaluator) EvaluateFromDB(ctx context.Context, interviewID, candidateID int) error {
+	var lang, essaySummary, candidateName string
+	var contextJSON []byte
+	var questionsAsked int
+
+	err := e.pool.QueryRow(ctx, `
+		SELECT i.language, i.essay_summary, i.conversation_context, i.questions_asked, c.full_name
+		FROM interviews i
+		JOIN candidates c ON c.id = i.candidate_id
+		WHERE i.id = $1`, interviewID).Scan(&lang, &essaySummary, &contextJSON, &questionsAsked, &candidateName)
+	if err != nil {
+		return fmt.Errorf("failed to load interview %d: %w", interviewID, err)
+	}
+
+	var conversation []models.ConversationMessage
+	if err := json.Unmarshal(contextJSON, &conversation); err != nil {
+		return fmt.Errorf("failed to unmarshal conversation: %w", err)
+	}
+
+	session := &activeSession{
+		InterviewID:    interviewID,
+		CandidateID:    candidateID,
+		CandidateName:  candidateName,
+		Language:       lang,
+		State:          StateEvaluating,
+		QuestionsAsked: questionsAsked,
+		EssaySummary:   essaySummary,
+		Conversation:   conversation,
+	}
+
+	return e.EvaluateInterview(ctx, session)
 }
 
 func clamp(v int) int {

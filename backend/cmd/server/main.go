@@ -264,6 +264,30 @@ func main() {
 	protected.GET("/candidates/:id/interview", handlers.GetInterviewStatus(pool))
 	protected.GET("/candidates/:id/interview/messages", handlers.GetInterviewTranscript(pool))
 
+	// Force evaluate / re-evaluate interview
+	var evaluateFn func(interviewID, candidateID int) error
+	if cfg.TelegramBotToken != "" {
+		var evalTextGen telegram_bot.TextGenerator
+		evalModelName := "unknown"
+		if gen, ok := textGens["gemini"]; ok {
+			evalTextGen = gen
+			evalModelName = gemini.ModelName
+		} else if gen, ok := textGens["ollama"]; ok {
+			evalTextGen = gen
+			evalModelName = "ollama/" + cfg.OllamaModel
+		}
+		if evalTextGen != nil {
+			evaluator := telegram_bot.NewEvaluator(pool, evalTextGen, evalModelName)
+			evaluateFn = func(interviewID, candidateID int) error {
+				return evaluator.EvaluateFromDB(context.Background(), interviewID, candidateID)
+			}
+		}
+	}
+	if evaluateFn != nil {
+		protected.POST("/candidates/:id/interview/evaluate", handlers.ForceEvaluateInterview(pool, evaluateFn))
+		protected.POST("/candidates/:id/interview/re-evaluate", handlers.ReEvaluateInterview(pool, evaluateFn))
+	}
+
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

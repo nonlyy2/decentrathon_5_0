@@ -99,13 +99,15 @@ func GetInterviewStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 			QuestionsAsked int     `json:"questions_asked"`
 			StartedAt      string  `json:"started_at"`
 			CompletedAt    *string `json:"completed_at"`
+			CurrentTopic   string  `json:"current_topic"`
 		}
 		err = pool.QueryRow(c.Request.Context(), `
 			SELECT id, status, language, questions_asked,
-				   started_at::text, completed_at::text
+				   started_at::text, completed_at::text, COALESCE(current_topic, '')
 			FROM interviews WHERE candidate_id = $1`, candidateID).Scan(
 			&interview.ID, &interview.Status, &interview.Language,
-			&interview.QuestionsAsked, &interview.StartedAt, &interview.CompletedAt)
+			&interview.QuestionsAsked, &interview.StartedAt, &interview.CompletedAt,
+			&interview.CurrentTopic)
 		if err != nil {
 			// No interview yet — check for invite
 			var inviteStatus *string
@@ -126,24 +128,29 @@ func GetInterviewStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 			"interview": interview,
 		}
 
-		// Get analysis if completed
-		if interview.Status == "completed" || interview.Status == "timeout" {
+		// Get analysis if completed (or if interview finished but status not yet updated)
+		{
 			var analysis struct {
-				ScoreLeadership  int      `json:"score_leadership"`
-				ScoreGrit        int      `json:"score_grit"`
-				ScoreAuthenticity int     `json:"score_authenticity"`
-				ScoreMotivation  int      `json:"score_motivation"`
-				ScoreVision      int      `json:"score_vision"`
-				FinalScore       float64  `json:"final_score"`
-				Category         string   `json:"category"`
-				ConsistencyScore int      `json:"consistency_score"`
-				StyleMatchScore  int      `json:"style_match_score"`
-				SuspicionFlags   string   `json:"suspicion_flags_raw"`
-				Summary          string   `json:"summary"`
-				Strengths        []string `json:"strengths"`
-				Concerns         []string `json:"concerns"`
-				AnalyzedAt       string   `json:"analyzed_at"`
-				ModelUsed        string   `json:"model_used"`
+				ScoreLeadership        int      `json:"score_leadership"`
+				ScoreGrit              int      `json:"score_grit"`
+				ScoreAuthenticity      int      `json:"score_authenticity"`
+				ScoreMotivation        int      `json:"score_motivation"`
+				ScoreVision            int      `json:"score_vision"`
+				FinalScore             float64  `json:"final_score"`
+				Category               string   `json:"category"`
+				ConsistencyScore       int      `json:"consistency_score"`
+				StyleMatchScore        int      `json:"style_match_score"`
+				SuspicionFlags         string   `json:"suspicion_flags_raw"`
+				Summary                string   `json:"summary"`
+				Strengths              []string `json:"strengths"`
+				Concerns               []string `json:"concerns"`
+				AnalyzedAt             string   `json:"analyzed_at"`
+				ModelUsed              string   `json:"model_used"`
+				ExplanationLeadership  string   `json:"explanation_leadership"`
+				ExplanationGrit        string   `json:"explanation_grit"`
+				ExplanationAuthenticity string  `json:"explanation_authenticity"`
+				ExplanationMotivation  string   `json:"explanation_motivation"`
+				ExplanationVision      string   `json:"explanation_vision"`
 			}
 			err = pool.QueryRow(c.Request.Context(), `
 				SELECT score_leadership, score_grit, score_authenticity,
@@ -153,35 +160,48 @@ func GetInterviewStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 					   COALESCE(summary, ''),
 					   COALESCE(strengths, ARRAY[]::text[]),
 					   COALESCE(concerns, ARRAY[]::text[]),
-					   analyzed_at::text, COALESCE(model_used, '')
+					   analyzed_at::text, COALESCE(model_used, ''),
+					   COALESCE(explanation_leadership, ''),
+					   COALESCE(explanation_grit, ''),
+					   COALESCE(explanation_authenticity, ''),
+					   COALESCE(explanation_motivation, ''),
+					   COALESCE(explanation_vision, '')
 				FROM interview_analyses WHERE candidate_id = $1`, candidateID).Scan(
 				&analysis.ScoreLeadership, &analysis.ScoreGrit, &analysis.ScoreAuthenticity,
 				&analysis.ScoreMotivation, &analysis.ScoreVision, &analysis.FinalScore,
 				&analysis.Category, &analysis.ConsistencyScore, &analysis.StyleMatchScore,
 				&analysis.SuspicionFlags, &analysis.Summary,
 				&analysis.Strengths, &analysis.Concerns,
-				&analysis.AnalyzedAt, &analysis.ModelUsed)
+				&analysis.AnalyzedAt, &analysis.ModelUsed,
+				&analysis.ExplanationLeadership, &analysis.ExplanationGrit,
+				&analysis.ExplanationAuthenticity, &analysis.ExplanationMotivation,
+				&analysis.ExplanationVision)
 			if err == nil {
 				// Parse suspicion flags from JSONB
 				var flags []string
 				json.Unmarshal([]byte(analysis.SuspicionFlags), &flags)
 
 				result["analysis"] = gin.H{
-					"score_leadership":  analysis.ScoreLeadership,
-					"score_grit":        analysis.ScoreGrit,
-					"score_authenticity": analysis.ScoreAuthenticity,
-					"score_motivation":  analysis.ScoreMotivation,
-					"score_vision":      analysis.ScoreVision,
-					"final_score":       analysis.FinalScore,
-					"category":          analysis.Category,
-					"consistency_score": analysis.ConsistencyScore,
-					"style_match_score": analysis.StyleMatchScore,
-					"suspicion_flags":   flags,
-					"summary":           analysis.Summary,
-					"strengths":         analysis.Strengths,
-					"concerns":          analysis.Concerns,
-					"analyzed_at":       analysis.AnalyzedAt,
-					"model_used":        analysis.ModelUsed,
+					"score_leadership":        analysis.ScoreLeadership,
+					"score_grit":              analysis.ScoreGrit,
+					"score_authenticity":       analysis.ScoreAuthenticity,
+					"score_motivation":        analysis.ScoreMotivation,
+					"score_vision":            analysis.ScoreVision,
+					"final_score":             analysis.FinalScore,
+					"category":                analysis.Category,
+					"consistency_score":       analysis.ConsistencyScore,
+					"style_match_score":       analysis.StyleMatchScore,
+					"suspicion_flags":         flags,
+					"summary":                 analysis.Summary,
+					"strengths":               analysis.Strengths,
+					"concerns":                analysis.Concerns,
+					"analyzed_at":             analysis.AnalyzedAt,
+					"model_used":              analysis.ModelUsed,
+					"explanation_leadership":   analysis.ExplanationLeadership,
+					"explanation_grit":         analysis.ExplanationGrit,
+					"explanation_authenticity": analysis.ExplanationAuthenticity,
+					"explanation_motivation":   analysis.ExplanationMotivation,
+					"explanation_vision":       analysis.ExplanationVision,
 				}
 			}
 
@@ -193,6 +213,81 @@ func GetInterviewStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, result)
+	}
+}
+
+// ForceEvaluateInterview triggers evaluation for an interview that finished but wasn't evaluated.
+// POST /candidates/:id/interview/evaluate
+func ForceEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, candidateID int) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid candidate id"})
+			return
+		}
+
+		// Check interview exists
+		var interviewID int
+		var status string
+		err = pool.QueryRow(c.Request.Context(),
+			`SELECT id, status FROM interviews WHERE candidate_id = $1`, candidateID).Scan(&interviewID, &status)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no interview found for this candidate"})
+			return
+		}
+
+		// Check if already has analysis
+		var hasAnalysis bool
+		pool.QueryRow(c.Request.Context(),
+			`SELECT EXISTS(SELECT 1 FROM interview_analyses WHERE candidate_id = $1)`, candidateID).Scan(&hasAnalysis)
+
+		if hasAnalysis {
+			c.JSON(http.StatusConflict, gin.H{"error": "interview already has analysis, use re-evaluate if needed"})
+			return
+		}
+
+		// Launch evaluation async
+		go func() {
+			log.Printf("Force evaluation starting for interview %d (candidate %d)", interviewID, candidateID)
+			if err := evaluateFn(interviewID, candidateID); err != nil {
+				log.Printf("Force evaluation failed for interview %d: %v", interviewID, err)
+			} else {
+				log.Printf("Force evaluation completed for interview %d", interviewID)
+			}
+		}()
+
+		c.JSON(http.StatusOK, gin.H{"message": "Evaluation started"})
+	}
+}
+
+// ReEvaluateInterview re-runs evaluation for an interview (overwrites existing analysis).
+// POST /candidates/:id/interview/re-evaluate
+func ReEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, candidateID int) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid candidate id"})
+			return
+		}
+
+		var interviewID int
+		err = pool.QueryRow(c.Request.Context(),
+			`SELECT id FROM interviews WHERE candidate_id = $1`, candidateID).Scan(&interviewID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no interview found for this candidate"})
+			return
+		}
+
+		go func() {
+			log.Printf("Re-evaluation starting for interview %d (candidate %d)", interviewID, candidateID)
+			if err := evaluateFn(interviewID, candidateID); err != nil {
+				log.Printf("Re-evaluation failed for interview %d: %v", interviewID, err)
+			} else {
+				log.Printf("Re-evaluation completed for interview %d", interviewID)
+			}
+		}()
+
+		c.JSON(http.StatusOK, gin.H{"message": "Re-evaluation started"})
 	}
 }
 

@@ -81,6 +81,11 @@ export interface InterviewAnalysis {
   score_authenticity: number;
   score_motivation: number;
   score_vision: number;
+  explanation_leadership: string;
+  explanation_grit: string;
+  explanation_authenticity: string;
+  explanation_motivation: string;
+  explanation_vision: string;
   final_score: number;
   category: string;
   consistency_score: number;
@@ -104,6 +109,7 @@ export interface InterviewStatus {
     questions_asked: number;
     started_at: string;
     completed_at: string | null;
+    current_topic: string;
   };
   analysis?: InterviewAnalysis;
   combined_score?: number;

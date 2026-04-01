@@ -77,7 +77,7 @@ func (c *Client) GenerateLarge(ctx context.Context, systemPrompt, userMessage st
 }
 
 func (c *Client) GenerateText(ctx context.Context, systemPrompt, userMessage string) (string, error) {
-	return c.generate(ctx, systemPrompt, userMessage, 2048)
+	return c.generate(ctx, systemPrompt, userMessage, 8192)
 }
 
 func (c *Client) generate(ctx context.Context, systemPrompt, userMessage string, maxTokens int) (string, error) {
