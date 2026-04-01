@@ -13,8 +13,6 @@ FROM node:20-alpine
 WORKDIR /app
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-# Copy public folder if it exists (static assets, favicon, etc.)
-COPY --from=builder /app/public ./public
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"

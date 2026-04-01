@@ -5,6 +5,6 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "./server --seed"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

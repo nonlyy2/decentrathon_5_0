@@ -40,27 +40,22 @@ services:
       INTERVIEW_TIMEOUT_MIN: ${INTERVIEW_TIMEOUT_MIN:-30}
       INTERVIEW_MIN_QUESTIONS: ${INTERVIEW_MIN_QUESTIONS:-8}
       INTERVIEW_MAX_QUESTIONS: ${INTERVIEW_MAX_QUESTIONS:-15}
-
-  pgadmin:
-    image: dpage/pgadmin4
-    restart: unless-stopped
-    ports:
-      - "5050:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    depends_on:
-      - db
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # NEXT_PUBLIC_* must be passed at BUILD time, not runtime
+        NEXT_PUBLIC_API_URL: http://localhost:8080/api
     restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:
       - backend
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080/api
 
 volumes:
   pgdata:
+  uploads:
