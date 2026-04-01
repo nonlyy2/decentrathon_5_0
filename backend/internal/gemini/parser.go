@@ -74,9 +74,22 @@ func ParseBatchAnalysisResponse(jsonStr string, expected int) ([]*GeminiAnalysis
 }
 
 func ParseAnalysisResponse(jsonStr string) (*GeminiAnalysisResponse, error) {
+	// Strip markdown code fences and find JSON object
+	jsonStr = strings.TrimSpace(jsonStr)
+	jsonStr = strings.TrimPrefix(jsonStr, "```json")
+	jsonStr = strings.TrimPrefix(jsonStr, "```")
+	jsonStr = strings.TrimSuffix(jsonStr, "```")
+	jsonStr = strings.TrimSpace(jsonStr)
+	if idx := strings.Index(jsonStr, "{"); idx > 0 {
+		jsonStr = jsonStr[idx:]
+	}
+	if idx := strings.LastIndex(jsonStr, "}"); idx >= 0 && idx < len(jsonStr)-1 {
+		jsonStr = jsonStr[:idx+1]
+	}
+
 	var resp GeminiAnalysisResponse
 	if err := json.Unmarshal([]byte(jsonStr), &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse Gemini response: %w", err)
+		return nil, fmt.Errorf("failed to parse Gemini response: %w (raw: %.300s)", err, jsonStr)
 	}
 
 	// Clamp scores

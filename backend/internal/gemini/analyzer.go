@@ -11,7 +11,7 @@ func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candida
 	userMsg := BuildUserMessage(candidate)
 	fullSystemPrompt := SystemPrompt + "\n\nExpected JSON response schema:\n" + ResponseSchema
 
-	responseText, err := c.Generate(ctx, fullSystemPrompt, userMsg)
+	responseText, err := c.GenerateLarge(ctx, fullSystemPrompt, userMsg)
 	if err != nil {
 		return nil, fmt.Errorf("gemini API error: %w", err)
 	}

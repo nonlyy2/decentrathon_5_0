@@ -19,7 +19,7 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    command: ["./server", "--force-seed"]
+    command: ["./server", "--seed"]
     ports:
       - "8080:8080"
     depends_on:
@@ -35,7 +35,7 @@ services:
       OLLAMA_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-mistral:7b}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      WHISPER_API_KEY: ${WHISPER_API_KEY:-}
+      ALEM_STT_API_KEY: ${ALEM_STT_API_KEY:-}
       WHISPER_PROVIDER: ${WHISPER_PROVIDER:-openai}
       INTERVIEW_TIMEOUT_MIN: ${INTERVIEW_TIMEOUT_MIN:-30}
       INTERVIEW_MIN_QUESTIONS: ${INTERVIEW_MIN_QUESTIONS:-8}
