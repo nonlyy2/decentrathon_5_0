@@ -217,6 +217,13 @@ func RunMigrations(pool *pgxpool.Pool) error {
 
 		// Analysis duration tracking
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0`,
+
+		// Interview analysis explanations
+		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_leadership TEXT`,
+		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_grit TEXT`,
+		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_authenticity TEXT`,
+		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_motivation TEXT`,
+		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_vision TEXT`,
 	}
 
 	for _, q := range queries {

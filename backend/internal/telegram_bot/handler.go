@@ -387,16 +387,36 @@ func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *active
 	// Update DB status
 	b.pool.Exec(ctx, `UPDATE interviews SET current_topic = 'evaluating' WHERE id = $1`, interviewID)
 
-	// Trigger async evaluation
+	// Trigger async evaluation with retry
 	go func() {
-		log.Printf("[TG-BOT] Starting evaluation for interview %d", interviewID)
-		if err := b.evaluator.EvaluateInterview(context.Background(), session); err != nil {
-			log.Printf("[TG-BOT] Evaluation failed for interview %d: %v", interviewID, err)
-		} else {
-			log.Printf("[TG-BOT] Evaluation completed for interview %d", interviewID)
-			session.mu.Lock()
-			session.State = StateCompleted
-			session.mu.Unlock()
+		maxRetries := 3
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			log.Printf("[TG-BOT] Starting evaluation for interview %d (attempt %d/%d)", interviewID, attempt, maxRetries)
+			if err := b.evaluator.EvaluateInterview(context.Background(), session); err != nil {
+				log.Printf("[TG-BOT] Evaluation failed for interview %d (attempt %d/%d): %v", interviewID, attempt, maxRetries, err)
+				if attempt < maxRetries {
+					time.Sleep(time.Duration(attempt*5) * time.Second)
+					continue
+				}
+				log.Printf("[TG-BOT] Evaluation permanently failed for interview %d after %d attempts", interviewID, maxRetries)
+			} else {
+				log.Printf("[TG-BOT] Evaluation completed for interview %d", interviewID)
+				session.mu.Lock()
+				session.State = StateCompleted
+				session.mu.Unlock()
+				// Notify candidate
+				doneMsg := map[string]string{
+					"en": "Your interview has been evaluated! Thank you for participating.",
+					"ru": "Ваше интервью оценено! Спасибо за участие.",
+					"kz": "Сұхбатыңыз бағаланды! Қатысқаныңыз үшін рахмет.",
+				}
+				if m := doneMsg[session.Language]; m != "" {
+					b.sendMessage(chatID, m)
+				} else {
+					b.sendMessage(chatID, doneMsg["en"])
+				}
+				break
+			}
 		}
 		b.sessions.Delete(chatID)
 	}()

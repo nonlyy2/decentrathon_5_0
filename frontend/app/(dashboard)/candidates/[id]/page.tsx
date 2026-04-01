@@ -734,30 +734,83 @@ export default function CandidateDetailPage() {
                     </Button>
                   </div>
 
-                  {/* Evaluating state */}
-                  {(interviewData.interview?.status === "active" || interviewData.interview?.status === "evaluating") &&
-                   !interviewData.analysis && (
-                    <div className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3">
-                      <Loader2 size={14} className="animate-spin" />
-                      <span>Interview in progress — AI analysis will appear here once complete.</span>
+                  {/* Evaluating / needs evaluation state */}
+                  {!interviewData.analysis && interviewData.interview && (() => {
+                    const isTrulyActive = interviewData.interview!.status === "active"
+                      && interviewData.interview!.current_topic !== "evaluating"
+                      && interviewData.interview!.current_topic !== "closing";
+                    return (
+                    <div className="flex items-center justify-between gap-2 text-sm text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2">
+                        {isTrulyActive ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            <span>Interview in progress — AI analysis will appear here once complete.</span>
+                          </>
+                        ) : (
+                          <span>Interview finished but not yet evaluated.</span>
+                        )}
+                      </div>
+                      {!isTrulyActive && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 border-purple-300 text-purple-700 hover:bg-purple-100 dark:border-purple-600 dark:text-purple-300 dark:hover:bg-purple-900/50"
+                          onClick={async () => {
+                            try {
+                              await api.post(`/candidates/${params.id}/interview/re-evaluate`);
+                              toast.success("Evaluation started — this may take up to a minute");
+                              // Poll for result every 5s, up to 2 min
+                              let attempts = 0;
+                              const poll = setInterval(async () => {
+                                attempts++;
+                                try {
+                                  const res = await api.get(`/candidates/${params.id}/interview`);
+                                  if (res.data.analysis) {
+                                    clearInterval(poll);
+                                    setInterviewData(res.data);
+                                    toast.success("Interview evaluation complete!");
+                                  } else if (attempts >= 24) {
+                                    clearInterval(poll);
+                                    toast.error("Evaluation timed out — try refreshing");
+                                  }
+                                } catch { /* ignore poll errors */ }
+                              }, 5000);
+                            } catch {
+                              toast.error("Failed to start evaluation");
+                            }
+                          }}
+                        >
+                          Run AI Evaluation
+                        </Button>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Interview AI analysis */}
                   {interviewData.analysis && (
                     <div className="space-y-3 bg-muted/50 rounded-lg p-3">
-                      {/* Score grid */}
-                      <div className="grid grid-cols-5 gap-2 text-center">
+                      {/* Score grid with explanations */}
+                      <div className="space-y-2">
                         {[
-                          { label: "Leadership", score: interviewData.analysis.score_leadership },
-                          { label: "Grit", score: interviewData.analysis.score_grit },
-                          { label: "Authentic", score: interviewData.analysis.score_authenticity },
-                          { label: "Motivation", score: interviewData.analysis.score_motivation },
-                          { label: "Vision", score: interviewData.analysis.score_vision },
+                          { label: "Leadership", score: interviewData.analysis.score_leadership, explanation: interviewData.analysis.explanation_leadership },
+                          { label: "Grit", score: interviewData.analysis.score_grit, explanation: interviewData.analysis.explanation_grit },
+                          { label: "Authenticity", score: interviewData.analysis.score_authenticity, explanation: interviewData.analysis.explanation_authenticity },
+                          { label: "Motivation", score: interviewData.analysis.score_motivation, explanation: interviewData.analysis.explanation_motivation },
+                          { label: "Vision", score: interviewData.analysis.score_vision, explanation: interviewData.analysis.explanation_vision },
                         ].map((s) => (
-                          <div key={s.label}>
-                            <p className="text-xs text-muted-foreground">{s.label}</p>
-                            <p className="text-lg font-bold">{s.score}</p>
+                          <div key={s.label} className="bg-card rounded p-2 border border-border">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
+                              <span className="text-sm font-bold">{s.score}<span className="text-xs text-muted-foreground font-normal">/100</span></span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                              <div className="h-1.5 rounded-full bg-purple-500 transition-all" style={{ width: `${s.score}%` }} />
+                            </div>
+                            {s.explanation && (
+                              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{s.explanation}</p>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -832,9 +885,35 @@ export default function CandidateDetailPage() {
                         </div>
                       )}
 
-                      <p className="text-xs text-muted-foreground pt-1 border-t">
-                        Analyzed by {interviewData.analysis.model_used} — {new Date(interviewData.analysis.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      </p>
+                      <div className="flex items-center justify-between pt-1 border-t">
+                        <p className="text-xs text-muted-foreground">
+                          Analyzed by {interviewData.analysis.model_used} — {new Date(interviewData.analysis.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs h-6 px-2 text-muted-foreground hover:text-foreground"
+                          onClick={async () => {
+                            try {
+                              await api.post(`/candidates/${params.id}/interview/re-evaluate`);
+                              toast.success("Re-evaluation started");
+                              const poll = setInterval(async () => {
+                                const res = await api.get(`/candidates/${params.id}/interview`);
+                                if (res.data.analysis?.analyzed_at !== interviewData?.analysis?.analyzed_at) {
+                                  clearInterval(poll);
+                                  fetchInterview();
+                                  toast.success("Re-evaluation complete");
+                                }
+                              }, 5000);
+                              setTimeout(() => clearInterval(poll), 120000);
+                            } catch {
+                              toast.error("Failed to re-evaluate");
+                            }
+                          }}
+                        >
+                          Re-evaluate
+                        </Button>
+                      </div>
                     </div>
                   )}
 

@@ -69,6 +69,9 @@ func (b *Bot) Start(ctx context.Context) {
 	// Restore active sessions from DB on startup
 	b.restoreSessions(ctx)
 
+	// Re-evaluate any interviews stuck in 'evaluating' state (e.g. server crashed mid-evaluation)
+	b.retryStuckEvaluations(ctx)
+
 	// Clear any stale getUpdates to release previous polling session
 	clearURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=-1&timeout=0", b.api.Token)
 	resp, err := http.Get(clearURL)
@@ -194,6 +197,81 @@ func (b *Bot) restoreSessions(ctx context.Context) {
 
 	if count > 0 {
 		log.Printf("[TG-BOT] Restored %d active sessions", count)
+	}
+}
+
+// retryStuckEvaluations finds interviews that were in the middle of evaluation
+// when the server stopped (current_topic='evaluating' but status='active') and
+// re-runs the evaluation for them.
+func (b *Bot) retryStuckEvaluations(ctx context.Context) {
+	rows, err := b.pool.Query(ctx, `
+		SELECT i.id, i.candidate_id, i.language, i.essay_summary, i.conversation_context,
+		       i.telegram_chat_id, c.full_name, i.questions_asked
+		FROM interviews i
+		JOIN candidates c ON c.id = i.candidate_id
+		WHERE i.status = 'active' AND i.current_topic = 'evaluating'`)
+	if err != nil {
+		log.Printf("[TG-BOT] Failed to query stuck evaluations: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var (
+			interviewID    int
+			candidateID    int
+			lang           string
+			essaySummary   string
+			contextJSON    []byte
+			chatID         int64
+			candidateName  string
+			questionsAsked int
+		)
+		if err := rows.Scan(&interviewID, &candidateID, &lang, &essaySummary, &contextJSON,
+			&chatID, &candidateName, &questionsAsked); err != nil {
+			log.Printf("[TG-BOT] Failed to scan stuck evaluation: %v", err)
+			continue
+		}
+
+		var conversation []models.ConversationMessage
+		if err := json.Unmarshal(contextJSON, &conversation); err != nil {
+			log.Printf("[TG-BOT] Failed to unmarshal conversation for stuck interview %d: %v", interviewID, err)
+			continue
+		}
+
+		session := &activeSession{
+			InterviewID:   interviewID,
+			CandidateID:   candidateID,
+			CandidateName: candidateName,
+			Language:      lang,
+			State:         StateEvaluating,
+			QuestionsAsked: questionsAsked,
+			EssaySummary:  essaySummary,
+			Conversation:  conversation,
+		}
+
+		count++
+		go func(iid int, cid int64, s *activeSession) {
+			log.Printf("[TG-BOT] Retrying stuck evaluation for interview %d", iid)
+			if err := b.evaluator.EvaluateInterview(context.Background(), s); err != nil {
+				log.Printf("[TG-BOT] Stuck evaluation retry failed for interview %d: %v", iid, err)
+			} else {
+				log.Printf("[TG-BOT] Stuck evaluation completed for interview %d", iid)
+				doneMsg := map[string]string{
+					"en": "Your interview has been evaluated! Thank you for participating.",
+					"ru": "Ваше интервью оценено! Спасибо за участие.",
+					"kz": "Сұхбатыңыз бағаланды! Қатысқаныңыз үшін рахмет.",
+				}
+				if m := doneMsg[s.Language]; m != "" {
+					b.sendMessage(cid, m)
+				}
+			}
+		}(interviewID, chatID, session)
+	}
+
+	if count > 0 {
+		log.Printf("[TG-BOT] Found %d stuck evaluations, retrying...", count)
 	}
 }
 
