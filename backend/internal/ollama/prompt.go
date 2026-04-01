@@ -72,11 +72,11 @@ Respond with ONLY this JSON object. Fill every field.
   "score_communication": <0-100>,
   "ai_generated_score": <0-100>,
   "summary": "<2-3 sentence assessment of this candidate>",
-  "explanation_leadership": "<1-2 sentences with evidence>",
-  "explanation_motivation": "<1-2 sentences with evidence>",
-  "explanation_growth": "<1-2 sentences with evidence>",
-  "explanation_vision": "<1-2 sentences with evidence>",
-  "explanation_communication": "<1-2 sentences with evidence>",
+  "explanation_leadership": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
+  "explanation_motivation": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
+  "explanation_growth": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
+  "explanation_vision": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
+  "explanation_communication": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
   "key_strengths": ["<strength 1>", "<strength 2>"],
   "red_flags": []
 }`)

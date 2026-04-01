@@ -68,6 +68,8 @@ export default function CandidateDetailPage() {
   const [sendingInvite, setSendingInvite] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // effectiveInviteLink: prefer local state (just-created), fall back to status endpoint deep_link
+  const effectiveInviteLink = inviteLink || (interviewData?.deep_link as string | undefined) || null;
   const [showTranscript, setShowTranscript] = useState(false);
   const [transcript, setTranscript] = useState<InterviewMessage[]>([]);
 
@@ -85,6 +87,9 @@ export default function CandidateDetailPage() {
     }
   }, [detail?.analysis, params.id]);
 
+  // Stage 2 expanded criteria
+  const [expandedStage2Score, setExpandedStage2Score] = useState<string | null>(null);
+
   // Delete analysis custom modal
   const [showDeleteAnalysis, setShowDeleteAnalysis] = useState(false);
   const [deleteAnalysisText, setDeleteAnalysisText] = useState("");
@@ -98,6 +103,13 @@ export default function CandidateDetailPage() {
   const [showEditCandidate, setShowEditCandidate] = useState(false);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const hasRussianContent = (() => {
+    const text = (detail?.essay || "") + " " + (detail?.motivation_statement || "") + " " + (detail?.achievements || "");
+    if (text.trim().length < 50) return false;
+    const cyrillicCount = (text.match(/[а-яёА-ЯЁ]/g) || []).length;
+    return cyrillicCount / text.length > 0.25;
+  });
 
   const scoreLabels = [
     { key: "score_leadership", label: t("score.leadership"), explKey: "explanation_leadership", weight: "25%" },
@@ -136,8 +148,9 @@ export default function CandidateDetailPage() {
   };
 
   const handleCopyLink = () => {
-    if (inviteLink) {
-      navigator.clipboard.writeText(inviteLink);
+    const link = inviteLink || (interviewData?.deep_link as string | undefined) || null;
+    if (link) {
+      navigator.clipboard.writeText(link);
       setLinkCopied(true);
       toast.success(t("interview.copied"));
       setTimeout(() => setLinkCopied(false), 2000);
@@ -525,10 +538,15 @@ export default function CandidateDetailPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <Sparkles size={16} className="text-purple-500" /> {t("detail.ai_analysis")}
                     </CardTitle>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Badge className={riskColors[a.ai_generated_risk]}>
                         {t("detail.ai_risk")}: {a.ai_generated_score}%
                       </Badge>
+                      {hasRussianContent() && (
+                        <Badge className="bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700">
+                          ⚠ Answers in Russian
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -676,9 +694,9 @@ export default function CandidateDetailPage() {
                   {detail.analysis && detail.analysis.final_score >= 65 ? (
                     <>
                       <p className="text-sm text-muted-foreground">{t("interview.eligible")}</p>
-                      {inviteLink ? (
+                      {effectiveInviteLink ? (
                         <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{inviteLink}</code>
+                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{effectiveInviteLink}</code>
                           <Button size="sm" variant="outline" onClick={handleCopyLink}>
                             {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                           </Button>
@@ -703,9 +721,9 @@ export default function CandidateDetailPage() {
                   ) : (
                     <div className="space-y-2">
                       <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
-                      {inviteLink ? (
+                      {effectiveInviteLink ? (
                         <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{inviteLink}</code>
+                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{effectiveInviteLink}</code>
                           <Button size="sm" variant="outline" onClick={handleCopyLink}>
                             {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                           </Button>
@@ -791,28 +809,36 @@ export default function CandidateDetailPage() {
                   {/* Interview AI analysis */}
                   {interviewData.analysis && (
                     <div className="space-y-3 bg-muted/50 rounded-lg p-3">
-                      {/* Score grid with explanations */}
+                      {/* Score grid with collapsible explanations */}
                       <div className="space-y-2">
                         {[
-                          { label: "Leadership", score: interviewData.analysis.score_leadership, explanation: interviewData.analysis.explanation_leadership },
-                          { label: "Grit", score: interviewData.analysis.score_grit, explanation: interviewData.analysis.explanation_grit },
-                          { label: "Authenticity", score: interviewData.analysis.score_authenticity, explanation: interviewData.analysis.explanation_authenticity },
-                          { label: "Motivation", score: interviewData.analysis.score_motivation, explanation: interviewData.analysis.explanation_motivation },
-                          { label: "Vision", score: interviewData.analysis.score_vision, explanation: interviewData.analysis.explanation_vision },
-                        ].map((s) => (
-                          <div key={s.label} className="bg-card rounded p-2 border border-border">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
-                              <span className="text-sm font-bold">{s.score}<span className="text-xs text-muted-foreground font-normal">/100</span></span>
-                            </div>
-                            <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                              <div className="h-1.5 rounded-full bg-purple-500 transition-all" style={{ width: `${s.score}%` }} />
-                            </div>
-                            {s.explanation && (
-                              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{s.explanation}</p>
+                          { key: "leadership", label: "Leadership", score: interviewData.analysis.score_leadership, explanation: interviewData.analysis.explanation_leadership },
+                          { key: "grit", label: "Grit", score: interviewData.analysis.score_grit, explanation: interviewData.analysis.explanation_grit },
+                          { key: "authenticity", label: "Authenticity", score: interviewData.analysis.score_authenticity, explanation: interviewData.analysis.explanation_authenticity },
+                          { key: "motivation", label: "Motivation", score: interviewData.analysis.score_motivation, explanation: interviewData.analysis.explanation_motivation },
+                          { key: "vision", label: "Vision", score: interviewData.analysis.score_vision, explanation: interviewData.analysis.explanation_vision },
+                        ].map((s) => {
+                          const isExp = expandedStage2Score === s.key;
+                          return (
+                          <div key={s.key} className="bg-card rounded p-2 border border-border">
+                            <button
+                              className="w-full text-left"
+                              onClick={() => setExpandedStage2Score(isExp ? null : s.key)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
+                                <span className="text-sm font-bold">{s.score}<span className="text-xs text-muted-foreground font-normal">/100</span></span>
+                              </div>
+                              <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                                <div className="h-1.5 rounded-full bg-purple-500 transition-all" style={{ width: `${s.score}%` }} />
+                              </div>
+                            </button>
+                            {isExp && s.explanation && (
+                              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed pl-2 border-l-2 border-purple-200 dark:border-purple-700">{s.explanation}</p>
                             )}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {/* Final score + category */}
@@ -875,13 +901,37 @@ export default function CandidateDetailPage() {
                         </div>
                       )}
 
-                      {/* Suspicion flags */}
+                      {/* Anti-cheat flags */}
                       {interviewData.analysis.suspicion_flags && interviewData.analysis.suspicion_flags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-1 border-t">
-                          <span className="text-xs text-orange-600 font-medium w-full">Anti-cheat flags:</span>
-                          {interviewData.analysis.suspicion_flags.map((f, i) => (
-                            <Badge key={i} variant="outline" className="text-xs text-orange-600 border-orange-300">{f}</Badge>
-                          ))}
+                        <div className="pt-1 border-t space-y-1.5">
+                          <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold">⚑ Anti-cheat flags detected</p>
+                          {interviewData.analysis.suspicion_flags.map((f, i) => {
+                            const flagInfo: Record<string, { label: string; reason: string }> = {
+                              multiple_fast_responses: {
+                                label: "Multiple fast responses",
+                                reason: "Candidate answered 50+ character messages in under 5 seconds — indicates likely copy-paste from prepared text.",
+                              },
+                              style_shift_detected: {
+                                label: "Writing style shift",
+                                reason: "Significant change in average word length between first and second half of answers — suggests different authorship or assistance mid-interview.",
+                              },
+                              all_voice: {
+                                label: "All voice messages",
+                                reason: "Candidate used only voice messages, which reduces verifiability of authentic typed responses.",
+                              },
+                              no_responses: {
+                                label: "No responses recorded",
+                                reason: "No candidate messages were logged during the interview session.",
+                              },
+                            };
+                            const info = flagInfo[f] || { label: f.replace(/_/g, " "), reason: "Unusual behavioral pattern detected by the anti-cheat system." };
+                            return (
+                              <div key={i} className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded p-2">
+                                <p className="text-xs font-medium text-orange-700 dark:text-orange-300">{info.label}</p>
+                                <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">{info.reason}</p>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -917,13 +967,6 @@ export default function CandidateDetailPage() {
                     </div>
                   )}
 
-                  {interviewData.combined_score && (
-                    <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-3 text-center">
-                      <p className="text-xs text-purple-600 dark:text-purple-400 uppercase font-medium">{t("interview.combined_score")}</p>
-                      <p className="text-2xl font-bold text-purple-800 dark:text-purple-300">{Number(interviewData.combined_score).toFixed(1)}</p>
-                      <p className="text-xs text-purple-500 dark:text-purple-400">60% essay + 40% interview</p>
-                    </div>
-                  )}
 
                   {/* Transcript button */}
                   <Button size="sm" variant="outline" onClick={handleViewTranscript}>

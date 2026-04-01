@@ -10,7 +10,7 @@ import (
 
 type BulkDecisionRequest struct {
 	CandidateIDs []int  `json:"candidate_ids" binding:"required,min=1"`
-	Decision     string `json:"decision" binding:"required,oneof=shortlist reject waitlist review"`
+	Decision     string `json:"decision" binding:"required,oneof=shortlist reject waitlist review pending"`
 	Notes        string `json:"notes"`
 }
 
@@ -30,6 +30,7 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			"reject":    "rejected",
 			"waitlist":  "waitlisted",
 			"review":    "analyzed",
+			"pending":   "pending",
 		}
 		newStatus := statusMap[req.Decision]
 

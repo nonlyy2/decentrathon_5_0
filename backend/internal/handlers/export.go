@@ -298,9 +298,3 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-func nilIfEmpty(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}

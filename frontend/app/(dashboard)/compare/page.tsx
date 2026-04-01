@@ -24,18 +24,29 @@ export default function ComparePage() {
   const ids = (searchParams.get("ids") || "").split(",").filter(Boolean).map(Number);
   const [candidates, setCandidates] = useState<CandidateDetail[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectCount, setSelectCount] = useState(1);
+  const [selectCountInput, setSelectCountInput] = useState("1");
+  const [selectCountError, setSelectCountError] = useState<string | null>(null);
   const [aiPicking, setAiPicking] = useState(false);
   const [aiResult, setAiResult] = useState<{ selected: AIPickResult[]; overall_reasoning: string } | null>(null);
 
   const handleAIPick = async () => {
+    const n = parseInt(selectCountInput, 10);
+    if (!selectCountInput.trim() || isNaN(n) || n < 1 || !Number.isInteger(n)) {
+      setSelectCountError("Please enter a positive integer");
+      return;
+    }
+    if (n >= ids.length) {
+      setSelectCountError(`Must be less than total (${ids.length})`);
+      return;
+    }
+    setSelectCountError(null);
     setAiPicking(true);
     setAiResult(null);
     try {
       const qs = provider ? `?provider=${provider}` : "";
       const res = await api.post(`/candidates/ai-recommend${qs}`, {
         candidate_ids: ids,
-        select_count: selectCount,
+        select_count: n,
       });
       setAiResult(res.data);
     } catch (err: unknown) {
@@ -209,14 +220,17 @@ export default function ComparePage() {
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-sm text-foreground">{t("compare.ai_pick_desc")}</span>
-            <Input
-              type="number"
-              min={1}
-              max={ids.length - 1}
-              value={selectCount}
-              onChange={(e) => setSelectCount(Math.max(1, Math.min(ids.length - 1, Number(e.target.value))))}
-              className="w-20 text-center"
-            />
+            <div className="flex flex-col gap-1">
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={selectCountInput}
+                onChange={(e) => { setSelectCountInput(e.target.value); setSelectCountError(null); }}
+                className={`w-20 text-center ${selectCountError ? "border-red-400" : ""}`}
+                placeholder="N"
+              />
+              {selectCountError && <p className="text-xs text-red-500">{selectCountError}</p>}
+            </div>
             <span className="text-sm text-muted-foreground">/ {ids.length}</span>
             <Button
               className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 ml-2"

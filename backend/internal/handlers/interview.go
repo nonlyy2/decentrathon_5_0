@@ -83,7 +83,7 @@ func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFun
 
 // GetInterviewStatus returns the interview status and results for a candidate.
 // GET /candidates/:id/interview
-func GetInterviewStatus(pool *pgxpool.Pool) gin.HandlerFunc {
+func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
@@ -111,15 +111,23 @@ func GetInterviewStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 		if err != nil {
 			// No interview yet — check for invite
 			var inviteStatus *string
-			var deepLink *string
+			var token *string
 			pool.QueryRow(c.Request.Context(), `
 				SELECT status, token FROM telegram_invites WHERE candidate_id = $1`,
-				candidateID).Scan(&inviteStatus, &deepLink)
+				candidateID).Scan(&inviteStatus, &token)
+
+			var deepLink *string
+			if token != nil && botUsername != "" {
+				dl := "https://t.me/" + botUsername + "?start=" + *token
+				deepLink = &dl
+			} else if token != nil {
+				deepLink = token
+			}
 
 			c.JSON(http.StatusOK, gin.H{
 				"status":        "not_started",
 				"invite_status": inviteStatus,
-				"invite_token":  deepLink,
+				"deep_link":     deepLink,
 			})
 			return
 		}
@@ -340,5 +348,53 @@ func GetInterviewTranscript(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, messages)
+	}
+}
+
+// EvaluateAllPendingInterviews triggers AI evaluation for all interviews that are completed
+// but have no interview_analyses record yet.
+// POST /interviews/evaluate-all-pending
+func EvaluateAllPendingInterviews(pool *pgxpool.Pool, evaluateFn func(interviewID, candidateID int) error) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rows, err := pool.Query(c.Request.Context(), `
+			SELECT i.id, i.candidate_id
+			FROM interviews i
+			WHERE i.status IN ('completed', 'active')
+			  AND NOT EXISTS (
+			    SELECT 1 FROM interview_analyses ia WHERE ia.candidate_id = i.candidate_id
+			  )`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query interviews"})
+			return
+		}
+		defer rows.Close()
+
+		type pair struct{ interviewID, candidateID int }
+		var pending []pair
+		for rows.Next() {
+			var p pair
+			if err := rows.Scan(&p.interviewID, &p.candidateID); err == nil {
+				pending = append(pending, p)
+			}
+		}
+
+		if len(pending) == 0 {
+			c.JSON(http.StatusOK, gin.H{"message": "no pending interviews to evaluate", "count": 0})
+			return
+		}
+
+		go func() {
+			for _, p := range pending {
+				log.Printf("Auto-evaluating interview %d (candidate %d)", p.interviewID, p.candidateID)
+				if err := evaluateFn(p.interviewID, p.candidateID); err != nil {
+					log.Printf("Auto-evaluation failed for interview %d: %v", p.interviewID, err)
+				}
+			}
+		}()
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Evaluation started for pending interviews",
+			"count":   len(pending),
+		})
 	}
 }

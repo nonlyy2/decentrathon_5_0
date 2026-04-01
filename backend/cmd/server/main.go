@@ -262,7 +262,7 @@ func main() {
 
 	// Interview routes
 	protected.POST("/candidates/:id/telegram-invite", handlers.CreateTelegramInvite(pool, botUsername))
-	protected.GET("/candidates/:id/interview", handlers.GetInterviewStatus(pool))
+	protected.GET("/candidates/:id/interview", handlers.GetInterviewStatus(pool, botUsername))
 	protected.GET("/candidates/:id/interview/messages", handlers.GetInterviewTranscript(pool))
 
 	// Force evaluate / re-evaluate interview
@@ -287,6 +287,7 @@ func main() {
 	if evaluateFn != nil {
 		protected.POST("/candidates/:id/interview/evaluate", handlers.ForceEvaluateInterview(pool, evaluateFn))
 		protected.POST("/candidates/:id/interview/re-evaluate", handlers.ReEvaluateInterview(pool, evaluateFn))
+		protected.POST("/interviews/evaluate-all-pending", handlers.EvaluateAllPendingInterviews(pool, evaluateFn))
 	}
 
 	log.Printf("Server starting on port %s", cfg.Port)

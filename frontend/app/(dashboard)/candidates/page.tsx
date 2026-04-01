@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Play, Square, Download, Trash2, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, ArrowUpDown, ArrowUp, ArrowDown, Play, Square, Download, Upload, Trash2, SlidersHorizontal, X } from "lucide-react";
 
 const MAJORS = [
   { tag: "Engineering", label: "Creative Engineering" },
@@ -102,15 +102,40 @@ export default function CandidatesPage() {
   // Admin controls state
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchElapsed, setBatchElapsed] = useState(0);
+  const [batchFinishedTime, setBatchFinishedTime] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const batchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Import CSV
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await api.post("/candidates/import/csv", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success(`Imported ${res.data.imported} candidates${res.data.skipped ? `, skipped ${res.data.skipped}` : ""}`);
+      setImportOpen(false);
+      setImportFile(null);
+      fetchCandidates();
+      fetchCounts();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg || "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // Auto-accept
   const [autoAcceptOpen, setAutoAcceptOpen] = useState(false);
@@ -182,7 +207,10 @@ export default function CandidatesPage() {
   };
 
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (batchTimerRef.current) clearInterval(batchTimerRef.current);
+    };
   }, []);
 
   const handleStopBatch = async () => {
@@ -289,8 +317,26 @@ export default function CandidatesPage() {
   useEffect(() => { fetchCandidates(); }, [fetchCandidates]);
   useEffect(() => { setPage(0); }, [status, search, scoreRange, ageRange, majorFilter]);
 
+  const startBatchTimer = useCallback(() => {
+    if (batchTimerRef.current) return;
+    setBatchElapsed(0);
+    setBatchFinishedTime(null);
+    batchTimerRef.current = setInterval(() => {
+      setBatchElapsed((s) => s + 1);
+    }, 1000);
+  }, []);
+
+  const stopBatchTimer = useCallback(() => {
+    if (batchTimerRef.current) {
+      clearInterval(batchTimerRef.current);
+      batchTimerRef.current = null;
+    }
+    setBatchElapsed((s) => { setBatchFinishedTime(s); return s; });
+  }, []);
+
   const startBatchPoll = useCallback(() => {
     if (pollRef.current) return;
+    startBatchTimer();
     pollRef.current = setInterval(async () => {
       try {
         const res = await api.get("/analyze-all/status");
@@ -300,6 +346,7 @@ export default function CandidatesPage() {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setBatchRunning(false);
+          stopBatchTimer();
           setBatchProgress(null);
           const errCount = Array.isArray(errors) ? errors.length : 0;
           const ok = processed - errCount;
@@ -313,9 +360,10 @@ export default function CandidatesPage() {
         clearInterval(pollRef.current!);
         pollRef.current = null;
         setBatchRunning(false);
+        stopBatchTimer();
       }
     }, 3000);
-  }, [fetchCandidates, fetchCounts]);
+  }, [fetchCandidates, fetchCounts, startBatchTimer, stopBatchTimer]);
 
   useEffect(() => {
     api.get("/analyze-all/status").then((res) => {
@@ -331,7 +379,11 @@ export default function CandidatesPage() {
     try {
       const qs = provider ? `?provider=${provider}` : "";
       const res = await api.post(`/analyze-all${qs}`);
-      if (!res.data.count) { toast.info("No pending candidates to analyze"); return; }
+      // Also trigger Stage 2 interview evaluations in background
+      api.post("/interviews/evaluate-all-pending").then((r) => {
+        if (r.data.count > 0) toast.info(`Also evaluating ${r.data.count} pending Stage 2 interview(s)`);
+      }).catch(() => {});
+      if (!res.data.count) { toast.info("No pending Stage 1 candidates to analyze"); return; }
       toast.success(`Analysis started for ${res.data.count} candidates`);
       setBatchRunning(true);
       setBatchProgress({ done: 0, total: res.data.count });
@@ -378,6 +430,9 @@ export default function CandidatesPage() {
                 {batchProgress && (
                   <span className="text-xs text-primary font-medium">{batchProgress.done}/{batchProgress.total}</span>
                 )}
+                <span className="text-xs font-mono text-muted-foreground">
+                  {String(Math.floor(batchElapsed / 60)).padStart(2, "0")}:{String(batchElapsed % 60).padStart(2, "0")}
+                </span>
                 <Button size="sm" variant="destructive" onClick={handleStopBatch}>
                   <Square size={14} className="mr-1" /> {t("cand.stop")}
                 </Button>
@@ -394,6 +449,9 @@ export default function CandidatesPage() {
 
             <Button size="sm" variant="outline" onClick={handleExportCSV}>
               <Download size={14} className="mr-1" /> {t("cand.export")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setImportFile(null); setImportOpen(true); }}>
+              <Upload size={14} className="mr-1" /> Import CSV
             </Button>
             <Button
               size="sm"
@@ -418,11 +476,22 @@ export default function CandidatesPage() {
 
       {/* Batch progress bar */}
       {batchRunning && batchProgress && (
-        <div className="w-full bg-muted rounded-full h-1.5" role="progressbar" aria-valuenow={batchProgress.done} aria-valuemax={batchProgress.total}>
-          <div
-            className="h-1.5 rounded-full transition-all"
-            style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%`, backgroundColor: "#c1f11d" }}
-          />
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Analyzing {batchProgress.done}/{batchProgress.total} candidates…</span>
+            <span className="font-mono">{String(Math.floor(batchElapsed / 60)).padStart(2, "0")}:{String(batchElapsed % 60).padStart(2, "0")}</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-1.5" role="progressbar" aria-valuenow={batchProgress.done} aria-valuemax={batchProgress.total}>
+            <div
+              className="h-1.5 rounded-full transition-all"
+              style={{ width: `${batchProgress.total > 0 ? (batchProgress.done / batchProgress.total) * 100 : 0}%`, backgroundColor: "#c1f11d" }}
+            />
+          </div>
+        </div>
+      )}
+      {!batchRunning && batchFinishedTime !== null && (
+        <div className="text-xs text-muted-foreground">
+          Last batch finished in {String(Math.floor(batchFinishedTime / 60)).padStart(2, "0")}:{String(batchFinishedTime % 60).padStart(2, "0")}
         </div>
       )}
 
@@ -534,7 +603,7 @@ export default function CandidatesPage() {
       {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 border rounded-lg px-4 py-2 flex-wrap" style={{ backgroundColor: "#c1f11d22", borderColor: "#c1f11d" }}>
           <span className="text-sm font-medium text-foreground">{selectedIds.size} {t("cand.selected")}</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("shortlist")}>
               {bulkAction === "shortlist" && <Loader2 size={14} className="animate-spin mr-1" />} {t("dec.shortlist")}
             </Button>
@@ -543,6 +612,12 @@ export default function CandidatesPage() {
             </Button>
             <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("reject")}>
               {t("dec.reject")}
+            </Button>
+            <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" disabled={!!bulkAction} onClick={() => handleBulkDecision("review")}>
+              {bulkAction === "review" && <Loader2 size={14} className="animate-spin mr-1" />} → Review
+            </Button>
+            <Button size="sm" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50" disabled={!!bulkAction} onClick={() => handleBulkDecision("pending")}>
+              {bulkAction === "pending" && <Loader2 size={14} className="animate-spin mr-1" />} → Pending
             </Button>
           </div>
           {selectedIds.size >= 2 && (
@@ -614,7 +689,7 @@ export default function CandidatesPage() {
                     <Link href={`/candidates/${c.id}`} className="flex items-center gap-2 relative z-20 py-1 -my-1 cursor-pointer" aria-label={`Open ${c.full_name}`}>
                       {c.photo_url ? (
                         <img
-                          src={`http://localhost:8080${c.photo_url}`}
+                          src={`${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") || "http://localhost:8080"}${c.photo_url}`}
                           alt=""
                           className="w-7 h-7 rounded-full object-cover border border-border shrink-0"
                           aria-hidden="true"
@@ -700,6 +775,56 @@ export default function CandidatesPage() {
               onClick={handleDeleteAll}
             >
               {deleting ? <><Loader2 size={14} className="animate-spin mr-2" />{t("del.deleting")}</> : t("del.delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import CSV dialog */}
+      <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) setImportFile(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload size={16} /> Import Candidates from CSV
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Upload a CSV file with columns: <span className="font-mono text-xs">Full Name, Email, Phone, Telegram, Age, City, School, Graduation Year, Achievements, Extracurriculars, Essay, Motivation Statement, Disability, Major</span>
+            </p>
+            <p className="text-xs text-muted-foreground">Rows with duplicate emails are skipped automatically.</p>
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+              onClick={() => document.getElementById("csv-import-input")?.click()}
+            >
+              {importFile ? (
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">{importFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{(importFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+              ) : (
+                <>
+                  <Upload size={24} className="mx-auto text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">Click to select a CSV file</p>
+                </>
+              )}
+              <input
+                id="csv-import-input"
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!importFile || importing}
+              onClick={handleImport}
+              style={{ backgroundColor: "#c1f11d", color: "#111" }}
+            >
+              {importing ? <><Loader2 size={14} className="animate-spin mr-1" /> Importing...</> : "Import"}
             </Button>
           </DialogFooter>
         </DialogContent>

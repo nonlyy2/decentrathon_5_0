@@ -102,6 +102,7 @@ export interface InterviewStatus {
   status: string;
   invite_status?: string;
   invite_token?: string;
+  deep_link?: string;
   interview?: {
     id: number;
     status: string;
