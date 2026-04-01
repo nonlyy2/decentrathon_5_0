@@ -445,7 +445,7 @@ export default function CandidateDetailPage() {
                   )}
                   <div className="text-sm text-muted-foreground">{detail.email}</div>
                   {detail.phone && <div className="text-sm text-muted-foreground">{detail.phone}</div>}
-                  {detail.telegram && <div className="text-sm text-muted-foreground">@{detail.telegram}</div>}
+                  {detail.telegram && <div className="text-sm text-muted-foreground">{detail.telegram}</div>}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
@@ -528,7 +528,7 @@ export default function CandidateDetailPage() {
         </div>
 
         {/* Right column — Analysis + Decisions */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           {a ? (
             <>
               {/* Score overview */}
@@ -544,7 +544,7 @@ export default function CandidateDetailPage() {
                       </Badge>
                       {hasRussianContent() && (
                         <Badge className="bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700">
-                          ⚠ Answers in Russian
+                          ⚠ Answers not in English
                         </Badge>
                       )}
                     </div>
@@ -653,36 +653,8 @@ export default function CandidateDetailPage() {
             </Card>
           )}
 
-          {/* Decision panel */}
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t("detail.committee")}</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <DecisionButtons
-                candidateId={detail.id}
-                onDecisionMade={refetch}
-              />
-              {detail.decisions.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">{t("detail.history")}</p>
-                  {detail.decisions.map((d) => (
-                    <div key={d.id} className="flex items-start gap-2 text-sm border-l-2 border-slate-200 pl-3">
-                      <div>
-                        <StatusBadge status={d.decision === "shortlist" ? "shortlisted" : d.decision === "reject" ? "rejected" : d.decision === "waitlist" ? "waitlisted" : "analyzed"} />
-                        {d.notes && <p className="text-xs text-slate-500 italic mt-1">{d.notes}</p>}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {d.decided_by_email && <span className="font-medium">{d.decided_by_email} — </span>}
-                          {new Date(d.decided_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Interview — Stage 2 */}
-          <Card>
+          <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <BotMessageSquare size={16} /> {t("interview.title")}
@@ -694,10 +666,13 @@ export default function CandidateDetailPage() {
                   {detail.analysis && detail.analysis.final_score >= 65 ? (
                     <>
                       <p className="text-sm text-muted-foreground">{t("interview.eligible")}</p>
+                      
                       {effectiveInviteLink ? (
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{effectiveInviteLink}</code>
-                          <Button size="sm" variant="outline" onClick={handleCopyLink}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 min-w-0 overflow-x-auto whitespace-nowrap text-foreground">
+                            {effectiveInviteLink}
+                          </code>
+                          <Button size="sm" variant="outline" className="shrink-0" onClick={handleCopyLink}>
                             {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                           </Button>
                         </div>
@@ -984,6 +959,33 @@ export default function CandidateDetailPage() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          {/* Decision panel */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">{t("detail.committee")}</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <DecisionButtons
+                candidateId={detail.id}
+                onDecisionMade={refetch}
+              />
+              {detail.decisions.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">{t("detail.history")}</p>
+                  {detail.decisions.map((d) => (
+                    <div key={d.id} className="flex items-start gap-2 text-sm border-l-2 border-slate-200 pl-3">
+                      <div>
+                        <StatusBadge status={d.decision === "shortlist" ? "shortlisted" : d.decision === "reject" ? "rejected" : d.decision === "waitlist" ? "waitlisted" : "analyzed"} />
+                        {d.notes && <p className="text-xs text-slate-500 italic mt-1">{d.notes}</p>}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {d.decided_by_email && <span className="font-medium">{d.decided_by_email} — </span>}
+                          {new Date(d.decided_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
