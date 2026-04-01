@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { User, KeyRound, Shield } from "lucide-react";
+import { User, KeyRound, Shield, Eye, EyeOff } from "lucide-react";
 
 interface Profile {
   id: number;
@@ -45,7 +45,19 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const validatePassword = (pw: string): string | null => {
+    if (pw.length < 8) return "At least 8 characters";
+    if (!/[A-Z]/.test(pw)) return "At least one uppercase letter (A-Z)";
+    if (!/[a-z]/.test(pw)) return "At least one lowercase letter (a-z)";
+    if (!/[0-9]/.test(pw)) return "At least one digit (0-9)";
+    if (!/[^A-Za-z0-9]/.test(pw)) return "At least one special character (!@#$%^&*)";
+    if (/[^\x00-\x7F]/.test(pw)) return "Use Latin (English) letters only";
+    return null;
+  };
 
   useEffect(() => {
     api.get<Profile>("/profile").then((r) => {
@@ -56,12 +68,12 @@ export default function ProfilePage() {
   }, []);
 
   const handleSave = async () => {
+    if (password) {
+      const pwErr = validatePassword(password);
+      if (pwErr) { toast.error(pwErr); return; }
+    }
     if (password && password !== confirmPw) {
       toast.error("Passwords do not match");
-      return;
-    }
-    if (password && password.length < 6) {
-      toast.error("Password must be at least 6 characters");
       return;
     }
 
@@ -173,27 +185,54 @@ export default function ProfilePage() {
         <CardContent className="space-y-3">
           <div>
             <Label htmlFor="new_password" className="text-sm">{t("profile.new_password")}</Label>
-            <Input
-              id="new_password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="new-password"
-              className="mt-1"
-            />
+            <div className="relative mt-1">
+              <Input
+                id="new_password"
+                type={showPw ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                className="pr-10"
+              />
+              <button type="button" onClick={() => setShowPw(!showPw)} tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {password && (
+              <ul className="mt-2 space-y-0.5">
+                {[
+                  { ok: password.length >= 8, text: "At least 8 characters" },
+                  { ok: /[A-Z]/.test(password), text: "One uppercase letter (A-Z)" },
+                  { ok: /[a-z]/.test(password), text: "One lowercase letter (a-z)" },
+                  { ok: /[0-9]/.test(password), text: "One digit (0-9)" },
+                  { ok: /[^A-Za-z0-9]/.test(password), text: "One special character (!@#$…)" },
+                ].map((r) => (
+                  <li key={r.text} className={`text-xs flex items-center gap-1 ${r.ok ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                    <span>{r.ok ? "✓" : "○"}</span>{r.text}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div>
             <Label htmlFor="confirm_password" className="text-sm">{t("profile.confirm_password")}</Label>
-            <Input
-              id="confirm_password"
-              type="password"
-              value={confirmPw}
-              onChange={(e) => setConfirmPw(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="new-password"
-              className="mt-1"
-            />
+            <div className="relative mt-1">
+              <Input
+                id="confirm_password"
+                type={showConfirmPw ? "text" : "password"}
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                className="pr-10"
+              />
+              <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} tabIndex={-1}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
             {password && confirmPw && password !== confirmPw && (
               <p className="text-xs text-red-500 mt-1" role="alert">{t("profile.pw_mismatch")}</p>
             )}

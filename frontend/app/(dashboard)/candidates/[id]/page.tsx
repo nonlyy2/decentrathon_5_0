@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward, GitCompare, Brain } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -49,6 +49,19 @@ export default function CandidateDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Analysis timer
+  const [analysisElapsed, setAnalysisElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Copy state for contact fields
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const copyField = (value: string, field: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    toast.success("Copied!");
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   // Interview (Stage 2)
   const [interviewData, setInterviewData] = useState<InterviewStatus | null>(null);
@@ -158,6 +171,11 @@ export default function CandidateDetailPage() {
   // Poll analysis status while analyzing
   const startPolling = () => {
     if (pollRef.current) return;
+    // Start elapsed timer
+    setAnalysisElapsed(0);
+    timerRef.current = setInterval(() => {
+      setAnalysisElapsed((s) => s + 1);
+    }, 1000);
     pollRef.current = setInterval(async () => {
       try {
         const res = await api.get(`/candidates/${params.id}/analysis-status`);
@@ -165,6 +183,7 @@ export default function CandidateDetailPage() {
         if (!running) {
           clearInterval(pollRef.current!);
           pollRef.current = null;
+          if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
           setAnalyzing(false);
           if (failed) {
             setAnalysisFailed(true);
@@ -180,19 +199,24 @@ export default function CandidateDetailPage() {
       } catch {
         clearInterval(pollRef.current!);
         pollRef.current = null;
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
         setAnalyzing(false);
       }
     }, 2000);
   };
 
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, []);
 
   const handleAnalyze = async (force = false) => {
     setAnalysisFailed(false);
     setAnalysisError(null);
     setAnalyzing(true);
+    setAnalysisElapsed(0);
     try {
       const params2 = new URLSearchParams();
       if (force) params2.set("force", "true");
@@ -325,8 +349,8 @@ export default function CandidateDetailPage() {
           <Button variant="outline" size="sm" onClick={openEditCandidate}>
             <Pencil size={14} className="mr-1" /> Edit
           </Button>
-          <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => { setDeleteCandidateText(""); setShowDeleteCandidate(true); }}>
-            <UserX size={14} className="mr-1" /> Delete
+          <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 dark:hover:bg-red-950" onClick={() => { setDeleteCandidateText(""); setShowDeleteCandidate(true); }}>
+            <UserX size={14} className="mr-1" /> Delete Candidate
           </Button>
           {/* Provider toggle */}
           <div className="flex items-center gap-1 bg-muted border border-border rounded-lg p-1">
@@ -354,8 +378,9 @@ export default function CandidateDetailPage() {
               <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
                 {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.re_analyzing")}</> : t("detail.reanalyze")}
               </Button>
-              <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200" onClick={() => setShowDeleteAnalysis(true)} disabled={deletingAnalysis}>
-                {deletingAnalysis ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
+              <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 dark:hover:bg-orange-950" onClick={() => setShowDeleteAnalysis(true)} disabled={deletingAnalysis}>
+                {deletingAnalysis ? <Loader2 className="animate-spin mr-1" size={14} /> : <Trash2 size={14} className="mr-1" />}
+                <span className="text-xs">Del Analysis</span>
               </Button>
             </div>
           ) : (
@@ -411,9 +436,31 @@ export default function CandidateDetailPage() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">{t("detail.email")}:</span> {detail.email}</div>
-                <div><span className="text-muted-foreground">{t("detail.phone")}:</span> {detail.phone || "—"}</div>
-                <div><span className="text-muted-foreground">{t("detail.telegram")}:</span> {detail.telegram || "—"}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">{t("detail.email")}:</span>
+                  <span className="truncate">{detail.email}</span>
+                  <button onClick={() => copyField(detail.email, "email")} className="text-muted-foreground hover:text-foreground shrink-0" title="Copy email">
+                    {copiedField === "email" ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">{t("detail.phone")}:</span>
+                  <span>{detail.phone || "—"}</span>
+                  {detail.phone && (
+                    <button onClick={() => copyField(detail.phone!, "phone")} className="text-muted-foreground hover:text-foreground shrink-0" title="Copy phone">
+                      {copiedField === "phone" ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">{t("detail.telegram")}:</span>
+                  <span>{detail.telegram || "—"}</span>
+                  {detail.telegram && (
+                    <button onClick={() => copyField(detail.telegram!, "telegram")} className="text-muted-foreground hover:text-foreground shrink-0" title="Copy Telegram">
+                      {copiedField === "telegram" ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+                    </button>
+                  )}
+                </div>
                 <div><span className="text-muted-foreground">{t("detail.age")}:</span> {detail.age || "—"}</div>
                 <div><span className="text-muted-foreground">{t("detail.city")}:</span> {detail.city || "—"}</div>
                 <div><span className="text-muted-foreground">{t("detail.school")}:</span> {detail.school || "—"}</div>
@@ -422,6 +469,17 @@ export default function CandidateDetailPage() {
                   <div><span className="text-muted-foreground">Major:</span> {majors.find((m) => m.tag === detail.major)?.en || detail.major}</div>
                 )}
               </div>
+              {/* Recommended major from analysis */}
+              {detail.analysis && detail.major && (
+                <div className="mt-3 pt-3 border-t flex items-start gap-2 text-sm bg-lime-50 dark:bg-lime-950/30 rounded-lg px-3 py-2">
+                  <Brain size={14} className="text-lime-600 dark:text-lime-400 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="font-medium text-lime-800 dark:text-lime-300">Recommended Major: </span>
+                    <span className="text-lime-700 dark:text-lime-400">{majors.find((m) => m.tag === detail.major)?.en || detail.major}</span>
+                    <p className="text-xs text-lime-600 dark:text-lime-500 mt-0.5">Based on essay themes and identified strengths</p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -562,6 +620,9 @@ export default function CandidateDetailPage() {
                 <Loader2 className="mx-auto text-purple-400 mb-3 animate-spin" size={32} />
                 <p className="text-purple-600 font-medium">{t("detail.analyzing")}</p>
                 <p className="text-sm text-muted-foreground mt-1">{t("detail.analyzing_wait")}</p>
+                <p className="text-2xl font-mono font-bold text-purple-500 mt-3">
+                  {String(Math.floor(analysisElapsed / 60)).padStart(2, "0")}:{String(analysisElapsed % 60).padStart(2, "0")}
+                </p>
               </CardContent>
             </Card>
           ) : (
@@ -855,7 +916,19 @@ export default function CandidateDetailPage() {
       {similarCandidates.length > 0 && (
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle className="text-base">Similar Candidates (±3% score)</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Similar Candidates (±3 pts)</CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const ids = [detail.id, ...similarCandidates.map((sc) => sc.id)].join(",");
+                  router.push(`/compare?ids=${ids}`);
+                }}
+              >
+                <GitCompare size={14} className="mr-1" /> Compare All
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

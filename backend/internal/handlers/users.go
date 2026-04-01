@@ -188,6 +188,10 @@ func UpdateProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		if req.Password != nil {
+			if err := validatePassword(*req.Password); err != nil {
+				c.JSON(400, gin.H{"error": err.Error()})
+				return
+			}
 			hash, err := bcrypt.GenerateFromPassword([]byte(*req.Password), 10)
 			if err != nil {
 				c.JSON(500, gin.H{"error": "failed to hash password"})

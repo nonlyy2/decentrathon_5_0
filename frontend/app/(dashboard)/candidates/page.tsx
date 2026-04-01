@@ -493,8 +493,8 @@ export default function CandidatesPage() {
 
       {/* Filter panel */}
       {showFilters && (
-        <div className="border border-border rounded-xl p-4 bg-card space-y-4 animate-fade-in" role="region" aria-label="Filter options">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="border border-border rounded-xl p-5 bg-card space-y-4 animate-fade-in" role="region" aria-label="Filter options">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             <RangeSlider
               label={t("filter.score_range")}
               min={0} max={100}

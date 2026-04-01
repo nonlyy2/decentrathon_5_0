@@ -402,10 +402,7 @@ func GetSimilarCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		margin := *score * 0.03
-		if margin < 1 {
-			margin = 1
-		}
+		margin := 3.0
 		lo := *score - margin
 		hi := *score + margin
 

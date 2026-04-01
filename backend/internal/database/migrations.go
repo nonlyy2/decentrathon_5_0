@@ -214,6 +214,9 @@ func RunMigrations(pool *pgxpool.Pool) error {
 
 		// GIN index for full-text search on essay+achievements
 		`CREATE INDEX IF NOT EXISTS idx_candidates_fts ON candidates USING GIN(to_tsvector('english', coalesce(essay,'') || ' ' || coalesce(achievements,'')))`,
+
+		// Analysis duration tracking
+		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0`,
 	}
 
 	for _, q := range queries {

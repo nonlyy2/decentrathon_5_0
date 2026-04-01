@@ -68,6 +68,10 @@ export default function ApplyPage() {
       setError(t("apply.major_required"));
       return;
     }
+    if (!photo) {
+      setError(t("apply.photo_required") || "Profile photo is required");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -216,7 +220,7 @@ export default function ApplyPage() {
 
               {/* Photo upload */}
               <section aria-labelledby="photo-section">
-                <h3 id="photo-section" className="font-semibold mb-1 text-foreground">{t("apply.photo")}</h3>
+                <h3 id="photo-section" className="font-semibold mb-1 text-foreground">{t("apply.photo")} <span className="text-red-500">*</span></h3>
                 <p className="text-xs text-muted-foreground mb-3">{t("apply.photo_desc")}</p>
                 <div className="flex items-start gap-4">
                   {photoPreview ? (

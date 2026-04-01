@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
+	"unicode"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/gin-gonic/gin"
@@ -11,11 +13,54 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// validatePassword enforces: min 8 chars, Latin letters only, 1 upper, 1 lower, 1 digit, 1 special
+func validatePassword(pw string) error {
+	if len(pw) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, ch := range pw {
+		switch {
+		case ch >= 'A' && ch <= 'Z':
+			hasUpper = true
+		case ch >= 'a' && ch <= 'z':
+			hasLower = true
+		case ch >= '0' && ch <= '9':
+			hasDigit = true
+		default:
+			if unicode.IsLetter(ch) && ch > 127 {
+				return fmt.Errorf("password must use Latin (English) letters only")
+			}
+			if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) {
+				hasSpecial = true
+			}
+		}
+	}
+	if !hasUpper {
+		return fmt.Errorf("password must contain at least one uppercase letter (A-Z)")
+	}
+	if !hasLower {
+		return fmt.Errorf("password must contain at least one lowercase letter (a-z)")
+	}
+	if !hasDigit {
+		return fmt.Errorf("password must contain at least one digit (0-9)")
+	}
+	if !hasSpecial {
+		return fmt.Errorf("password must contain at least one special character (!@#$%%^&* etc.)")
+	}
+	return nil
+}
+
 func Register(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.RegisterRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
+			return
+		}
+
+		if err := validatePassword(req.Password); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -27,10 +72,10 @@ func Register(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		var user models.User
 		err = pool.QueryRow(c.Request.Context(),
-			`INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3)
-			 RETURNING id, email, role, created_at`,
-			req.Email, string(hash), req.Role,
-		).Scan(&user.ID, &user.Email, &user.Role, &user.CreatedAt)
+			`INSERT INTO users (email, password_hash, role, full_name) VALUES ($1, $2, $3, $4)
+			 RETURNING id, email, full_name, role, created_at`,
+			req.Email, string(hash), req.Role, req.FullName,
+		).Scan(&user.ID, &user.Email, &user.FullName, &user.Role, &user.CreatedAt)
 
 		if err != nil {
 			if isDuplicateKey(err) {

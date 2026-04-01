@@ -17,7 +17,7 @@ type User struct {
 
 type RegisterRequest struct {
 	Email    string  `json:"email" binding:"required,email"`
-	Password string  `json:"password" binding:"required,min=6"`
+	Password string  `json:"password" binding:"required"`
 	Role     string  `json:"role" binding:"required,oneof=superadmin tech-admin auditor manager admin committee"`
 	FullName *string `json:"full_name"`
 }
@@ -35,7 +35,7 @@ type LoginResponse struct {
 type UpdateProfileRequest struct {
 	FullName *string `json:"full_name"`
 	Email    *string `json:"email" binding:"omitempty,email"`
-	Password *string `json:"password" binding:"omitempty,min=6"`
+	Password *string `json:"password" binding:"omitempty"`
 }
 
 type UpdateUserRequest struct {

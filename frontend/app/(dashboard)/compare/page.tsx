@@ -200,15 +200,15 @@ export default function ComparePage() {
       </div>
 
       {/* AI Selection Assistant */}
-      <Card className="border-purple-200 bg-purple-50/50">
+      <Card className="border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/30">
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2 text-purple-700">
+          <CardTitle className="text-base flex items-center gap-2 text-purple-700 dark:text-purple-300">
             <Sparkles size={16} /> {t("compare.ai_pick_title")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600">{t("compare.ai_pick_desc")}</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm text-foreground">{t("compare.ai_pick_desc")}</span>
             <Input
               type="number"
               min={1}
@@ -217,9 +217,9 @@ export default function ComparePage() {
               onChange={(e) => setSelectCount(Math.max(1, Math.min(ids.length - 1, Number(e.target.value))))}
               className="w-20 text-center"
             />
-            <span className="text-sm text-slate-400">/ {ids.length}</span>
+            <span className="text-sm text-muted-foreground">/ {ids.length}</span>
             <Button
-              className="bg-purple-600 hover:bg-purple-700 ml-2"
+              className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600 ml-2"
               onClick={handleAIPick}
               disabled={aiPicking}
             >
@@ -231,27 +231,27 @@ export default function ComparePage() {
 
           {aiResult && (
             <div className="space-y-3 pt-2">
-              <p className="text-sm font-semibold text-purple-700 flex items-center gap-1">
+              <p className="text-sm font-semibold text-purple-700 dark:text-purple-300 flex items-center gap-1">
                 <Trophy size={14} /> {t("compare.ai_result_title")}
               </p>
               <div className="space-y-2">
                 {aiResult.selected.map((item, i) => (
-                  <div key={item.id} className="flex items-start gap-3 bg-white rounded-lg border border-purple-100 p-3">
-                    <span className="text-lg font-bold text-purple-400 w-6 text-center">#{i + 1}</span>
+                  <div key={item.id} className="flex items-start gap-3 bg-card rounded-lg border border-purple-200 dark:border-purple-800 p-3">
+                    <span className="text-lg font-bold text-purple-400 dark:text-purple-500 w-6 text-center">#{i + 1}</span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{item.name}</span>
-                        <span className="text-xs text-purple-600 font-semibold">{item.score.toFixed(1)}</span>
+                        <span className="font-medium text-sm text-foreground">{item.name}</span>
+                        <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold">{item.score.toFixed(1)}</span>
                       </div>
-                      <p className="text-xs text-slate-600 mt-0.5">{item.reason}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.reason}</p>
                     </div>
                   </div>
                 ))}
               </div>
               {aiResult.overall_reasoning && (
-                <div className="bg-white rounded-lg border border-purple-100 p-3">
-                  <p className="text-xs font-medium text-purple-600 mb-1">{t("compare.ai_overall")}</p>
-                  <p className="text-sm text-slate-600">{aiResult.overall_reasoning}</p>
+                <div className="bg-card rounded-lg border border-purple-200 dark:border-purple-800 p-3">
+                  <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1">{t("compare.ai_overall")}</p>
+                  <p className="text-sm text-foreground">{aiResult.overall_reasoning}</p>
                 </div>
               )}
             </div>

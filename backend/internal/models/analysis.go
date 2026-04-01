@@ -25,6 +25,7 @@ type Analysis struct {
 	RedFlags                 []string  `json:"red_flags"`
 	AnalyzedAt               time.Time `json:"analyzed_at"`
 	ModelUsed                string    `json:"model_used"`
+	DurationMs               int       `json:"duration_ms"`
 }
 
 func (a *Analysis) IsHighRisk() bool {

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { UserCog, Plus, Pencil, Trash2, Shield } from "lucide-react";
+import { UserCog, Plus, Pencil, Trash2, Shield, Eye, EyeOff } from "lucide-react";
 
 interface UserItem {
   id: number;
@@ -52,6 +52,15 @@ export default function UsersPage() {
   const [registerOpen, setRegisterOpen] = useState(false);
   const [regForm, setRegForm] = useState({ email: "", password: "", role: "manager", full_name: "" });
   const [registering, setRegistering] = useState(false);
+  const [showRegPw, setShowRegPw] = useState(false);
+
+  const PW_RULES = [
+    { test: (p: string) => p.length >= 8, text: "At least 8 characters" },
+    { test: (p: string) => /[A-Z]/.test(p), text: "One uppercase letter (A-Z)" },
+    { test: (p: string) => /[a-z]/.test(p), text: "One lowercase letter (a-z)" },
+    { test: (p: string) => /[0-9]/.test(p), text: "One digit (0-9)" },
+    { test: (p: string) => /[^A-Za-z0-9]/.test(p), text: "One special character (!@#$…)" },
+  ];
 
   const myRole = user?.role ?? "manager";
   const myLevel = ROLE_LEVEL[myRole] ?? 0;
@@ -301,7 +310,29 @@ export default function UsersPage() {
             </div>
             <div>
               <Label>{t("users.password")}</Label>
-              <Input type="password" value={regForm.password} onChange={(e) => setRegForm({ ...regForm, password: e.target.value })} className="mt-1" autoComplete="new-password" required />
+              <div className="relative mt-1">
+                <Input
+                  type={showRegPw ? "text" : "password"}
+                  value={regForm.password}
+                  onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
+                  className="pr-10"
+                  autoComplete="new-password"
+                  required
+                />
+                <button type="button" onClick={() => setShowRegPw(!showRegPw)} tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showRegPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {regForm.password && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {PW_RULES.map((r) => (
+                    <li key={r.text} className={`text-xs flex items-center gap-1 ${r.test(regForm.password) ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                      <span>{r.test(regForm.password) ? "✓" : "○"}</span>{r.text}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div>
               <Label>{t("users.role")}</Label>

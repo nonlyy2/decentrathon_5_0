@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/gin-gonic/gin"
@@ -123,14 +124,14 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
 		 final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
 		 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
-		 summary, key_strengths, red_flags, model_used)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+		 summary, key_strengths, red_flags, model_used, duration_ms)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
 		analysis.CandidateID, analysis.ScoreLeadership, analysis.ScoreMotivation, analysis.ScoreGrowth,
 		analysis.ScoreVision, analysis.ScoreCommunication, analysis.FinalScore, analysis.Category,
 		analysis.AIGeneratedRisk, analysis.AIGeneratedScore, analysis.IncompleteFlag,
 		analysis.ExplanationLeadership, analysis.ExplanationMotivation, analysis.ExplanationGrowth,
 		analysis.ExplanationVision, analysis.ExplanationCommunication,
-		analysis.Summary, analysis.KeyStrengths, analysis.RedFlags, analysis.ModelUsed)
+		analysis.Summary, analysis.KeyStrengths, analysis.RedFlags, analysis.ModelUsed, analysis.DurationMs)
 
 	if err != nil {
 		return err
@@ -212,33 +213,38 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 		}
 
 		// Mark as running and return immediately — analysis runs in background
-		candidateAnalyses.Store(candidateID, candidateAnalysisState{Running: true})
-		c.JSON(202, gin.H{"message": "analysis started"})
+		startedAt := time.Now()
+		candidateAnalyses.Store(candidateID, candidateAnalysisState{Running: true, StartedAt: startedAt})
+		c.JSON(202, gin.H{"message": "analysis started", "started_at": startedAt.UnixMilli()})
 
 		go func(cand models.Candidate) {
 			ctx := context.Background()
 			analysis, err := analyzeFunc(ctx, &cand)
+			durMs := int(time.Since(startedAt).Milliseconds())
 			if err != nil {
-				log.Printf("Analysis failed for candidate %d: %v", cand.ID, err)
-				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: err.Error()})
+				log.Printf("Analysis failed for candidate %d after %dms: %v", cand.ID, durMs, err)
+				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: err.Error(), DurationMs: durMs})
 				return
 			}
+			analysis.DurationMs = durMs
 			if err := SaveAnalysis(ctx, pool, analysis); err != nil {
 				log.Printf("Save failed for candidate %d: %v", cand.ID, err)
-				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: "failed to save analysis"})
+				candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: true, ErrMsg: "failed to save analysis", DurationMs: durMs})
 				return
 			}
-			candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: false})
-			log.Printf("Analysis completed for candidate %d", cand.ID)
+			candidateAnalyses.Store(cand.ID, candidateAnalysisState{Running: false, Failed: false, DurationMs: durMs})
+			log.Printf("Analysis completed for candidate %d in %dms", cand.ID, durMs)
 		}(candidate)
 	}
 }
 
 // Per-candidate async analysis tracking
 type candidateAnalysisState struct {
-	Running bool
-	Failed  bool
-	ErrMsg  string
+	Running    bool
+	Failed     bool
+	ErrMsg     string
+	StartedAt  time.Time
+	DurationMs int
 }
 
 var candidateAnalyses sync.Map // map[int]candidateAnalysisState
@@ -252,14 +258,22 @@ func GetCandidateAnalysisStatus() gin.HandlerFunc {
 		}
 		if raw, ok := candidateAnalyses.Load(candidateID); ok {
 			state := raw.(candidateAnalysisState)
+			elapsed := 0
+			if state.Running && !state.StartedAt.IsZero() {
+				elapsed = int(time.Since(state.StartedAt).Milliseconds())
+			} else {
+				elapsed = state.DurationMs
+			}
 			c.JSON(200, gin.H{
-				"running": state.Running,
-				"failed":  state.Failed,
-				"error":   state.ErrMsg,
+				"running":     state.Running,
+				"failed":      state.Failed,
+				"error":       state.ErrMsg,
+				"elapsed_ms":  elapsed,
+				"duration_ms": state.DurationMs,
 			})
 			return
 		}
-		c.JSON(200, gin.H{"running": false, "failed": false, "error": ""})
+		c.JSON(200, gin.H{"running": false, "failed": false, "error": "", "elapsed_ms": 0, "duration_ms": 0})
 	}
 }
 
