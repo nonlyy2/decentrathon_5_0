@@ -18,7 +18,21 @@ func NoCacheMiddleware() gin.HandlerFunc {
 }
 
 func CORSMiddleware(allowOrigins string) gin.HandlerFunc {
+	// "*" is incompatible with AllowCredentials:true per the CORS spec.
+	// Since we use JWT Bearer tokens (not cookies), credentials mode is not required.
+	if allowOrigins == "*" || allowOrigins == "" {
+		return cors.New(cors.Config{
+			AllowAllOrigins: true,
+			AllowMethods:    []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+			AllowHeaders:    []string{"Origin", "Content-Type", "Authorization", "Cache-Control", "Pragma"},
+			ExposeHeaders:   []string{"X-Total-Count"},
+			MaxAge:          12 * time.Hour,
+		})
+	}
 	origins := strings.Split(allowOrigins, ",")
+	for i := range origins {
+		origins[i] = strings.TrimSpace(origins[i])
+	}
 	return cors.New(cors.Config{
 		AllowOrigins:     origins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

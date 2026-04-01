@@ -41,11 +41,13 @@ type Config struct {
 func Load() *Config {
 	godotenv.Load()
 	return &Config{
-		Port:         getEnv("PORT", "8080"),
-		DatabaseURL:  getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/invisionu?sslmode=disable"),
+		Port: getEnv("PORT", "8080"),
+		// Railway injects DATABASE_URL automatically when a Postgres service is linked.
+		// Falls back to POSTGRES_URL / DATABASE_PUBLIC_URL for other Railway configurations.
+		DatabaseURL:  getEnvMulti("DATABASE_URL", "POSTGRES_URL", "DATABASE_PUBLIC_URL", "postgres://postgres:postgres@localhost:5432/invisionu?sslmode=disable"),
 		JWTSecret:    getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
-		AllowOrigins: getEnv("ALLOW_ORIGINS", "http://localhost:3000"),
+		AllowOrigins: getEnv("ALLOW_ORIGINS", "*"),
 		AIProvider:   getEnv("AI_PROVIDER", "gemini"),
 		OllamaURL:    getEnv("OLLAMA_URL", "http://localhost:11434"),
 		OllamaModel:  getEnv("OLLAMA_MODEL", "mistral:7b"),
@@ -61,7 +63,7 @@ func Load() *Config {
 		SMTPHost:     getEnv("SMTP_HOST", ""),
 		SMTPPort:     getEnvInt("SMTP_PORT", 587),
 		SMTPUser:     getEnv("SMTP_USER", ""),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPPassword: getEnvMulti("SMTP_PASSWORD", "SMTP_PASS", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", "noreply@invisionu.kz"),
 
 		UploadDir: getEnv("UPLOAD_DIR", "./uploads"),
