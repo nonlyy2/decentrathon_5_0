@@ -1,5 +1,9 @@
 # Environment
 .env
+
+# Go workspace (local only)
+go.work
+go.work.sum
 .env.local
 .env.production
 backend/.env
