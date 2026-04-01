@@ -4,19 +4,58 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var phoneRegex = regexp.MustCompile(`^\+?[0-9\s\-()]+$`)
+var telegramRegex = regexp.MustCompile(`^@?[a-zA-Z0-9_]+$`)
+
+func validateCandidateFields(req *models.CreateCandidateRequest) map[string]string {
+	errs := map[string]string{}
+
+	// Phone: only digits, spaces, +, -, ()
+	if req.Phone != "" && !phoneRegex.MatchString(req.Phone) {
+		errs["Phone"] = "phone must contain only digits and + - ( ) characters"
+	}
+
+	// Telegram: only latin letters, digits, underscore (no cyrillic)
+	if req.Telegram != "" {
+		tg := strings.TrimPrefix(req.Telegram, "@")
+		if !telegramRegex.MatchString(tg) {
+			errs["Telegram"] = "telegram username must contain only Latin letters, digits, and underscores"
+		}
+	}
+
+	// City: no digits
+	if req.City != "" {
+		for _, ch := range req.City {
+			if unicode.IsDigit(ch) {
+				errs["City"] = "city name must not contain digits"
+				break
+			}
+		}
+	}
+
+	return errs
+}
+
 func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.CreateCandidateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
+			return
+		}
+
+		if errs := validateCandidateFields(&req); len(errs) > 0 {
+			c.JSON(400, ErrorResponse{Error: "validation failed", Details: errs})
 			return
 		}
 
@@ -51,6 +90,11 @@ func SubmitApplication(pool *pgxpool.Pool, emailSvc ...*EmailService) gin.Handle
 		var req models.CreateCandidateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
+			return
+		}
+
+		if errs := validateCandidateFields(&req); len(errs) > 0 {
+			c.JSON(400, ErrorResponse{Error: "validation failed", Details: errs})
 			return
 		}
 

@@ -560,7 +560,11 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("From the %d candidates below, pick the top %d:\n\n", len(cands), req.SelectCount))
 		for i, r := range cands {
-			sb.WriteString(fmt.Sprintf("[%d] %s | Score: %.1f | %s\n    %s\n", i, r.Name, r.FinalScore, r.Category, r.Summary))
+			summary := r.Summary
+			if len(summary) > 300 {
+				summary = summary[:300] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("[%d] %s | Score: %.1f | %s\n    %s\n", i, r.Name, r.FinalScore, r.Category, summary))
 			if len(r.Strengths) > 0 {
 				sb.WriteString(fmt.Sprintf("    Strengths: %s\n", strings.Join(r.Strengths, "; ")))
 			}
@@ -575,6 +579,25 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			return
 		}
 
+		// Strip markdown code fences if present
+		cleaned := strings.TrimSpace(responseText)
+		if strings.HasPrefix(cleaned, "```") {
+			if idx := strings.Index(cleaned, "\n"); idx >= 0 {
+				cleaned = cleaned[idx+1:]
+			}
+			if idx := strings.LastIndex(cleaned, "```"); idx >= 0 {
+				cleaned = cleaned[:idx]
+			}
+			cleaned = strings.TrimSpace(cleaned)
+		}
+		// Extract JSON object
+		if idx := strings.Index(cleaned, "{"); idx > 0 {
+			cleaned = cleaned[idx:]
+		}
+		if idx := strings.LastIndex(cleaned, "}"); idx >= 0 && idx < len(cleaned)-1 {
+			cleaned = cleaned[:idx+1]
+		}
+
 		var parsed struct {
 			Selected []struct {
 				Index  int    `json:"index"`
@@ -582,7 +605,8 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			} `json:"selected"`
 			OverallReasoning string `json:"overall_reasoning"`
 		}
-		if err := json.Unmarshal([]byte(responseText), &parsed); err != nil {
+		if err := json.Unmarshal([]byte(cleaned), &parsed); err != nil {
+			log.Printf("AI recommend parse error: %v (raw: %.500s)", err, responseText)
 			c.JSON(500, gin.H{"error": "failed to parse AI response"})
 			return
 		}

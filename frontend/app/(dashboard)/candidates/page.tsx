@@ -107,6 +107,11 @@ export default function CandidatesPage() {
   const [deleting, setDeleting] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Import CSV
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+
   // Auto-accept
   const [autoAcceptOpen, setAutoAcceptOpen] = useState(false);
   const [autoAcceptCount, setAutoAcceptCount] = useState("10");

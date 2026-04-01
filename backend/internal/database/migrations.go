@@ -196,6 +196,11 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS combined_score NUMERIC(5,2)`,
 
 		// users: role constraint updated (drop old check, add new)
+		`DO $$ BEGIN
+			ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+			ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('superadmin','tech-admin','auditor','manager','admin','committee'));
+		EXCEPTION WHEN OTHERS THEN NULL;
+		END $$`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512)`,
 

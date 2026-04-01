@@ -72,6 +72,24 @@ export default function ApplyPage() {
       setError(t("apply.photo_required") || "Profile photo is required");
       return;
     }
+    // Validate phone: digits, +, -, spaces, parentheses only
+    if (form.phone && !/^\+?[0-9\s\-()]+$/.test(form.phone)) {
+      setError(t("apply.phone_invalid"));
+      return;
+    }
+    // Validate telegram: latin letters, digits, underscore only (no cyrillic)
+    if (form.telegram) {
+      const tg = form.telegram.replace(/^@/, "");
+      if (!/^[a-zA-Z0-9_]+$/.test(tg)) {
+        setError(t("apply.telegram_invalid"));
+        return;
+      }
+    }
+    // Validate city: no digits
+    if (form.city && /\d/.test(form.city)) {
+      setError(t("apply.city_invalid"));
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -421,6 +439,9 @@ const APPLY_TRANSLATIONS: Record<Lang, Record<string, string>> = {
     "apply.disability": "Disability / Accessibility Needs",
     "apply.disability_desc": "Optional. Not used in scoring — only for accommodation during interviews.",
     "apply.disability_ph": "e.g. visual impairment, hearing difficulty...",
+    "apply.phone_invalid": "Phone must contain only digits and + - ( ) characters",
+    "apply.telegram_invalid": "Telegram username must contain only Latin letters, digits, and underscores",
+    "apply.city_invalid": "City name must not contain digits",
     "apply.submit": "Submit Application",
     "apply.submitting": "Submitting...",
     "apply.error": "Something went wrong. Please try again.",
@@ -472,6 +493,9 @@ const APPLY_TRANSLATIONS: Record<Lang, Record<string, string>> = {
     "apply.disability": "Особые потребности / Доступность",
     "apply.disability_desc": "Необязательно. Не влияет на оценку — только для адаптации во время собеседования.",
     "apply.disability_ph": "напр. нарушение зрения, слуха...",
+    "apply.phone_invalid": "Телефон должен содержать только цифры и символы + - ( )",
+    "apply.telegram_invalid": "Telegram имя пользователя должно содержать только латинские буквы, цифры и подчёркивания",
+    "apply.city_invalid": "Название города не должно содержать цифры",
     "apply.submit": "Отправить заявку",
     "apply.submitting": "Отправка...",
     "apply.error": "Что-то пошло не так. Попробуйте ещё раз.",
@@ -523,6 +547,9 @@ const APPLY_TRANSLATIONS: Record<Lang, Record<string, string>> = {
     "apply.disability": "Мүмкіндіктері шектеулі / Қолжетімділік",
     "apply.disability_desc": "Міндетті емес. Бағалауға әсер етпейді — тек сұхбат кезінде бейімдеу үшін.",
     "apply.disability_ph": "мысалы, көру, есту қиындықтары...",
+    "apply.phone_invalid": "Телефон тек сандар мен + - ( ) таңбаларынан тұруы керек",
+    "apply.telegram_invalid": "Telegram пайдаланушы аты тек латын әріптерінен, сандардан және астын сызудан тұруы керек",
+    "apply.city_invalid": "Қала атауында сандар болмауы керек",
     "apply.submit": "Өтінімді жіберу",
     "apply.submitting": "Жіберілуде...",
     "apply.error": "Бірдеңе дұрыс болмады. Қайталап көріңіз.",
