@@ -92,15 +92,35 @@ func FetchTranscript(videoID string) (string, error) {
 	return fetchTimedText(best.BaseURL)
 }
 
-// extractCaptionTracks pulls the captionTracks array out of the page JS.
-var captionTracksRe = regexp.MustCompile(`"captionTracks":(\[.*?\])`)
+// extractCaptionTracks pulls caption tracks from ytInitialPlayerResponse.
+var (
+	captionTracksRe = regexp.MustCompile(`(?s)"captionTracks"\s*:\s*(\[.*?\])`)
+	initRespMarkers = []string{
+		"ytInitialPlayerResponse = ",
+		"var ytInitialPlayerResponse = ",
+		"window[\"ytInitialPlayerResponse\"] = ",
+	}
+)
 
 func extractCaptionTracks(page string) ([]captionTrack, error) {
+	if initialJSON := extractInitialPlayerResponseJSON(page); initialJSON != "" {
+		var parsed struct {
+			Captions struct {
+				PlayerCaptionsTracklistRenderer struct {
+					CaptionTracks []captionTrack `json:"captionTracks"`
+				} `json:"playerCaptionsTracklistRenderer"`
+			} `json:"captions"`
+		}
+		if err := json.Unmarshal([]byte(initialJSON), &parsed); err == nil && len(parsed.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks) > 0 {
+			return parsed.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks, nil
+		}
+	}
+
+	// Fallback for alternative page layouts.
 	m := captionTracksRe.FindStringSubmatch(page)
 	if len(m) < 2 {
 		return nil, fmt.Errorf("captionTracks not found in page")
 	}
-	// Unescape unicode sequences that YouTube embeds
 	raw := strings.ReplaceAll(m[1], `\u0026`, "&")
 
 	var tracks []captionTrack
@@ -108,6 +128,61 @@ func extractCaptionTracks(page string) ([]captionTrack, error) {
 		return nil, fmt.Errorf("failed to parse captionTracks: %w", err)
 	}
 	return tracks, nil
+}
+
+func extractInitialPlayerResponseJSON(page string) string {
+	for _, marker := range initRespMarkers {
+		idx := strings.Index(page, marker)
+		if idx == -1 {
+			continue
+		}
+		start := strings.Index(page[idx+len(marker):], "{")
+		if start == -1 {
+			continue
+		}
+		start += idx + len(marker)
+		return extractBalancedJSONObject(page[start:])
+	}
+	return ""
+}
+
+func extractBalancedJSONObject(s string) string {
+	if s == "" || s[0] != '{' {
+		return ""
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		if ch == '"' {
+			inString = true
+			continue
+		}
+		if ch == '{' {
+			depth++
+		} else if ch == '}' {
+			depth--
+			if depth == 0 {
+				return s[:i+1]
+			}
+		}
+	}
+	return ""
 }
 
 func chooseBestTrack(tracks []captionTrack) *captionTrack {
