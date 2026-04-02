@@ -107,8 +107,7 @@ func fetchTimedText(baseURL string) (string, error) {
 }
 
 // extractCaptionTracks pulls the captionTracks array out of the page JS.
-var captionTracksRe = regexp.MustCompile(`"captionTracks":(\[.*?\])`)
-
+var captionTracksRe = regexp.MustCompile(`"captionTracks":\s*(\[.*?\])\s*,\s*"[a-zA-Z0-9_]+":`)
 func extractCaptionTracks(page string) ([]captionTrack, error) {
 	m := captionTracksRe.FindStringSubmatch(page)
 	if len(m) < 2 {
@@ -214,6 +213,12 @@ func ValidateAndFetch(rawURL string) (transcript string, isValid bool, err error
 		return "", false, fmt.Errorf("video is private, deleted, or not accessible")
 	}
 
-	transcript, _ = FetchTranscript(videoID)
+	// Перестаем игнорировать ошибку!
+	transcript, err = FetchTranscript(videoID)
+	if err != nil {
+		// Возвращаем isValid = true (видео доступно), но с ошибкой парсинга
+		return "", true, fmt.Errorf("failed to extract transcript: %w", err) 
+	}
+	
 	return transcript, true, nil
 }
