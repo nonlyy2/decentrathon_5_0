@@ -308,9 +308,11 @@ export default function CandidateDetailPage() {
         city: editForm.city || null,
         school: editForm.school || null,
         graduation_year: editForm.graduation_year ? parseInt(editForm.graduation_year) : null,
-        // essay and motivation_statement are intentionally not sent — managers cannot edit candidate essays
+        // preserve unchanged fields — managers cannot edit essays/achievements
         essay: detail?.essay ?? "",
         motivation_statement: detail?.motivation_statement || null,
+        achievements: detail?.achievements || null,
+        extracurriculars: detail?.extracurriculars || null,
         major: editForm.major || null,
         youtube_url: editForm.youtube_url || null,
       });
@@ -592,15 +594,41 @@ export default function CandidateDetailPage() {
                 </CardHeader>
               </button>
               {transcriptExpanded && (
-                <CardContent>
+                <CardContent className="space-y-3">
                   {detail.youtube_transcript ? (
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
-                      {detail.youtube_transcript}
-                    </p>
-                  ) : detail.youtube_url_valid === false ? (
-                    <p className="text-sm text-red-500">Transcript unavailable — the video link is invalid or inaccessible.</p>
+                    <>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+                        {detail.youtube_transcript}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={async () => {
+                          try {
+                            const res = await api.post(`/candidates/${params.id}/fetch-transcript`);
+                            toast.success(res.data.message || "Transcript refreshed");
+                            refetch();
+                          } catch (e: unknown) {
+                            const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to fetch transcript";
+                            toast.error(msg);
+                          }
+                        }}
+                      >
+                        <Loader2 size={12} className="mr-1" /> Refresh Transcript
+                      </Button>
+                    </>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No transcript available for this video (auto-captions may be disabled).</p>
+                    <div className="space-y-3">
+                      {detail.youtube_url_valid === false ? (
+                        <p className="text-sm text-red-500">Transcript unavailable — the video link is invalid or inaccessible.</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Transcript not yet fetched. Click the button below to retrieve captions from YouTube.
+                        </p>
+                      )}
+                      <FetchTranscriptButton candidateId={params.id as string} onDone={refetch} />
+                    </div>
                   )}
                 </CardContent>
               )}
@@ -1340,6 +1368,38 @@ export default function CandidateDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function FetchTranscriptButton({ candidateId, onDone }: { candidateId: string; onDone: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const handleFetch = async () => {
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await api.post(`/candidates/${candidateId}/fetch-transcript`);
+      setMsg({ text: res.data.message || "Done", ok: true });
+      onDone();
+    } catch (e: unknown) {
+      const err = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || "Failed to fetch transcript";
+      setMsg({ text: err, ok: false });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Button size="sm" variant="outline" onClick={handleFetch} disabled={loading}>
+        {loading ? <Loader2 size={12} className="animate-spin mr-1" /> : null}
+        {loading ? "Fetching…" : "Fetch Transcript from YouTube"}
+      </Button>
+      {msg && (
+        <p className={`text-xs ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>
+      )}
     </div>
   );
 }

@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, GraduationCap, Globe, Rocket, ArrowLeft, Upload, AlertTriangle, X, ChevronDown } from "lucide-react";
+import { CheckCircle, GraduationCap, Globe, Rocket, ArrowLeft, Upload, AlertTriangle, X, ChevronDown, Accessibility } from "lucide-react";
+import { getAccessibilityMode, applyAccessibilityMode } from "@/lib/accessibility";
 
 const publicApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api",
@@ -26,6 +27,7 @@ type Lang = "en" | "ru" | "kk";
 export default function ApplyPage() {
   const [lang, setLang] = useState<Lang>("en");
   const [majors, setMajors] = useState<MajorOption[]>([]);
+  const [a11y, setA11y] = useState(false);
   const [form, setForm] = useState({
     full_name: "", email: "", phone: "", telegram: "", age: "", city: "", school: "",
     graduation_year: "", achievements: "", extracurriculars: "",
@@ -42,7 +44,14 @@ export default function ApplyPage() {
     publicApi.get<MajorOption[]>("/majors").then((r) => setMajors(r.data)).catch(() => {});
     const saved = localStorage.getItem("apply_lang") as Lang;
     if (saved) setLang(saved);
+    setA11y(getAccessibilityMode());
   }, []);
+
+  const toggleA11y = () => {
+    const next = !a11y;
+    setA11y(next);
+    applyAccessibilityMode(next);
+  };
 
   const switchLang = (l: Lang) => { setLang(l); localStorage.setItem("apply_lang", l); };
   const update = (field: string, value: string) => setForm({ ...form, [field]: value });
@@ -166,8 +175,20 @@ export default function ApplyPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Language selector strip */}
-      <div className="flex justify-end items-center gap-2 px-6 pt-4">
+      {/* Language selector strip + accessibility */}
+      <div className="flex justify-end items-center gap-2 px-6 pt-4 flex-wrap">
+        <button
+          onClick={toggleA11y}
+          aria-pressed={a11y}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+            a11y
+              ? "bg-foreground text-background border-foreground"
+              : "border-border text-muted-foreground hover:border-primary hover:text-foreground"
+          }`}
+        >
+          <Accessibility size={12} />
+          {a11y ? "Обычный режим" : "Перейти в режим для слабовидящих"}
+        </button>
         {(["en", "ru", "kk"] as const).map((l) => (
           <button
             key={l}

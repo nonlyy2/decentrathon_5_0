@@ -151,6 +151,7 @@ func main() {
 		protected.PATCH("/candidates/:id", handlers.UpdateCandidate(pool))
 		protected.DELETE("/candidates/:id", handlers.DeleteCandidate(pool))
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
+		protected.POST("/candidates/:id/fetch-transcript", handlers.FetchTranscriptManually(pool))
 
 		// Analysis
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))

@@ -462,6 +462,49 @@ func UpdateCandidateKeywords(pool *pgxpool.Pool, candidateID int, keywords []str
 	return err
 }
 
+// FetchTranscriptManually re-validates the YouTube URL and fetches/refreshes the transcript.
+// POST /candidates/:id/fetch-transcript
+func FetchTranscriptManually(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "invalid candidate id"})
+			return
+		}
+
+		var youtubeURL *string
+		err = pool.QueryRow(c.Request.Context(),
+			`SELECT youtube_url FROM candidates WHERE id = $1`, id).Scan(&youtubeURL)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "candidate not found"})
+			return
+		}
+		if youtubeURL == nil || *youtubeURL == "" {
+			c.JSON(400, gin.H{"error": "no YouTube URL on this candidate"})
+			return
+		}
+
+		transcript, isValid, fetchErr := youtube.ValidateAndFetch(*youtubeURL)
+		var transcriptVal *string
+		if transcript != "" {
+			transcriptVal = &transcript
+		}
+		pool.Exec(c.Request.Context(),
+			`UPDATE candidates SET youtube_url_valid=$1, youtube_transcript=$2 WHERE id=$3`,
+			isValid, transcriptVal, id)
+
+		if !isValid {
+			c.JSON(422, gin.H{"error": fetchErr.Error(), "youtube_url_valid": false})
+			return
+		}
+		if transcript == "" {
+			c.JSON(200, gin.H{"message": "Video is accessible but no transcript/captions are available", "youtube_url_valid": true, "youtube_transcript": nil})
+			return
+		}
+		c.JSON(200, gin.H{"message": "Transcript fetched successfully", "youtube_url_valid": true, "youtube_transcript": transcript})
+	}
+}
+
 // GetSimilarCandidates returns candidates whose score is within ±3% of the given candidate.
 func GetSimilarCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {

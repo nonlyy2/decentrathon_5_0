@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, EyeOff, Accessibility } from "lucide-react";
+import { getAccessibilityMode, applyAccessibilityMode } from "@/lib/accessibility";
 
 const FAQ_ITEMS = [
   {
@@ -46,8 +47,17 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [a11y, setA11y] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
+
+  useEffect(() => { setA11y(getAccessibilityMode()); }, []);
+
+  const toggleA11y = () => {
+    const next = !a11y;
+    setA11y(next);
+    applyAccessibilityMode(next);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +88,23 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center bg-slate-950 p-4">
+      {/* Accessibility button — always visible top-right */}
+      <div className="fixed top-3 right-3 z-50">
+        <button
+          onClick={toggleA11y}
+          className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
+            a11y
+              ? "bg-white text-black border-white"
+              : "bg-slate-800 text-slate-300 border-slate-600 hover:border-white hover:text-white"
+          }`}
+          aria-pressed={a11y}
+          title="Режим для слабовидящих"
+        >
+          <Accessibility size={15} />
+          {a11y ? "Обычный режим" : "Перейти в режим для слабовидящих"}
+        </button>
+      </div>
+
       {!showAdmin ? (
         <div className="w-full max-w-2xl space-y-10 py-12">
           {/* Hero */}
