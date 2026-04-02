@@ -47,6 +47,9 @@ func BuildPrompt(c *models.Candidate) string {
 	if c.GraduationYear != nil {
 		sb.WriteString(fmt.Sprintf("Graduation Year: %d\n", *c.GraduationYear))
 	}
+	if c.Major != nil {
+		sb.WriteString(fmt.Sprintf("Candidate's Chosen Major: %s\n", *c.Major))
+	}
 
 	if c.Achievements != nil && *c.Achievements != "" {
 		sb.WriteString(fmt.Sprintf("\nAchievements:\n%s\n", *c.Achievements))
@@ -82,7 +85,9 @@ Respond with ONLY this JSON object. Fill every field.
   "explanation_vision": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
   "explanation_communication": "<1-2 sentences with evidence. Quote the application in double quotes where possible.>",
   "key_strengths": ["<strength 1>", "<strength 2>"],
-  "red_flags": []
+  "red_flags": [],
+  "recommended_major": "<one of: Engineering|Tech|Society|Policy Reform|Art + Media>",
+  "major_reason_note": "<1 sentence if differs from chosen major, else empty string>"
 }`)
 
 	return sb.String()

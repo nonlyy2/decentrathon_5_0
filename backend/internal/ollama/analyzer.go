@@ -76,7 +76,7 @@ func toAnalysis(r *OllamaAnalysisResponse, candidateID int, modelUsed string) *m
 		float64(r.ScoreVision)*0.15+
 		float64(r.ScoreCommunication)*0.15)*100) / 100
 
-	return &models.Analysis{
+	a := &models.Analysis{
 		CandidateID:              candidateID,
 		ScoreLeadership:          r.ScoreLeadership,
 		ScoreMotivation:          r.ScoreMotivation,
@@ -98,4 +98,11 @@ func toAnalysis(r *OllamaAnalysisResponse, candidateID int, modelUsed string) *m
 		RedFlags:                 r.RedFlags,
 		ModelUsed:                modelUsed,
 	}
+	if r.RecommendedMajor != "" {
+		a.RecommendedMajor = &r.RecommendedMajor
+	}
+	if r.MajorReasonNote != "" {
+		a.MajorReasonNote = &r.MajorReasonNote
+	}
+	return a
 }

@@ -308,10 +308,9 @@ export default function CandidateDetailPage() {
         city: editForm.city || null,
         school: editForm.school || null,
         graduation_year: editForm.graduation_year ? parseInt(editForm.graduation_year) : null,
-        achievements: editForm.achievements || null,
-        extracurriculars: editForm.extracurriculars || null,
-        essay: editForm.essay,
-        motivation_statement: editForm.motivation_statement || null,
+        // essay and motivation_statement are intentionally not sent — managers cannot edit candidate essays
+        essay: detail?.essay ?? "",
+        motivation_statement: detail?.motivation_statement || null,
         major: editForm.major || null,
         youtube_url: editForm.youtube_url || null,
       });
@@ -487,14 +486,29 @@ export default function CandidateDetailPage() {
                   <div><span className="text-muted-foreground">Major:</span> {majors.find((m) => m.tag === detail.major)?.en || detail.major}</div>
                 )}
               </div>
-              {/* Recommended major from analysis */}
-              {detail.analysis && detail.major && (
-                <div className="mt-3 pt-3 border-t flex items-start gap-2 text-sm bg-lime-50 dark:bg-lime-950/30 rounded-lg px-3 py-2">
-                  <Brain size={14} className="text-lime-600 dark:text-lime-400 mt-0.5 shrink-0" />
+              {/* Recommended major from AI analysis */}
+              {detail.analysis?.recommended_major && (
+                <div className={`mt-3 pt-3 border-t flex items-start gap-2 text-sm rounded-lg px-3 py-2 ${
+                  detail.analysis.recommended_major !== detail.major
+                    ? "bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800"
+                    : "bg-lime-50 dark:bg-lime-950/30"
+                }`}>
+                  <Brain size={14} className={`mt-0.5 shrink-0 ${detail.analysis.recommended_major !== detail.major ? "text-amber-600 dark:text-amber-400" : "text-lime-600 dark:text-lime-400"}`} />
                   <div>
-                    <span className="font-medium text-lime-800 dark:text-lime-300">Recommended Major: </span>
-                    <span className="text-lime-700 dark:text-lime-400">{majors.find((m) => m.tag === detail.major)?.en || detail.major}</span>
-                    <p className="text-xs text-lime-600 dark:text-lime-500 mt-0.5">Based on essay themes and identified strengths</p>
+                    <span className={`font-medium ${detail.analysis.recommended_major !== detail.major ? "text-amber-800 dark:text-amber-300" : "text-lime-800 dark:text-lime-300"}`}>
+                      AI Recommended Major:{" "}
+                    </span>
+                    <span className={detail.analysis.recommended_major !== detail.major ? "text-amber-700 dark:text-amber-400" : "text-lime-700 dark:text-lime-400"}>
+                      {majors.find((m) => m.tag === detail.analysis!.recommended_major)?.en || detail.analysis.recommended_major}
+                    </span>
+                    {detail.analysis.recommended_major !== detail.major && detail.major && (
+                      <span className="text-xs text-amber-600 dark:text-amber-500 ml-1">
+                        (applied for: {majors.find((m) => m.tag === detail.major)?.en || detail.major})
+                      </span>
+                    )}
+                    {detail.analysis.major_reason_note && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{detail.analysis.major_reason_note}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -820,6 +834,39 @@ export default function CandidateDetailPage() {
                           <span>Interview finished but not yet evaluated.</span>
                         )}
                       </div>
+                      {isTrulyActive && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-600 dark:text-orange-300 dark:hover:bg-orange-900/50"
+                          onClick={async () => {
+                            if (!confirm("Force-evaluate this incomplete interview? The analysis will be based on answers given so far.")) return;
+                            try {
+                              await api.post(`/candidates/${params.id}/interview/re-evaluate`);
+                              toast.success("Force evaluation started");
+                              let attempts = 0;
+                              const poll = setInterval(async () => {
+                                attempts++;
+                                try {
+                                  const res = await api.get(`/candidates/${params.id}/interview`);
+                                  if (res.data.analysis) {
+                                    clearInterval(poll);
+                                    setInterviewData(res.data);
+                                    toast.success("Evaluation complete!");
+                                  } else if (attempts >= 24) {
+                                    clearInterval(poll);
+                                    toast.error("Evaluation timed out — try refreshing");
+                                  }
+                                } catch { /* ignore */ }
+                              }, 5000);
+                            } catch {
+                              toast.error("Failed to start evaluation");
+                            }
+                          }}
+                        >
+                          Force Evaluate (Incomplete)
+                        </Button>
+                      )}
                       {!isTrulyActive && (
                         <Button
                           size="sm"
@@ -986,34 +1033,53 @@ export default function CandidateDetailPage() {
                         </div>
                       )}
 
-                      <div className="flex items-center justify-between pt-1 border-t">
+                      <div className="flex items-center justify-between pt-1 border-t flex-wrap gap-2">
                         <p className="text-xs text-muted-foreground">
                           Analyzed by {interviewData.analysis.model_used} — {new Date(interviewData.analysis.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </p>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-xs h-6 px-2 text-muted-foreground hover:text-foreground"
-                          onClick={async () => {
-                            try {
-                              await api.post(`/candidates/${params.id}/interview/re-evaluate`);
-                              toast.success("Re-evaluation started");
-                              const poll = setInterval(async () => {
-                                const res = await api.get(`/candidates/${params.id}/interview`);
-                                if (res.data.analysis?.analyzed_at !== interviewData?.analysis?.analyzed_at) {
-                                  clearInterval(poll);
-                                  fetchInterview();
-                                  toast.success("Re-evaluation complete");
-                                }
-                              }, 5000);
-                              setTimeout(() => clearInterval(poll), 120000);
-                            } catch {
-                              toast.error("Failed to re-evaluate");
-                            }
-                          }}
-                        >
-                          Re-evaluate
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs h-6 px-2 text-muted-foreground hover:text-foreground"
+                            onClick={async () => {
+                              try {
+                                await api.post(`/candidates/${params.id}/interview/re-evaluate`);
+                                toast.success("Re-evaluation started");
+                                const poll = setInterval(async () => {
+                                  const res = await api.get(`/candidates/${params.id}/interview`);
+                                  if (res.data.analysis?.analyzed_at !== interviewData?.analysis?.analyzed_at) {
+                                    clearInterval(poll);
+                                    fetchInterview();
+                                    toast.success("Re-evaluation complete");
+                                  }
+                                }, 5000);
+                                setTimeout(() => clearInterval(poll), 120000);
+                              } catch {
+                                toast.error("Failed to re-evaluate");
+                              }
+                            }}
+                          >
+                            Re-evaluate
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs h-6 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                            onClick={async () => {
+                              if (!confirm("Delete this interview analysis? This cannot be undone.")) return;
+                              try {
+                                await api.delete(`/candidates/${params.id}/interview/analysis`);
+                                toast.success("Interview analysis deleted");
+                                fetchInterview();
+                              } catch {
+                                toast.error("Failed to delete interview analysis");
+                              }
+                            }}
+                          >
+                            <Trash2 size={12} className="mr-1" /> Delete Analysis
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1209,80 +1275,65 @@ export default function CandidateDetailPage() {
 
       {/* Edit Candidate Modal */}
       <Dialog open={showEditCandidate} onOpenChange={setShowEditCandidate}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Candidate</DialogTitle>
+            <DialogTitle>Edit Candidate — Personal Information</DialogTitle>
           </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2 mb-2">Managers can only edit personal/contact data. Essay and motivation are read-only.</p>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label className="text-sm">Full Name *</Label>
-              <Input value={editForm.full_name || ""} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
+              <Input className="mt-1" value={editForm.full_name || ""} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">Email *</Label>
-              <Input value={editForm.email || ""} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              <Input className="mt-1" type="email" value={editForm.email || ""} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">Phone</Label>
-              <Input value={editForm.phone || ""} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+              <Input className="mt-1" type="tel" value={editForm.phone || ""} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">Telegram</Label>
-              <Input value={editForm.telegram || ""} onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })} />
+              <Input className="mt-1" value={editForm.telegram || ""} onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">Age</Label>
-              <Input type="number" value={editForm.age || ""} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
+              <Input className="mt-1" type="number" value={editForm.age || ""} onChange={(e) => setEditForm({ ...editForm, age: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">City</Label>
-              <Input value={editForm.city || ""} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
+              <Input className="mt-1" value={editForm.city || ""} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">School</Label>
-              <Input value={editForm.school || ""} onChange={(e) => setEditForm({ ...editForm, school: e.target.value })} />
+              <Input className="mt-1" value={editForm.school || ""} onChange={(e) => setEditForm({ ...editForm, school: e.target.value })} />
             </div>
             <div>
               <Label className="text-sm">Graduation Year</Label>
-              <Input type="number" value={editForm.graduation_year || ""} onChange={(e) => setEditForm({ ...editForm, graduation_year: e.target.value })} />
+              <Input className="mt-1" type="number" value={editForm.graduation_year || ""} onChange={(e) => setEditForm({ ...editForm, graduation_year: e.target.value })} />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-sm">Major / Program</Label>
+              <select
+                className="w-full mt-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={editForm.major || ""}
+                onChange={(e) => setEditForm({ ...editForm, major: e.target.value })}
+              >
+                <option value="">— Not specified —</option>
+                {majors.map((m) => (
+                  <option key={m.tag} value={m.tag}>{m.tag} — {m.en}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <Label className="text-sm">YouTube Presentation Video</Label>
+              <Input className="mt-1" type="url" placeholder="https://www.youtube.com/watch?v=..." value={editForm.youtube_url || ""} onChange={(e) => setEditForm({ ...editForm, youtube_url: e.target.value })} />
             </div>
           </div>
-          <div className="col-span-2">
-            <Label className="text-sm">Major / Program</Label>
-            <select
-              className="w-full mt-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={editForm.major || ""}
-              onChange={(e) => setEditForm({ ...editForm, major: e.target.value })}
-            >
-              <option value="">— Not specified —</option>
-              {majors.map((m) => (
-                <option key={m.tag} value={m.tag}>{m.tag} — {m.en}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-span-2">
-            <Label className="text-sm">Achievements</Label>
-            <Textarea rows={2} value={editForm.achievements || ""} onChange={(e) => setEditForm({ ...editForm, achievements: e.target.value })} />
-          </div>
-          <div>
-            <Label className="text-sm">Extracurriculars</Label>
-            <Textarea rows={2} value={editForm.extracurriculars || ""} onChange={(e) => setEditForm({ ...editForm, extracurriculars: e.target.value })} />
-          </div>
-          <div>
-            <Label className="text-sm">Essay *</Label>
-            <Textarea rows={4} value={editForm.essay || ""} onChange={(e) => setEditForm({ ...editForm, essay: e.target.value })} />
-          </div>
-          <div>
-            <Label className="text-sm">Motivation Statement</Label>
-            <Textarea rows={3} value={editForm.motivation_statement || ""} onChange={(e) => setEditForm({ ...editForm, motivation_statement: e.target.value })} />
-          </div>
-          <div>
-            <Label className="text-sm">YouTube Presentation Video</Label>
-            <Input type="url" placeholder="https://www.youtube.com/watch?v=..." value={editForm.youtube_url || ""} onChange={(e) => setEditForm({ ...editForm, youtube_url: e.target.value })} />
-          </div>
-          <DialogFooter>
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowEditCandidate(false)}>Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={savingEdit || !editForm.full_name || !editForm.email || !editForm.essay}>
+            <Button onClick={handleSaveEdit} disabled={savingEdit || !editForm.full_name || !editForm.email}>
               {savingEdit ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
               Save Changes
             </Button>

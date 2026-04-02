@@ -234,6 +234,10 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_url TEXT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_transcript TEXT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_url_valid BOOLEAN`,
+
+		// AI-recommended major (may differ from candidate's chosen major)
+		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS recommended_major VARCHAR(100)`,
+		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS major_reason_note TEXT`,
 	}
 
 	for _, q := range queries {

@@ -23,6 +23,8 @@ type OllamaAnalysisResponse struct {
 	ExplanationCommunication string   `json:"explanation_communication"`
 	KeyStrengths             []string `json:"key_strengths"`
 	RedFlags                 []string `json:"red_flags"`
+	RecommendedMajor         string   `json:"recommended_major"`
+	MajorReasonNote          string   `json:"major_reason_note"`
 }
 
 var jsonCodeFenceRe = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```")

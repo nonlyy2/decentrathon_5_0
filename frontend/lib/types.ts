@@ -66,6 +66,8 @@ export interface Analysis {
   red_flags: string[];
   analyzed_at: string;
   model_used: string;
+  recommended_major: string | null;
+  major_reason_note: string | null;
 }
 
 export interface Decision {

@@ -351,6 +351,28 @@ func GetInterviewTranscript(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
+// DeleteInterviewAnalysis deletes the AI analysis for a candidate's Telegram interview.
+// DELETE /candidates/:id/interview/analysis
+func DeleteInterviewAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid candidate id"})
+			return
+		}
+		tag, err := pool.Exec(c.Request.Context(),
+			`DELETE FROM interview_analyses WHERE candidate_id = $1`, candidateID)
+		if err != nil || tag.RowsAffected() == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "interview analysis not found"})
+			return
+		}
+		// Reset combined score
+		pool.Exec(c.Request.Context(),
+			`UPDATE candidates SET combined_score = NULL WHERE id = $1`, candidateID)
+		c.JSON(http.StatusOK, gin.H{"message": "interview analysis deleted"})
+	}
+}
+
 // EvaluateAllPendingInterviews triggers AI evaluation for all interviews that are completed
 // but have no interview_analyses record yet.
 // POST /interviews/evaluate-all-pending

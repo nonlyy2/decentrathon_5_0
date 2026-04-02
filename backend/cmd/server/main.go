@@ -267,6 +267,7 @@ func main() {
 	if evaluateFn != nil {
 		protected.POST("/candidates/:id/interview/evaluate", handlers.ForceEvaluateInterview(pool, evaluateFn))
 		protected.POST("/candidates/:id/interview/re-evaluate", handlers.ReEvaluateInterview(pool, evaluateFn))
+		protected.DELETE("/candidates/:id/interview/analysis", handlers.DeleteInterviewAnalysis(pool))
 		protected.POST("/interviews/evaluate-all-pending", handlers.EvaluateAllPendingInterviews(pool, evaluateFn))
 	}
 

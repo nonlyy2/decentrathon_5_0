@@ -1,6 +1,7 @@
 package youtube
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"html"
@@ -14,6 +15,19 @@ import (
 
 var videoIDRegex = regexp.MustCompile(`(?:youtube\.com/watch\?(?:.*&)?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})`)
 
+// httpClient shared, with browser-like headers
+var httpClient = &http.Client{Timeout: 15 * time.Second}
+
+func browserGet(rawURL string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	return httpClient.Do(req)
+}
+
 // ExtractVideoID extracts the 11-char video ID from any YouTube URL format.
 func ExtractVideoID(rawURL string) (string, error) {
 	matches := videoIDRegex.FindStringSubmatch(rawURL)
@@ -24,35 +38,109 @@ func ExtractVideoID(rawURL string) (string, error) {
 }
 
 // CheckAccessibility returns true if the video is publicly viewable.
-// Uses YouTube's oEmbed endpoint (no API key required).
-// Only returns false when YouTube explicitly responds with 404 (video not found/private).
-// Network errors, timeouts, or rate-limit responses are treated as "assume valid"
-// to avoid false negatives from server-side IP blocks.
+// Only HTTP 404 from oEmbed counts as "definitely invalid".
+// Network/timeout/other errors → assume valid to avoid false negatives.
 func CheckAccessibility(videoID string) bool {
-	client := &http.Client{Timeout: 10 * time.Second}
 	videoURL := url.QueryEscape("https://www.youtube.com/watch?v=" + videoID)
 	oembedURL := "https://www.youtube.com/oembed?url=" + videoURL + "&format=json"
 
-	req, err := http.NewRequest("GET", oembedURL, nil)
+	resp, err := browserGet(oembedURL)
 	if err != nil {
-		return true // assume valid on request build failure
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; bot)")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		// Network error / timeout — cannot verify, assume valid
-		return true
+		return true // network error → can't verify, assume valid
 	}
 	defer resp.Body.Close()
-
-	// 404 = video not found, deleted, or private
-	// Any other code (200, 401, 403, 429…) — treat as valid/unknown
 	return resp.StatusCode != 404
 }
 
-// timedTextResponse maps the XML returned by the YouTube timedtext API.
-type timedTextResponse struct {
+// captionTrack is part of the ytInitialPlayerResponse captions JSON.
+type captionTrack struct {
+	BaseURL      string `json:"baseUrl"`
+	LanguageCode string `json:"languageCode"`
+	Kind         string `json:"kind"` // "asr" = auto-generated
+}
+
+// FetchTranscript fetches plain-text transcript by:
+//  1. Scraping the video watch page for ytInitialPlayerResponse
+//  2. Extracting captionTracks from it
+//  3. Fetching and parsing the timed-text XML from the best available track
+func FetchTranscript(videoID string) (string, error) {
+	watchURL := "https://www.youtube.com/watch?v=" + videoID
+	resp, err := browserGet(watchURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch watch page: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024)) // 4 MB cap
+	if err != nil {
+		return "", fmt.Errorf("failed to read watch page: %w", err)
+	}
+	page := string(body)
+
+	// Extract captionTracks JSON array from ytInitialPlayerResponse
+	tracks, err := extractCaptionTracks(page)
+	if err != nil || len(tracks) == 0 {
+		return "", fmt.Errorf("no captions found for video %s", videoID)
+	}
+
+	// Prefer: en manual > en ASR > any manual > any ASR
+	best := chooseBestTrack(tracks)
+	if best == nil {
+		return "", fmt.Errorf("no suitable caption track found")
+	}
+
+	return fetchTimedText(best.BaseURL)
+}
+
+// extractCaptionTracks pulls the captionTracks array out of the page JS.
+var captionTracksRe = regexp.MustCompile(`"captionTracks":(\[.*?\])`)
+
+func extractCaptionTracks(page string) ([]captionTrack, error) {
+	m := captionTracksRe.FindStringSubmatch(page)
+	if len(m) < 2 {
+		return nil, fmt.Errorf("captionTracks not found in page")
+	}
+	// Unescape unicode sequences that YouTube embeds
+	raw := strings.ReplaceAll(m[1], `\u0026`, "&")
+
+	var tracks []captionTrack
+	if err := json.Unmarshal([]byte(raw), &tracks); err != nil {
+		return nil, fmt.Errorf("failed to parse captionTracks: %w", err)
+	}
+	return tracks, nil
+}
+
+func chooseBestTrack(tracks []captionTrack) *captionTrack {
+	// Priority order
+	for _, lang := range []string{"en", "en-US", "en-GB"} {
+		for i := range tracks {
+			if tracks[i].LanguageCode == lang && tracks[i].Kind != "asr" {
+				return &tracks[i]
+			}
+		}
+	}
+	for _, lang := range []string{"en", "en-US", "en-GB"} {
+		for i := range tracks {
+			if tracks[i].LanguageCode == lang {
+				return &tracks[i]
+			}
+		}
+	}
+	// Any manual track
+	for i := range tracks {
+		if tracks[i].Kind != "asr" {
+			return &tracks[i]
+		}
+	}
+	// Any track
+	if len(tracks) > 0 {
+		return &tracks[0]
+	}
+	return nil
+}
+
+// timedTextXML maps the XML returned by the caption track URL.
+type timedTextXML struct {
 	XMLName xml.Name        `xml:"transcript"`
 	Texts   []timedTextNode `xml:"text"`
 }
@@ -61,44 +149,42 @@ type timedTextNode struct {
 	Value string `xml:",chardata"`
 }
 
-// FetchTranscript tries to retrieve a plain-text transcript for the video.
-// It cycles through common language codes and returns the first non-empty result.
-func FetchTranscript(videoID string) (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	langs := []string{"en", "en-US", "en-GB", "ru", "kk"}
-
-	for _, lang := range langs {
-		u := fmt.Sprintf("https://www.youtube.com/api/timedtext?lang=%s&v=%s", lang, videoID)
-		resp, err := client.Get(u)
-		if err != nil {
-			continue
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil || len(body) == 0 {
-			continue
-		}
-
-		var tt timedTextResponse
-		if err := xml.Unmarshal(body, &tt); err != nil || len(tt.Texts) == 0 {
-			continue
-		}
-
-		var sb strings.Builder
-		for _, node := range tt.Texts {
-			text := strings.TrimSpace(html.UnescapeString(node.Value))
-			if text != "" {
-				sb.WriteString(text)
-				sb.WriteString(" ")
-			}
-		}
-		result := strings.TrimSpace(sb.String())
-		if result != "" {
-			return result, nil
+func fetchTimedText(baseURL string) (string, error) {
+	// Request plain XML format
+	u := baseURL
+	if !strings.Contains(u, "fmt=") {
+		if strings.Contains(u, "?") {
+			u += "&fmt=xml"
+		} else {
+			u += "?fmt=xml"
 		}
 	}
 
-	return "", fmt.Errorf("no transcript available for video %s", videoID)
+	resp, err := browserGet(u)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch timed text: %w", err)
+	}
+	defer resp.Body.Close()
+
+	xmlBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read timed text: %w", err)
+	}
+
+	var tt timedTextXML
+	if err := xml.Unmarshal(xmlBytes, &tt); err != nil || len(tt.Texts) == 0 {
+		return "", fmt.Errorf("failed to parse timed text XML")
+	}
+
+	var sb strings.Builder
+	for _, node := range tt.Texts {
+		text := strings.TrimSpace(html.UnescapeString(node.Value))
+		if text != "" {
+			sb.WriteString(text)
+			sb.WriteString(" ")
+		}
+	}
+	return strings.TrimSpace(sb.String()), nil
 }
 
 // ValidateAndFetch validates the YouTube URL and fetches its transcript.

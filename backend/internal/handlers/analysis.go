@@ -51,14 +51,15 @@ func GetAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 			`SELECT id, candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
 			 final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0), incomplete_flag,
 			 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
-			 summary, key_strengths, red_flags, analyzed_at, model_used
+			 summary, key_strengths, red_flags, analyzed_at, model_used, recommended_major, major_reason_note
 			 FROM analyses WHERE candidate_id = $1`, candidateID,
 		).Scan(&analysis.ID, &analysis.CandidateID, &analysis.ScoreLeadership, &analysis.ScoreMotivation,
 			&analysis.ScoreGrowth, &analysis.ScoreVision, &analysis.ScoreCommunication,
 			&analysis.FinalScore, &analysis.Category, &analysis.AIGeneratedRisk, &analysis.AIGeneratedScore, &analysis.IncompleteFlag,
 			&analysis.ExplanationLeadership, &analysis.ExplanationMotivation, &analysis.ExplanationGrowth,
 			&analysis.ExplanationVision, &analysis.ExplanationCommunication,
-			&analysis.Summary, &analysis.KeyStrengths, &analysis.RedFlags, &analysis.AnalyzedAt, &analysis.ModelUsed)
+			&analysis.Summary, &analysis.KeyStrengths, &analysis.RedFlags, &analysis.AnalyzedAt, &analysis.ModelUsed,
+			&analysis.RecommendedMajor, &analysis.MajorReasonNote)
 
 		if err != nil {
 			c.JSON(404, gin.H{"error": "analysis not found"})
@@ -124,14 +125,15 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
 		 final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
 		 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
-		 summary, key_strengths, red_flags, model_used, duration_ms)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+		 summary, key_strengths, red_flags, model_used, duration_ms, recommended_major, major_reason_note)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
 		analysis.CandidateID, analysis.ScoreLeadership, analysis.ScoreMotivation, analysis.ScoreGrowth,
 		analysis.ScoreVision, analysis.ScoreCommunication, analysis.FinalScore, analysis.Category,
 		analysis.AIGeneratedRisk, analysis.AIGeneratedScore, analysis.IncompleteFlag,
 		analysis.ExplanationLeadership, analysis.ExplanationMotivation, analysis.ExplanationGrowth,
 		analysis.ExplanationVision, analysis.ExplanationCommunication,
-		analysis.Summary, analysis.KeyStrengths, analysis.RedFlags, analysis.ModelUsed, analysis.DurationMs)
+		analysis.Summary, analysis.KeyStrengths, analysis.RedFlags, analysis.ModelUsed, analysis.DurationMs,
+		analysis.RecommendedMajor, analysis.MajorReasonNote)
 
 	if err != nil {
 		return err
@@ -176,11 +178,11 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 		// Get candidate
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_transcript, created_at, status
 			 FROM candidates WHERE id = $1`, candidateID,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
-			&candidate.Essay, &candidate.MotivationStatement, &candidate.Disability, &candidate.CreatedAt, &candidate.Status)
+			&candidate.Essay, &candidate.MotivationStatement, &candidate.Disability, &candidate.Major, &candidate.YouTubeTranscript, &candidate.CreatedAt, &candidate.Status)
 		if err != nil {
 			c.JSON(404, gin.H{"error": "candidate not found"})
 			return

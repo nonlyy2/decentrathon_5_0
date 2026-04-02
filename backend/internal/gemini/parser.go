@@ -29,6 +29,8 @@ type GeminiAnalysisResponse struct {
 	Summary                  string   `json:"summary"`
 	KeyStrengths             []string `json:"key_strengths"`
 	RedFlags                 []string `json:"red_flags"`
+	RecommendedMajor         string   `json:"recommended_major"`
+	MajorReasonNote          string   `json:"major_reason_note"`
 }
 
 func ParseBatchAnalysisResponse(jsonStr string, expected int) ([]*GeminiAnalysisResponse, error) {
@@ -125,7 +127,7 @@ func ParseAnalysisResponse(jsonStr string) (*GeminiAnalysisResponse, error) {
 }
 
 func ToAnalysis(resp *GeminiAnalysisResponse, candidateID int) *models.Analysis {
-	return &models.Analysis{
+	a := &models.Analysis{
 		CandidateID:              candidateID,
 		ScoreLeadership:          resp.ScoreLeadership,
 		ScoreMotivation:          resp.ScoreMotivation,
@@ -148,6 +150,13 @@ func ToAnalysis(resp *GeminiAnalysisResponse, candidateID int) *models.Analysis 
 		AnalyzedAt:               time.Now(),
 		ModelUsed:                ModelName,
 	}
+	if resp.RecommendedMajor != "" {
+		a.RecommendedMajor = &resp.RecommendedMajor
+	}
+	if resp.MajorReasonNote != "" {
+		a.MajorReasonNote = &resp.MajorReasonNote
+	}
+	return a
 }
 
 func clamp(val, min, max int) int {

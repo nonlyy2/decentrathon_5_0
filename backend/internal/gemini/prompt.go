@@ -98,6 +98,16 @@ CATEGORY ASSIGNMENT:
 - 50-64: "Borderline"
 - 0-49: "Not Recommended"
 
+MAJOR RECOMMENDATION:
+The candidate selects a major when applying. Based solely on the content of their essays, achievements, and transcript, independently determine which of the following majors best fits their actual talents and interests:
+- "Engineering" (Creative Engineering)
+- "Tech" (Innovative IT Product Design)
+- "Society" (Sociology: Leadership and Innovation)
+- "Policy Reform" (Public Policy and Development)
+- "Art + Media" (Digital Media and Marketing)
+
+Set recommended_major to the tag that best matches. If it differs from the candidate's chosen major, the note in major_reason_note should briefly explain why you suggest a different path. If it matches, set major_reason_note to an empty string.
+
 You MUST respond with ONLY a valid JSON object matching the exact schema below. No additional text.`
 
 const BatchResponseSchema = `[
@@ -119,7 +129,9 @@ const BatchResponseSchema = `[
     "explanation_communication": "<2-3 sentences with a direct quote from the application in double quotes where possible>",
     "summary": "<3-5 sentence assessment>",
     "key_strengths": ["<strength 1>", "<strength 2>"],
-    "red_flags": ["<flag>"] or []
+    "red_flags": ["<flag>"] or [],
+    "recommended_major": "<one of: Engineering|Tech|Society|Policy Reform|Art + Media>",
+    "major_reason_note": "<1 sentence if differs from chosen major, else empty string>"
   }
 ]`
 
@@ -149,7 +161,9 @@ const ResponseSchema = `{
   "explanation_communication": "<2-3 sentences with specific evidence. Include at least one direct quote from the application in double quotes where possible.>",
   "summary": "<3-5 sentence overall assessment>",
   "key_strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
-  "red_flags": ["<flag 1>"] or []
+  "red_flags": ["<flag 1>"] or [],
+  "recommended_major": "<one of: Engineering|Tech|Society|Policy Reform|Art + Media>",
+  "major_reason_note": "<1 sentence explaining why if it differs from candidate's chosen major, else empty string>"
 }`
 
 // buildCandidateData formats candidate data only, without any response instruction.
@@ -162,6 +176,9 @@ func buildCandidateData(c *models.Candidate) string {
 	}
 	if c.GraduationYear != nil {
 		sb.WriteString(fmt.Sprintf("Graduation Year: %d\n", *c.GraduationYear))
+	}
+	if c.Major != nil {
+		sb.WriteString(fmt.Sprintf("Candidate's Chosen Major: %s\n", *c.Major))
 	}
 
 	sb.WriteString("\n--- ACHIEVEMENTS ---\n")

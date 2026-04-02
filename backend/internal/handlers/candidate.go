@@ -314,14 +314,15 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			`SELECT id, candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
 			 final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0), incomplete_flag,
 			 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
-			 summary, key_strengths, red_flags, analyzed_at, model_used
+			 summary, key_strengths, red_flags, analyzed_at, model_used, recommended_major, major_reason_note
 			 FROM analyses WHERE candidate_id = $1`, id,
 		).Scan(&analysis.ID, &analysis.CandidateID, &analysis.ScoreLeadership, &analysis.ScoreMotivation,
 			&analysis.ScoreGrowth, &analysis.ScoreVision, &analysis.ScoreCommunication,
 			&analysis.FinalScore, &analysis.Category, &analysis.AIGeneratedRisk, &analysis.AIGeneratedScore, &analysis.IncompleteFlag,
 			&analysis.ExplanationLeadership, &analysis.ExplanationMotivation, &analysis.ExplanationGrowth,
 			&analysis.ExplanationVision, &analysis.ExplanationCommunication,
-			&analysis.Summary, &analysis.KeyStrengths, &analysis.RedFlags, &analysis.AnalyzedAt, &analysis.ModelUsed)
+			&analysis.Summary, &analysis.KeyStrengths, &analysis.RedFlags, &analysis.AnalyzedAt, &analysis.ModelUsed,
+			&analysis.RecommendedMajor, &analysis.MajorReasonNote)
 
 		if err == nil {
 			detail.Analysis = &analysis
