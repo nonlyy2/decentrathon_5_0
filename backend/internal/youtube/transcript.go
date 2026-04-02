@@ -63,57 +63,64 @@ type captionTrack struct {
 //  1. Scraping the video watch page for ytInitialPlayerResponse
 //  2. Extracting captionTracks from it
 //  3. Fetching and parsing the timed-text XML from the best available track
-func fetchTimedText(baseURL string) (string, error) {
-	u := baseURL
-	
-	// Ищем любой существующий параметр fmt=... и заменяем его на fmt=xml
-	re := regexp.MustCompile(`([?&])fmt=[^&]+`)
-	if re.MatchString(u) {
-		u = re.ReplaceAllString(u, "${1}fmt=xml")
-	} else {
-		// Если параметра нет вообще, добавляем его
-		if strings.Contains(u, "?") {
-			u += "&fmt=xml"
-		} else {
-			u += "?fmt=xml"
-		}
-	}
-
-	resp, err := browserGet(u)
+func FetchTranscript(videoID string) (string, error) {
+	watchURL := "https://www.youtube.com/watch?v=" + videoID
+	resp, err := browserGet(watchURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch timed text: %w", err)
+		return "", fmt.Errorf("failed to fetch watch page: %w", err)
 	}
 	defer resp.Body.Close()
 
-	xmlBytes, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024)) // 4 MB cap
 	if err != nil {
-		return "", fmt.Errorf("failed to read timed text: %w", err)
+		return "", fmt.Errorf("failed to read watch page: %w", err)
+	}
+	page := string(body)
+
+	// Extract captionTracks JSON array from ytInitialPlayerResponse
+	tracks, err := extractCaptionTracks(page)
+	if err != nil || len(tracks) == 0 {
+		return "", fmt.Errorf("no captions found for video %s", videoID)
 	}
 
-	var tt timedTextXML
-	if err := xml.Unmarshal(xmlBytes, &tt); err != nil || len(tt.Texts) == 0 {
-		return "", fmt.Errorf("failed to parse timed text XML: %w", err)
+	// Prefer: en manual > en ASR > any manual > any ASR
+	best := chooseBestTrack(tracks)
+	if best == nil {
+		return "", fmt.Errorf("no suitable caption track found")
 	}
 
-	var sb strings.Builder
-	for _, node := range tt.Texts {
-		text := strings.TrimSpace(html.UnescapeString(node.Value))
-		if text != "" {
-			sb.WriteString(text)
-			sb.WriteString(" ")
-		}
-	}
-	return strings.TrimSpace(sb.String()), nil
+	return fetchTimedText(best.BaseURL)
 }
 
-// extractCaptionTracks pulls the captionTracks array out of the page JS.
-var captionTracksRe = regexp.MustCompile(`"captionTracks":\s*(\[.*?\])\s*,\s*"[a-zA-Z0-9_]+":`)
+// extractCaptionTracks pulls caption tracks from ytInitialPlayerResponse.
+var (
+	captionTracksRe = regexp.MustCompile(`(?s)"captionTracks"\s*:\s*(\[.*?\])`)
+	initRespMarkers = []string{
+		"ytInitialPlayerResponse = ",
+		"var ytInitialPlayerResponse = ",
+		"window[\"ytInitialPlayerResponse\"] = ",
+	}
+)
+
 func extractCaptionTracks(page string) ([]captionTrack, error) {
+	if initialJSON := extractInitialPlayerResponseJSON(page); initialJSON != "" {
+		var parsed struct {
+			Captions struct {
+				PlayerCaptionsTracklistRenderer struct {
+					CaptionTracks []captionTrack `json:"captionTracks"`
+				} `json:"playerCaptionsTracklistRenderer"`
+			} `json:"captions"`
+		}
+		if err := json.Unmarshal([]byte(initialJSON), &parsed); err == nil && len(parsed.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks) > 0 {
+			return parsed.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks, nil
+		}
+	}
+
+	// Fallback for alternative page layouts.
 	m := captionTracksRe.FindStringSubmatch(page)
 	if len(m) < 2 {
 		return nil, fmt.Errorf("captionTracks not found in page")
 	}
-	// Unescape unicode sequences that YouTube embeds
 	raw := strings.ReplaceAll(m[1], `\u0026`, "&")
 
 	var tracks []captionTrack
@@ -121,6 +128,61 @@ func extractCaptionTracks(page string) ([]captionTrack, error) {
 		return nil, fmt.Errorf("failed to parse captionTracks: %w", err)
 	}
 	return tracks, nil
+}
+
+func extractInitialPlayerResponseJSON(page string) string {
+	for _, marker := range initRespMarkers {
+		idx := strings.Index(page, marker)
+		if idx == -1 {
+			continue
+		}
+		start := strings.Index(page[idx+len(marker):], "{")
+		if start == -1 {
+			continue
+		}
+		start += idx + len(marker)
+		return extractBalancedJSONObject(page[start:])
+	}
+	return ""
+}
+
+func extractBalancedJSONObject(s string) string {
+	if s == "" || s[0] != '{' {
+		return ""
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		if ch == '"' {
+			inString = true
+			continue
+		}
+		if ch == '{' {
+			depth++
+		} else if ch == '}' {
+			depth--
+			if depth == 0 {
+				return s[:i+1]
+			}
+		}
+	}
+	return ""
 }
 
 func chooseBestTrack(tracks []captionTrack) *captionTrack {
@@ -163,9 +225,14 @@ type timedTextNode struct {
 }
 
 func fetchTimedText(baseURL string) (string, error) {
-	// Request plain XML format
 	u := baseURL
-	if !strings.Contains(u, "fmt=") {
+	
+	// Ищем любой существующий параметр fmt=... и заменяем его на fmt=xml
+	re := regexp.MustCompile(`([?&])fmt=[^&]+`)
+	if re.MatchString(u) {
+		u = re.ReplaceAllString(u, "${1}fmt=xml")
+	} else {
+		// Если параметра нет вообще, добавляем его
 		if strings.Contains(u, "?") {
 			u += "&fmt=xml"
 		} else {
@@ -186,7 +253,7 @@ func fetchTimedText(baseURL string) (string, error) {
 
 	var tt timedTextXML
 	if err := xml.Unmarshal(xmlBytes, &tt); err != nil || len(tt.Texts) == 0 {
-		return "", fmt.Errorf("failed to parse timed text XML")
+		return "", fmt.Errorf("failed to parse timed text XML: %w", err)
 	}
 
 	var sb strings.Builder
