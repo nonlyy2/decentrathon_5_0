@@ -135,6 +135,8 @@ func main() {
 	api.POST("/auth/register", handlers.Register(pool))
 	api.POST("/auth/login", handlers.Login(pool, cfg.JWTSecret))
 	api.GET("/majors", handlers.GetMajors())
+	// Photo upload is public so the apply page (no JWT) can attach a photo right after submission
+	api.POST("/candidates/:id/photo", handlers.UploadCandidatePhoto(pool, cfg.UploadDir, cfg.GeminiAPIKey))
 
 	// Public Telegram Mini App status endpoint (validated by initData)
 	api.GET("/tma/status", handlers.GetTMAStatusByChatID(pool, cfg.TelegramBotToken))
@@ -149,7 +151,6 @@ func main() {
 		protected.PATCH("/candidates/:id", handlers.UpdateCandidate(pool))
 		protected.DELETE("/candidates/:id", handlers.DeleteCandidate(pool))
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
-		protected.POST("/candidates/:id/photo", handlers.UploadCandidatePhoto(pool, cfg.UploadDir, cfg.GeminiAPIKey))
 
 		// Analysis
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))

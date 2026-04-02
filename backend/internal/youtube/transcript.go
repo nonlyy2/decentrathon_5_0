@@ -6,6 +6,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -24,15 +25,30 @@ func ExtractVideoID(rawURL string) (string, error) {
 
 // CheckAccessibility returns true if the video is publicly viewable.
 // Uses YouTube's oEmbed endpoint (no API key required).
+// Only returns false when YouTube explicitly responds with 404 (video not found/private).
+// Network errors, timeouts, or rate-limit responses are treated as "assume valid"
+// to avoid false negatives from server-side IP blocks.
 func CheckAccessibility(videoID string) bool {
 	client := &http.Client{Timeout: 10 * time.Second}
-	oembedURL := fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", videoID)
-	resp, err := client.Get(oembedURL)
+	videoURL := url.QueryEscape("https://www.youtube.com/watch?v=" + videoID)
+	oembedURL := "https://www.youtube.com/oembed?url=" + videoURL + "&format=json"
+
+	req, err := http.NewRequest("GET", oembedURL, nil)
 	if err != nil {
-		return false
+		return true // assume valid on request build failure
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; bot)")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// Network error / timeout — cannot verify, assume valid
+		return true
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == 200
+
+	// 404 = video not found, deleted, or private
+	// Any other code (200, 401, 403, 429…) — treat as valid/unknown
+	return resp.StatusCode != 404
 }
 
 // timedTextResponse maps the XML returned by the YouTube timedtext API.
@@ -93,7 +109,8 @@ func ValidateAndFetch(rawURL string) (transcript string, isValid bool, err error
 		return "", false, err
 	}
 
-	if !CheckAccessibility(videoID) {
+	isValid = CheckAccessibility(videoID)
+	if !isValid {
 		return "", false, fmt.Errorf("video is private, deleted, or not accessible")
 	}
 
