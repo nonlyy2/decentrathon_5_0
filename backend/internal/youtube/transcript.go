@@ -63,33 +63,47 @@ type captionTrack struct {
 //  1. Scraping the video watch page for ytInitialPlayerResponse
 //  2. Extracting captionTracks from it
 //  3. Fetching and parsing the timed-text XML from the best available track
-func FetchTranscript(videoID string) (string, error) {
-	watchURL := "https://www.youtube.com/watch?v=" + videoID
-	resp, err := browserGet(watchURL)
+func fetchTimedText(baseURL string) (string, error) {
+	u := baseURL
+	
+	// Ищем любой существующий параметр fmt=... и заменяем его на fmt=xml
+	re := regexp.MustCompile(`([?&])fmt=[^&]+`)
+	if re.MatchString(u) {
+		u = re.ReplaceAllString(u, "${1}fmt=xml")
+	} else {
+		// Если параметра нет вообще, добавляем его
+		if strings.Contains(u, "?") {
+			u += "&fmt=xml"
+		} else {
+			u += "?fmt=xml"
+		}
+	}
+
+	resp, err := browserGet(u)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch watch page: %w", err)
+		return "", fmt.Errorf("failed to fetch timed text: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024)) // 4 MB cap
+	xmlBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read watch page: %w", err)
-	}
-	page := string(body)
-
-	// Extract captionTracks JSON array from ytInitialPlayerResponse
-	tracks, err := extractCaptionTracks(page)
-	if err != nil || len(tracks) == 0 {
-		return "", fmt.Errorf("no captions found for video %s", videoID)
+		return "", fmt.Errorf("failed to read timed text: %w", err)
 	}
 
-	// Prefer: en manual > en ASR > any manual > any ASR
-	best := chooseBestTrack(tracks)
-	if best == nil {
-		return "", fmt.Errorf("no suitable caption track found")
+	var tt timedTextXML
+	if err := xml.Unmarshal(xmlBytes, &tt); err != nil || len(tt.Texts) == 0 {
+		return "", fmt.Errorf("failed to parse timed text XML: %w", err)
 	}
 
-	return fetchTimedText(best.BaseURL)
+	var sb strings.Builder
+	for _, node := range tt.Texts {
+		text := strings.TrimSpace(html.UnescapeString(node.Value))
+		if text != "" {
+			sb.WriteString(text)
+			sb.WriteString(" ")
+		}
+	}
+	return strings.TrimSpace(sb.String()), nil
 }
 
 // extractCaptionTracks pulls the captionTracks array out of the page JS.
