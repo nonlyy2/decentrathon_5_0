@@ -445,7 +445,7 @@ export default function CandidateDetailPage() {
                   )}
                   <div className="text-sm text-muted-foreground">{detail.email}</div>
                   {detail.phone && <div className="text-sm text-muted-foreground">{detail.phone}</div>}
-                  {detail.telegram && <div className="text-sm text-muted-foreground">@{detail.telegram}</div>}
+                  {detail.telegram && <div className="text-sm text-muted-foreground">{detail.telegram}</div>}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
