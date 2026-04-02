@@ -20,6 +20,9 @@ export interface Candidate {
   keywords: string[];
   created_at: string;
   status: string;
+  youtube_url: string | null;
+  youtube_transcript: string | null;
+  youtube_url_valid: boolean | null;
 }
 
 export interface CandidateListItem {

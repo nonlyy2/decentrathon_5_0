@@ -61,6 +61,10 @@ func BuildPrompt(c *models.Candidate) string {
 		sb.WriteString(fmt.Sprintf("\nMotivation:\n%s\n", *c.MotivationStatement))
 	}
 
+	if c.YouTubeTranscript != nil && *c.YouTubeTranscript != "" {
+		sb.WriteString(fmt.Sprintf("\nPresentation Video Transcript:\n%s\n", *c.YouTubeTranscript))
+	}
+
 	sb.WriteString(`
 === OUTPUT INSTRUCTIONS ===
 Respond with ONLY this JSON object. Fill every field.

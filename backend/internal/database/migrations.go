@@ -229,6 +229,11 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_authenticity TEXT`,
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_motivation TEXT`,
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_vision TEXT`,
+
+		// YouTube video presentation
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_url TEXT`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_transcript TEXT`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_url_valid BOOLEAN`,
 	}
 
 	for _, q := range queries {

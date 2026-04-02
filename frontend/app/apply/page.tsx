@@ -29,7 +29,7 @@ export default function ApplyPage() {
   const [form, setForm] = useState({
     full_name: "", email: "", phone: "", telegram: "", age: "", city: "", school: "",
     graduation_year: "", achievements: "", extracurriculars: "",
-    essay: "", motivation_statement: "", disability: "", major: "",
+    essay: "", motivation_statement: "", disability: "", major: "", youtube_url: "",
   });
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -72,6 +72,14 @@ export default function ApplyPage() {
       setError(t("apply.photo_required") || "Profile photo is required");
       return;
     }
+    if (!form.youtube_url) {
+      setError(t("apply.youtube_required"));
+      return;
+    }
+    if (!/(?:youtube\.com\/watch\?(?:.*&)?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/.test(form.youtube_url)) {
+      setError(t("apply.youtube_invalid"));
+      return;
+    }
     // Validate phone: digits, +, -, spaces, parentheses only
     if (form.phone && !/^\+?[0-9\s\-()]+$/.test(form.phone)) {
       setError(t("apply.phone_invalid"));
@@ -108,6 +116,7 @@ export default function ApplyPage() {
         motivation_statement: form.motivation_statement || null,
         disability: form.disability || null,
         major: form.major || null,
+        youtube_url: form.youtube_url,
       });
 
       // Upload photo if provided
@@ -352,6 +361,21 @@ export default function ApplyPage() {
                 </Field>
               </section>
 
+              {/* YouTube Presentation Video */}
+              <section>
+                <Field label={`${t("apply.youtube_label")} *`} htmlFor="youtube_url">
+                  <p className="text-xs text-muted-foreground mb-2">{t("apply.youtube_desc")}</p>
+                  <Input
+                    id="youtube_url"
+                    type="url"
+                    value={form.youtube_url}
+                    onChange={(e) => update("youtube_url", e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    required
+                  />
+                </Field>
+              </section>
+
               {/* Disability */}
               <section>
                 <Field label={t("apply.disability")} htmlFor="disability">
@@ -439,6 +463,10 @@ const APPLY_TRANSLATIONS: Record<Lang, Record<string, string>> = {
     "apply.disability": "Disability / Accessibility Needs",
     "apply.disability_desc": "Optional. Not used in scoring — only for accommodation during interviews.",
     "apply.disability_ph": "e.g. visual impairment, hearing difficulty...",
+    "apply.youtube_label": "YouTube Presentation Video",
+    "apply.youtube_desc": "Record a short video presenting your project or yourself and paste the YouTube link here.",
+    "apply.youtube_required": "YouTube presentation video link is required",
+    "apply.youtube_invalid": "Please enter a valid YouTube URL (youtube.com/watch?v=... or youtu.be/...)",
     "apply.phone_invalid": "Phone must contain only digits and + - ( ) characters",
     "apply.telegram_invalid": "Telegram username must contain only Latin letters, digits, and underscores",
     "apply.city_invalid": "City name must not contain digits",
@@ -493,6 +521,10 @@ const APPLY_TRANSLATIONS: Record<Lang, Record<string, string>> = {
     "apply.disability": "Особые потребности / Доступность",
     "apply.disability_desc": "Необязательно. Не влияет на оценку — только для адаптации во время собеседования.",
     "apply.disability_ph": "напр. нарушение зрения, слуха...",
+    "apply.youtube_label": "YouTube видео-презентация",
+    "apply.youtube_desc": "Запишите короткое видео с презентацией вашего проекта и вставьте ссылку на YouTube.",
+    "apply.youtube_required": "Ссылка на YouTube видео обязательна",
+    "apply.youtube_invalid": "Введите корректную ссылку YouTube (youtube.com/watch?v=... или youtu.be/...)",
     "apply.phone_invalid": "Телефон должен содержать только цифры и символы + - ( )",
     "apply.telegram_invalid": "Telegram имя пользователя должно содержать только латинские буквы, цифры и подчёркивания",
     "apply.city_invalid": "Название города не должно содержать цифры",
@@ -547,6 +579,10 @@ const APPLY_TRANSLATIONS: Record<Lang, Record<string, string>> = {
     "apply.disability": "Мүмкіндіктері шектеулі / Қолжетімділік",
     "apply.disability_desc": "Міндетті емес. Бағалауға әсер етпейді — тек сұхбат кезінде бейімдеу үшін.",
     "apply.disability_ph": "мысалы, көру, есту қиындықтары...",
+    "apply.youtube_label": "YouTube бейне-презентация",
+    "apply.youtube_desc": "Жобаңызды таныстыратын қысқа бейне жазып, YouTube сілтемесін қойыңыз.",
+    "apply.youtube_required": "YouTube бейне сілтемесі міндетті",
+    "apply.youtube_invalid": "Дұрыс YouTube сілтемесін енгізіңіз (youtube.com/watch?v=... немесе youtu.be/...)",
     "apply.phone_invalid": "Телефон тек сандар мен + - ( ) таңбаларынан тұруы керек",
     "apply.telegram_invalid": "Telegram пайдаланушы аты тек латын әріптерінен, сандардан және астын сызудан тұруы керек",
     "apply.city_invalid": "Қала атауында сандар болмауы керек",

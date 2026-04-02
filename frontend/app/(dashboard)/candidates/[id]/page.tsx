@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward, GitCompare, Brain } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward, GitCompare, Brain, Video, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -98,6 +98,9 @@ export default function CandidateDetailPage() {
   const [showDeleteCandidate, setShowDeleteCandidate] = useState(false);
   const [deleteCandidateText, setDeleteCandidateText] = useState("");
   const [deletingCandidate, setDeletingCandidate] = useState(false);
+
+  // YouTube transcript expanded state
+  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
 
   // Edit candidate modal
   const [showEditCandidate, setShowEditCandidate] = useState(false);
@@ -288,6 +291,7 @@ export default function CandidateDetailPage() {
       essay: detail.essay || "",
       motivation_statement: detail.motivation_statement || "",
       major: detail.major || "",
+      youtube_url: detail.youtube_url || "",
     });
     setShowEditCandidate(true);
   };
@@ -309,6 +313,7 @@ export default function CandidateDetailPage() {
         essay: editForm.essay,
         motivation_statement: editForm.motivation_statement || null,
         major: editForm.major || null,
+        youtube_url: editForm.youtube_url || null,
       });
       toast.success("Candidate updated");
       setShowEditCandidate(false);
@@ -525,6 +530,68 @@ export default function CandidateDetailPage() {
               <CardContent><p className="text-sm whitespace-pre-wrap">{detail.motivation_statement}</p></CardContent>
             </Card>
           )}
+
+          {/* YouTube Presentation Video */}
+          {detail.youtube_url && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Video size={16} className="text-red-500" /> YouTube Presentation Video
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <a
+                    href={detail.youtube_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline dark:text-blue-400 break-all"
+                  >
+                    {detail.youtube_url}
+                  </a>
+                  <ExternalLink size={12} className="text-muted-foreground shrink-0" />
+                </div>
+                {detail.youtube_url_valid === false && (
+                  <p className="text-xs text-red-600 flex items-center gap-1 font-medium">
+                    <AlertTriangle size={12} /> Invalid link — video is private, deleted, or inaccessible
+                  </p>
+                )}
+                {detail.youtube_url_valid === null && (
+                  <p className="text-xs text-muted-foreground">Checking video accessibility…</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Presentation Transcript — collapsible */}
+          {detail.youtube_url && (
+            <Card>
+              <button
+                className="w-full text-left"
+                onClick={() => setTranscriptExpanded((v) => !v)}
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">Presentation Transcript</CardTitle>
+                    {transcriptExpanded ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+                  </div>
+                </CardHeader>
+              </button>
+              {transcriptExpanded && (
+                <CardContent>
+                  {detail.youtube_transcript ? (
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
+                      {detail.youtube_transcript}
+                    </p>
+                  ) : detail.youtube_url_valid === false ? (
+                    <p className="text-sm text-red-500">Transcript unavailable — the video link is invalid or inaccessible.</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No transcript available for this video (auto-captions may be disabled).</p>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          )}
         </div>
 
         {/* Right column — Analysis + Decisions */}
@@ -545,6 +612,11 @@ export default function CandidateDetailPage() {
                       {hasRussianContent() && (
                         <Badge className="bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700">
                           ⚠ Answers not in English
+                        </Badge>
+                      )}
+                      {detail.youtube_url_valid === false && (
+                        <Badge className="bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700">
+                          <AlertTriangle size={10} className="mr-1" /> Video link inaccessible
                         </Badge>
                       )}
                     </div>
@@ -1203,6 +1275,10 @@ export default function CandidateDetailPage() {
           <div>
             <Label className="text-sm">Motivation Statement</Label>
             <Textarea rows={3} value={editForm.motivation_statement || ""} onChange={(e) => setEditForm({ ...editForm, motivation_statement: e.target.value })} />
+          </div>
+          <div>
+            <Label className="text-sm">YouTube Presentation Video</Label>
+            <Input type="url" placeholder="https://www.youtube.com/watch?v=..." value={editForm.youtube_url || ""} onChange={(e) => setEditForm({ ...editForm, youtube_url: e.target.value })} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditCandidate(false)}>Cancel</Button>

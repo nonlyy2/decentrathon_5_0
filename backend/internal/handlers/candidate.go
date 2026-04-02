@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
+	"github.com/assylkhan/invisionu-backend/internal/youtube"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -46,6 +48,25 @@ func validateCandidateFields(req *models.CreateCandidateRequest) map[string]stri
 	return errs
 }
 
+// fetchAndStoreTranscript runs asynchronously after a candidate is saved.
+// It validates the YouTube URL and stores the transcript (if any).
+func fetchAndStoreTranscript(pool *pgxpool.Pool, candidateID int, youtubeURL string) {
+	transcript, isValid, err := youtube.ValidateAndFetch(youtubeURL)
+	if err != nil {
+		log.Printf("youtube[%d]: %v", candidateID, err)
+	}
+	var transcriptVal *string
+	if transcript != "" {
+		transcriptVal = &transcript
+	}
+	_, dbErr := pool.Exec(context.Background(),
+		`UPDATE candidates SET youtube_url_valid=$1, youtube_transcript=$2 WHERE id=$3`,
+		isValid, transcriptVal, candidateID)
+	if dbErr != nil {
+		log.Printf("youtube[%d]: failed to save transcript: %v", candidateID, dbErr)
+	}
+}
+
 func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.CreateCandidateRequest
@@ -61,16 +82,16 @@ func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		var candidate models.Candidate
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-			 RETURNING id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, photo_url, photo_ai_flag, photo_ai_note, keywords, created_at, status`,
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_url)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+			 RETURNING id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, photo_url, photo_ai_flag, photo_ai_note, keywords, created_at, status, youtube_url, youtube_transcript, youtube_url_valid`,
 			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
-			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability, req.Major,
+			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability, req.Major, req.YouTubeURL,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram, &candidate.Age, &candidate.City,
 			&candidate.School, &candidate.GraduationYear, &candidate.Achievements, &candidate.Extracurriculars,
 			&candidate.Essay, &candidate.MotivationStatement, &candidate.Disability, &candidate.Major,
 			&candidate.PhotoURL, &candidate.PhotoAIFlag, &candidate.PhotoAINote, &candidate.Keywords,
-			&candidate.CreatedAt, &candidate.Status)
+			&candidate.CreatedAt, &candidate.Status, &candidate.YouTubeURL, &candidate.YouTubeTranscript, &candidate.YouTubeURLValid)
 
 		if err != nil {
 			if isDuplicateKey(err) {
@@ -80,6 +101,8 @@ func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(500, gin.H{"error": "failed to create candidate"})
 			return
 		}
+
+		go fetchAndStoreTranscript(pool, candidate.ID, req.YouTubeURL)
 
 		c.JSON(201, candidate)
 	}
@@ -106,11 +129,11 @@ func SubmitApplication(pool *pgxpool.Pool, emailSvc ...*EmailService) gin.Handle
 		var id int
 		var fullName, email string
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'pending')
+			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_url, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending')
 			 RETURNING id, full_name, email`,
 			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
-			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability, req.Major,
+			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability, req.Major, req.YouTubeURL,
 		).Scan(&id, &fullName, &email)
 
 		if err != nil {
@@ -121,6 +144,9 @@ func SubmitApplication(pool *pgxpool.Pool, emailSvc ...*EmailService) gin.Handle
 			c.JSON(500, gin.H{"error": "failed to submit application"})
 			return
 		}
+
+		// Async: validate YouTube URL and fetch transcript
+		go fetchAndStoreTranscript(pool, id, req.YouTubeURL)
 
 		// Send confirmation email (fire-and-forget)
 		if len(emailSvc) > 0 && emailSvc[0] != nil && emailSvc[0].Enabled() {
@@ -262,14 +288,16 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 		err = pool.QueryRow(c.Request.Context(),
 			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year,
 				achievements, extracurriculars, essay, motivation_statement, disability, major,
-				photo_url, photo_ai_flag, photo_ai_note, COALESCE(keywords, '{}'), created_at, status
+				photo_url, photo_ai_flag, photo_ai_note, COALESCE(keywords, '{}'), created_at, status,
+				youtube_url, youtube_transcript, youtube_url_valid
 			 FROM candidates WHERE id = $1`, id,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram,
 			&candidate.Age, &candidate.City, &candidate.School, &candidate.GraduationYear,
 			&candidate.Achievements, &candidate.Extracurriculars, &candidate.Essay,
 			&candidate.MotivationStatement, &candidate.Disability, &candidate.Major,
 			&candidate.PhotoURL, &candidate.PhotoAIFlag, &candidate.PhotoAINote,
-			&candidate.Keywords, &candidate.CreatedAt, &candidate.Status)
+			&candidate.Keywords, &candidate.CreatedAt, &candidate.Status,
+			&candidate.YouTubeURL, &candidate.YouTubeTranscript, &candidate.YouTubeURLValid)
 
 		if err != nil {
 			c.JSON(404, gin.H{"error": "candidate not found"})
@@ -356,6 +384,7 @@ func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			Essay               string  `json:"essay" binding:"required"`
 			MotivationStatement *string `json:"motivation_statement"`
 			Major               *string `json:"major"`
+			YouTubeURL          *string `json:"youtube_url"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
@@ -364,10 +393,10 @@ func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		tag, err := pool.Exec(c.Request.Context(),
 			`UPDATE candidates SET full_name=$1, email=$2, phone=$3, telegram=$4, age=$5, city=$6, school=$7,
-			 graduation_year=$8, achievements=$9, extracurriculars=$10, essay=$11, motivation_statement=$12, major=$13
-			 WHERE id=$14`,
+			 graduation_year=$8, achievements=$9, extracurriculars=$10, essay=$11, motivation_statement=$12, major=$13, youtube_url=$14
+			 WHERE id=$15`,
 			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School,
-			req.GraduationYear, req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Major, id)
+			req.GraduationYear, req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Major, req.YouTubeURL, id)
 		if err != nil {
 			if isDuplicateKey(err) {
 				c.JSON(409, gin.H{"error": "email already registered"})
@@ -379,6 +408,10 @@ func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 		if tag.RowsAffected() == 0 {
 			c.JSON(404, gin.H{"error": "candidate not found"})
 			return
+		}
+		// Re-fetch transcript if YouTube URL was provided
+		if req.YouTubeURL != nil && *req.YouTubeURL != "" {
+			go fetchAndStoreTranscript(pool, id, *req.YouTubeURL)
 		}
 		c.JSON(200, gin.H{"message": "candidate updated"})
 	}

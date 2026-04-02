@@ -87,6 +87,7 @@ IMPORTANT RULES:
 - Consider the candidate's CONTEXT. Achievements from students in underserved areas may look different but be equally impressive.
 - NEVER use demographic data (race, gender, socioeconomic status) as scoring factors.
 - Provide SPECIFIC evidence from the application for every score.
+- If a PRESENTATION VIDEO TRANSCRIPT is provided, incorporate it into all evaluation dimensions alongside the essay and motivation statement. Quote from the transcript where relevant.
 
 FINAL SCORE CALCULATION:
 final_score = (leadership * 0.25) + (motivation * 0.25) + (growth * 0.20) + (vision * 0.15) + (communication * 0.15)
@@ -185,6 +186,13 @@ func buildCandidateData(c *models.Candidate) string {
 		sb.WriteString(*c.MotivationStatement)
 	} else {
 		sb.WriteString("Not provided")
+	}
+
+	sb.WriteString("\n\n--- PRESENTATION VIDEO TRANSCRIPT ---\n")
+	if c.YouTubeTranscript != nil && *c.YouTubeTranscript != "" {
+		sb.WriteString(*c.YouTubeTranscript)
+	} else {
+		sb.WriteString("Not available")
 	}
 
 	sb.WriteString("\n\n=== END APPLICATION ===\n")

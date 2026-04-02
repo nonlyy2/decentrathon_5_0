@@ -24,6 +24,9 @@ type Candidate struct {
 	Keywords            []string  `json:"keywords"`
 	CreatedAt           time.Time `json:"created_at"`
 	Status              string    `json:"status"`
+	YouTubeURL          *string   `json:"youtube_url"`
+	YouTubeTranscript   *string   `json:"youtube_transcript"`
+	YouTubeURLValid     *bool     `json:"youtube_url_valid"`
 }
 
 type CandidateListItem struct {
@@ -65,6 +68,7 @@ type CreateCandidateRequest struct {
 	MotivationStatement string   `json:"motivation_statement" binding:"required"`
 	Disability          *string  `json:"disability"`
 	Major               *string  `json:"major"`
+	YouTubeURL          string   `json:"youtube_url" binding:"required"`
 }
 
 // Majors maps tag → display name (multilingual)
