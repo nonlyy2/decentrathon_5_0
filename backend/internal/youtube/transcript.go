@@ -225,15 +225,15 @@ type timedTextNode struct {
 }
 
 func fetchTimedText(baseURL string) (string, error) {
-	// Request plain XML format
-	u := baseURL
-	if !strings.Contains(u, "fmt=") {
-		if strings.Contains(u, "?") {
-			u += "&fmt=xml"
-		} else {
-			u += "?fmt=xml"
-		}
+	// Always force XML format. YouTube often returns base URLs with fmt=json3/srv3.
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid timed text URL: %w", err)
 	}
+	q := parsed.Query()
+	q.Set("fmt", "xml")
+	parsed.RawQuery = q.Encode()
+	u := parsed.String()
 
 	resp, err := browserGet(u)
 	if err != nil {
