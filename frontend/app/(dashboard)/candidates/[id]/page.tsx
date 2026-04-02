@@ -445,7 +445,7 @@ export default function CandidateDetailPage() {
                   )}
                   <div className="text-sm text-muted-foreground">{detail.email}</div>
                   {detail.phone && <div className="text-sm text-muted-foreground">{detail.phone}</div>}
-                  {detail.telegram && <div className="text-sm text-muted-foreground">{detail.telegram}</div>}
+                  {detail.telegram && <div className="text-sm text-muted-foreground">@{detail.telegram}</div>}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
@@ -697,9 +697,13 @@ export default function CandidateDetailPage() {
                     <div className="space-y-2">
                       <p className="text-sm text-slate-500">{t("interview.not_eligible")}</p>
                       {effectiveInviteLink ? (
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate text-foreground">{effectiveInviteLink}</code>
-                          <Button size="sm" variant="outline" onClick={handleCopyLink}>
+                        <div className="flex items-center gap-2 w-full">
+                          <div className="flex-1 min-w-0 overflow-hidden rounded bg-muted">
+                            <code className="text-xs px-2 py-1 block w-full overflow-x-auto whitespace-nowrap text-foreground">
+                              {effectiveInviteLink}
+                            </code>
+                          </div>
+                          <Button size="sm" variant="outline" className="shrink-0" onClick={handleCopyLink}>
                             {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                           </Button>
                         </div>
