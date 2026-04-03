@@ -45,6 +45,7 @@ type CandidateListItem struct {
 	PhotoURL   *string    `json:"photo_url"`
 	PhotoAIFlag bool      `json:"photo_ai_flag"`
 	Age        *int       `json:"age"`
+	NetScore   *int       `json:"net_score"`
 }
 
 type CandidateDetail struct {

@@ -1,13 +1,18 @@
 package youtube
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"html"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -263,8 +268,9 @@ func fetchTimedText(baseURL string) (string, error) {
 }
 
 // ValidateAndFetch validates the YouTube URL and fetches its transcript.
+// If no captions are found, falls back to audio download + STT if credentials are provided.
 // Returns: transcript (may be empty string), isValid (video accessible), error.
-func ValidateAndFetch(rawURL string) (transcript string, isValid bool, err error) {
+func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript string, isValid bool, err error) {
 	videoID, err := ExtractVideoID(rawURL)
 	if err != nil {
 		return "", false, err
@@ -275,12 +281,111 @@ func ValidateAndFetch(rawURL string) (transcript string, isValid bool, err error
 		return "", false, fmt.Errorf("video is private, deleted, or not accessible")
 	}
 
-	// Перестаем игнорировать ошибку!
 	transcript, err = FetchTranscript(videoID)
 	if err != nil {
-		// Возвращаем isValid = true (видео доступно), но с ошибкой парсинга
-		return "", true, fmt.Errorf("failed to extract transcript: %w", err) 
+		// No captions found — try audio-based transcription if STT is configured
+		if sttAPIKey != "" {
+			transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
+			if err != nil {
+				return "", true, fmt.Errorf("captions unavailable, audio transcription failed: %w", err)
+			}
+			return transcript, true, nil
+		}
+		return "", true, fmt.Errorf("no captions available (configure WHISPER_API_KEY to enable audio transcription)")
 	}
-	
+
 	return transcript, true, nil
+}
+
+// FetchTranscriptViaAudio downloads the video audio using yt-dlp and transcribes it via Whisper/Alem STT.
+func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		return "", fmt.Errorf("yt-dlp not installed — cannot extract audio")
+	}
+
+	// Create temp dir
+	tmpDir, err := os.MkdirTemp("", "ytaudio-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	audioPath := filepath.Join(tmpDir, "audio.mp3")
+	videoURL := "https://www.youtube.com/watch?v=" + videoID
+
+	// Download audio only (max 50 MB, bail fast on long videos)
+	cmd := exec.Command("yt-dlp",
+		"--extract-audio",
+		"--audio-format", "mp3",
+		"--audio-quality", "5",
+		"--max-filesize", "50m",
+		"--no-playlist",
+		"-o", audioPath,
+		videoURL,
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("yt-dlp failed: %v — %s", err, stderr.String())
+	}
+
+	audioData, err := os.ReadFile(audioPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read downloaded audio: %w", err)
+	}
+
+	return transcribeAudio(audioData, "audio.mp3", apiKey, provider)
+}
+
+// transcribeAudio sends audio bytes to Whisper (OpenAI) or Alem STT.
+func transcribeAudio(audioData []byte, filename, apiKey, provider string) (string, error) {
+	var apiURL string
+	switch provider {
+	case "alem":
+		apiURL = "https://llm.alem.ai/v1/audio/transcriptions"
+	default: // openai / whisper
+		apiURL = "https://api.openai.com/v1/audio/transcriptions"
+	}
+
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	part, err := w.CreateFormFile("file", filename)
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(audioData); err != nil {
+		return "", err
+	}
+	_ = w.WriteField("model", "whisper-1")
+	w.Close()
+
+	req, err := http.NewRequest("POST", apiURL, &body)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("STT request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("STT API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("parse STT response: %w", err)
+	}
+	return strings.TrimSpace(result.Text), nil
 }

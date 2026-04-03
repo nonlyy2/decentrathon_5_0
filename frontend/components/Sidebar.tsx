@@ -68,8 +68,7 @@ export default function Sidebar() {
       href: "/candidates",
       label: t("nav.candidates"),
       icon: Users,
-      show: true,
-      disabled: false,
+      show: !auditorOnly,
     },
     {
       href: "/war-room",
@@ -78,10 +77,10 @@ export default function Sidebar() {
       show: !auditorOnly,
     },
     {
-      href: "/auditor",
+      href: "/analytics",
       label: "Analytics",
       icon: BarChart2,
-      show: hasLevel(role, "auditor"), // auditor and above
+      show: true,
     },
     {
       href: "/users",
@@ -221,11 +220,10 @@ export default function Sidebar() {
 
         {/* Notifications */}
         <Link
-          href="/war-room"
+          href="/notifications"
           className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sidebar-muted hover:text-sidebar-text hover:bg-sidebar-hover transition-colors text-sm relative"
           title={collapsed ? "Notifications" : undefined}
           onClick={() => {
-            // Mark as read when clicking
             api.post("/notifications/read").catch(() => {});
             setUnreadCount(0);
           }}

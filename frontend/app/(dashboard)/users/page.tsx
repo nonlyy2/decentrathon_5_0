@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { UserCog, Plus, Pencil, Trash2, Shield, Eye, EyeOff } from "lucide-react";
+import { UserCog, Plus, Pencil, Trash2, Shield, Eye, EyeOff, KeyRound, Copy, Check } from "lucide-react";
 
 interface UserItem {
   id: number;
@@ -47,8 +47,13 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<UserItem | null>(null);
   const [editRole, setEditRole] = useState("");
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteUser, setDeleteUser] = useState<UserItem | null>(null);
+  const [resetPwUser, setResetPwUser] = useState<UserItem | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<{ password?: string; warning?: string } | null>(null);
+  const [copiedPw, setCopiedPw] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [regForm, setRegForm] = useState({ email: "", password: "", role: "manager", full_name: "" });
   const [registering, setRegistering] = useState(false);
@@ -82,13 +87,19 @@ export default function UsersPage() {
     setEditUser(u);
     setEditRole(u.role);
     setEditName(u.full_name ?? "");
+    setEditEmail(u.email);
   };
 
   const handleSaveEdit = async () => {
     if (!editUser) return;
     setSaving(true);
     try {
-      await api.patch(`/users/${editUser.id}`, { role: editRole, full_name: editName || null });
+      const body: Record<string, unknown> = { role: editRole, full_name: editName || null };
+      // Only send email if superadmin and it changed
+      if (myLevel >= 4 && editEmail && editEmail !== editUser.email) {
+        body.email = editEmail;
+      }
+      await api.patch(`/users/${editUser.id}`, body);
       toast.success("User updated");
       setEditUser(null);
       fetch();
@@ -97,6 +108,24 @@ export default function UsersPage() {
       toast.error(msg ?? "Failed to update");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetPwUser) return;
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const res = await api.post(`/users/${resetPwUser.id}/reset-password`);
+      setResetResult({ password: res.data.new_password, warning: res.data.warning });
+      if (!res.data.new_password) {
+        toast.success("Password reset — new password emailed to user");
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg ?? "Failed to reset password");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -219,8 +248,19 @@ export default function UsersPage() {
                             onClick={() => openEdit(u)}
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                             aria-label={`Edit ${u.email}`}
+                            title="Edit user"
                           >
                             <Pencil size={14} />
+                          </button>
+                        )}
+                        {myLevel >= 4 && u.id !== user?.id && u.role !== "superadmin" && u.role !== "admin" && (
+                          <button
+                            onClick={() => { setResetPwUser(u); setResetResult(null); }}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                            aria-label={`Reset password for ${u.email}`}
+                            title="Reset password"
+                          >
+                            <KeyRound size={14} />
                           </button>
                         )}
                         {canDelete(u) && (
@@ -228,6 +268,7 @@ export default function UsersPage() {
                             onClick={() => setDeleteUser(u)}
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
                             aria-label={`Delete ${u.email}`}
+                            title="Delete user"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -253,6 +294,12 @@ export default function UsersPage() {
               <Label>{t("users.name")}</Label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="mt-1" />
             </div>
+            {myLevel >= 4 && (
+              <div>
+                <Label>Email {<span className="text-xs text-muted-foreground ml-1">(superadmin only)</span>}</Label>
+                <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="mt-1" />
+              </div>
+            )}
             <div>
               <Label>{t("users.role")}</Label>
               <select
@@ -290,6 +337,66 @@ export default function UsersPage() {
             <Button variant="outline" onClick={() => setDeleteUser(null)}>{t("dec.cancel")}</Button>
             <Button variant="destructive" onClick={handleDelete}>{t("users.delete_btn")}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password dialog */}
+      <Dialog open={!!resetPwUser} onOpenChange={(o) => { if (!o) { setResetPwUser(null); setResetResult(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound size={16} /> Reset Password
+            </DialogTitle>
+          </DialogHeader>
+          {!resetResult ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Generate a new random password for <strong>{resetPwUser?.email}</strong>.
+                {" "}If SMTP is configured, it will be emailed automatically.
+              </p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setResetPwUser(null)}>Cancel</Button>
+                <Button
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                  onClick={handleResetPassword}
+                  disabled={resetting}
+                >
+                  {resetting ? "Generating..." : "Generate & Send Password"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <div className="space-y-4">
+              {resetResult.warning && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+                  <p className="font-medium mb-1">SMTP not configured</p>
+                  <p className="text-xs">{resetResult.warning}</p>
+                </div>
+              )}
+              {resetResult.password && (
+                <div className="space-y-2">
+                  <Label>New temporary password — copy and share manually:</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-muted rounded px-3 py-2 text-sm font-mono">{resetResult.password}</code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(resetResult!.password!);
+                        setCopiedPw(true);
+                        setTimeout(() => setCopiedPw(false), 2000);
+                      }}
+                      className="p-2 rounded hover:bg-muted transition-colors"
+                      title="Copy password"
+                    >
+                      {copiedPw ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={() => { setResetPwUser(null); setResetResult(null); }}>Done</Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

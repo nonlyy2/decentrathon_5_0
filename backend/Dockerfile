@@ -6,7 +6,9 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o server cmd/server/main.go
 
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates ffmpeg
+RUN apk --no-cache add ca-certificates ffmpeg curl && \
+    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp && \
+    chmod +x /usr/local/bin/yt-dlp
 WORKDIR /app
 COPY --from=builder /app/server .
 EXPOSE 8080

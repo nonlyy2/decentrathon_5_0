@@ -41,6 +41,7 @@ export interface CandidateListItem {
   photo_url: string | null;
   photo_ai_flag: boolean;
   age: number | null;
+  net_score: number | null;
 }
 
 export interface Analysis {

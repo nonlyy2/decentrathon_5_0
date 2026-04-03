@@ -8,3 +8,8 @@ healthcheckPath = "/api/health"
 healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+# Persistent volume for candidate photos — survives redeployments
+# After adding this, set UPLOAD_DIR=/data/uploads in Railway env variables
+[[mounts]]
+mountPath = "/data"

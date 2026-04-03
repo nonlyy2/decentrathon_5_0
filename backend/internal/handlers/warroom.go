@@ -2,11 +2,15 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// mentionRegex matches @email patterns in post content
+var mentionRegex = regexp.MustCompile(`@([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|[a-zA-Z0-9_\-]+)`)
 
 type ActivityEntry struct {
 	ID          int     `json:"id"`
@@ -85,13 +89,32 @@ func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		userID, _ := c.Get("user_id")
 
+		// Parse @mentions from content text — look for @email or @username patterns
+		mentionHandles := mentionRegex.FindAllStringSubmatch(req.Content, -1)
+		mentionedUserIDs := req.Mentions // start with explicitly passed IDs
+		seen := map[int]bool{}
+		for _, existing := range mentionedUserIDs {
+			seen[existing] = true
+		}
+		for _, match := range mentionHandles {
+			handle := match[1]
+			var uid int
+			// Try matching by full email first, then by full_name/email prefix
+			if err2 := pool.QueryRow(c.Request.Context(),
+				`SELECT id FROM users WHERE email = $1 OR full_name ILIKE $1 LIMIT 1`, handle,
+			).Scan(&uid); err2 == nil && !seen[uid] {
+				mentionedUserIDs = append(mentionedUserIDs, uid)
+				seen[uid] = true
+			}
+		}
+
 		var entryID int
 		err := pool.QueryRow(c.Request.Context(), `
 			INSERT INTO activity_feed (user_id, candidate_id, action_type, content, mentions)
 			VALUES ($1, $2, $3, $4, $5::jsonb)
 			RETURNING id
 		`, userID, req.CandidateID, req.ActionType, req.Content,
-			mentionsToJSON(req.Mentions),
+			mentionsToJSON(mentionedUserIDs),
 		).Scan(&entryID)
 
 		if err != nil {
@@ -99,14 +122,13 @@ func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Create notifications for mentioned users
-		if len(req.Mentions) > 0 {
-			for _, mentionedUserID := range req.Mentions {
-				pool.Exec(c.Request.Context(), `
-					INSERT INTO notifications (user_id, from_user_id, candidate_id, activity_id, type)
-					VALUES ($1, $2, $3, $4, 'mention')
-				`, mentionedUserID, userID, req.CandidateID, entryID)
-			}
+		// Create notifications only for tagged/mentioned users
+		for _, mentionedUID := range mentionedUserIDs {
+			pool.Exec(c.Request.Context(), `
+				INSERT INTO notifications (user_id, from_user_id, candidate_id, activity_id, type)
+				VALUES ($1, $2, $3, $4, 'mention')
+				ON CONFLICT DO NOTHING
+			`, mentionedUID, userID, req.CandidateID, entryID)
 		}
 
 		c.JSON(http.StatusCreated, gin.H{"id": entryID, "message": "posted"})

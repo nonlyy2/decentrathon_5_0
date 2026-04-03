@@ -51,8 +51,8 @@ func validateCandidateFields(req *models.CreateCandidateRequest) map[string]stri
 
 // fetchAndStoreTranscript runs asynchronously after a candidate is saved.
 // It validates the YouTube URL and stores the transcript (if any).
-func fetchAndStoreTranscript(pool *pgxpool.Pool, candidateID int, youtubeURL string) {
-	transcript, isValid, err := youtube.ValidateAndFetch(youtubeURL)
+func fetchAndStoreTranscript(pool *pgxpool.Pool, candidateID int, youtubeURL, sttAPIKey, sttProvider string) {
+	transcript, isValid, err := youtube.ValidateAndFetch(youtubeURL, sttAPIKey, sttProvider)
 	if err != nil {
 		log.Printf("youtube[%d]: %v", candidateID, err)
 	}
@@ -68,7 +68,7 @@ func fetchAndStoreTranscript(pool *pgxpool.Pool, candidateID int, youtubeURL str
 	}
 }
 
-func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
+func CreateCandidate(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.CreateCandidateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -103,13 +103,13 @@ func CreateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		go fetchAndStoreTranscript(pool, candidate.ID, req.YouTubeURL)
+		go fetchAndStoreTranscript(pool, candidate.ID, req.YouTubeURL, sttAPIKey, sttProvider)
 
 		c.JSON(201, candidate)
 	}
 }
 
-func SubmitApplication(pool *pgxpool.Pool, emailSvc ...*EmailService) gin.HandlerFunc {
+func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailSvc ...*EmailService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req models.CreateCandidateRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -147,7 +147,7 @@ func SubmitApplication(pool *pgxpool.Pool, emailSvc ...*EmailService) gin.Handle
 		}
 
 		// Async: validate YouTube URL and fetch transcript
-		go fetchAndStoreTranscript(pool, id, req.YouTubeURL)
+		go fetchAndStoreTranscript(pool, id, req.YouTubeURL, sttAPIKey, sttProvider)
 
 		// Send confirmation email (fire-and-forget)
 		if len(emailSvc) > 0 && emailSvc[0] != nil && emailSvc[0].Enabled() {
@@ -184,6 +184,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			"final_score": "a.final_score",
 			"analyzed_at": "a.analyzed_at",
 			"age":         "c.age",
+			"net_score":   "COALESCE((SELECT COUNT(*) FILTER (WHERE cd2.decision='upvote') - COUNT(*) FILTER (WHERE cd2.decision='downvote') FROM committee_decisions cd2 WHERE cd2.candidate_id=c.id), 0)",
 		}
 		sortCol, ok := allowedSorts[sortBy]
 		if !ok {
@@ -242,7 +243,8 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		query := fmt.Sprintf(
 			`SELECT c.id, c.full_name, c.email, c.city, c.school, c.major, c.status, c.created_at,
-				a.final_score, a.category, a.analyzed_at, a.model_used, c.photo_url, c.photo_ai_flag, c.age
+				a.final_score, a.category, a.analyzed_at, a.model_used, c.photo_url, c.photo_ai_flag, c.age,
+				COALESCE((SELECT COUNT(*) FILTER (WHERE cd.decision='upvote') - COUNT(*) FILTER (WHERE cd.decision='downvote') FROM committee_decisions cd WHERE cd.candidate_id=c.id), 0) AS net_score
 			 FROM candidates c
 			 LEFT JOIN analyses a ON c.id = a.candidate_id
 			 %s ORDER BY %s %s NULLS LAST LIMIT $%d OFFSET $%d`,
@@ -262,7 +264,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			var item models.CandidateListItem
 			if err := rows.Scan(&item.ID, &item.FullName, &item.Email, &item.City, &item.School,
 				&item.Major, &item.Status, &item.CreatedAt, &item.FinalScore, &item.Category, &item.AnalyzedAt,
-				&item.ModelUsed, &item.PhotoURL, &item.PhotoAIFlag, &item.Age); err != nil {
+				&item.ModelUsed, &item.PhotoURL, &item.PhotoAIFlag, &item.Age, &item.NetScore); err != nil {
 				continue
 			}
 			candidates = append(candidates, item)
@@ -350,6 +352,10 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 func DeleteCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot delete candidates"})
+			return
+		}
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})
@@ -364,7 +370,7 @@ func DeleteCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
+func UpdateCandidate(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if middleware.IsRole(c, "auditor") {
 			c.JSON(403, gin.H{"error": "auditors cannot modify candidates"})
@@ -417,7 +423,7 @@ func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		// Re-fetch transcript if YouTube URL was provided
 		if req.YouTubeURL != nil && *req.YouTubeURL != "" {
-			go fetchAndStoreTranscript(pool, id, *req.YouTubeURL)
+			go fetchAndStoreTranscript(pool, id, *req.YouTubeURL, sttAPIKey, sttProvider)
 		}
 		c.JSON(200, gin.H{"message": "candidate updated"})
 	}
@@ -473,7 +479,7 @@ func UpdateCandidateKeywords(pool *pgxpool.Pool, candidateID int, keywords []str
 
 // FetchTranscriptManually re-validates the YouTube URL and fetches/refreshes the transcript.
 // POST /candidates/:id/fetch-transcript
-func FetchTranscriptManually(pool *pgxpool.Pool) gin.HandlerFunc {
+func FetchTranscriptManually(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
@@ -493,7 +499,7 @@ func FetchTranscriptManually(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		transcript, isValid, fetchErr := youtube.ValidateAndFetch(*youtubeURL)
+		transcript, isValid, fetchErr := youtube.ValidateAndFetch(*youtubeURL, sttAPIKey, sttProvider)
 		var transcriptVal *string
 		if transcript != "" {
 			transcriptVal = &transcript
