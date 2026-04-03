@@ -815,5 +815,5 @@ The project is deployed at https://front-production-6189.up.railway.app/ using [
 
 Built for **Decentrathon 5.0** — Track: AI inDrive
 
-- **Assylkhan** — Go backend, ML integration, database architecture, Telegram bot
-- **Zhanibek** — Next.js frontend, UI/UX design
+- **Assylkhan** — Go backend, database architecture, Telegram bot
+- **Zhanibek** — ML integration, Next.js frontend, UI/UX design
