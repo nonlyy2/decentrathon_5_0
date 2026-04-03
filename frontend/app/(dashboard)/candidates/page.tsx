@@ -160,7 +160,7 @@ export default function CandidatesPage() {
   };
 
   const limit = 20;
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin" || user?.role === "tech-admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin" || user?.role === "manager";
 
   const STATUS_TABS = [
     { value: "all", label: t("cand.all") },
