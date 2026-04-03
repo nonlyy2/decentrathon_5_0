@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -9,6 +9,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { MessageSquare, Flame, Users, RefreshCw, Send, Eye } from "lucide-react";
+
+interface StaffUser {
+  id: number;
+  email: string;
+  full_name: string | null;
+  role: string;
+}
 
 interface ActivityEntry {
   id: number;
@@ -56,6 +63,44 @@ export default function WarRoomPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const isAuditor = user?.role === "auditor";
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = dropdown closed
+  const [mentionAnchor, setMentionAnchor] = useState(0); // position of @ in text
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    api.get<StaffUser[]>("/users").then(r => setStaffUsers(r.data || [])).catch(() => {});
+  }, []);
+
+  const filteredMentions = mentionQuery !== null
+    ? staffUsers.filter(u =>
+        u.email.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+        (u.full_name ?? "").toLowerCase().includes(mentionQuery.toLowerCase())
+      ).slice(0, 6)
+    : [];
+
+  const handlePostTextChange = (val: string) => {
+    setNewPost(val);
+    // Detect @ mentions
+    const cursor = textareaRef.current?.selectionStart ?? val.length;
+    const textBeforeCursor = val.slice(0, cursor);
+    const atIdx = textBeforeCursor.lastIndexOf("@");
+    if (atIdx !== -1 && !textBeforeCursor.slice(atIdx + 1).includes(" ")) {
+      setMentionAnchor(atIdx);
+      setMentionQuery(textBeforeCursor.slice(atIdx + 1));
+    } else {
+      setMentionQuery(null);
+    }
+  };
+
+  const insertMention = (u: StaffUser) => {
+    const handle = u.full_name || u.email;
+    const before = newPost.slice(0, mentionAnchor);
+    const after = newPost.slice(mentionAnchor + 1 + (mentionQuery?.length ?? 0));
+    setNewPost(`${before}@${handle} ${after}`);
+    setMentionQuery(null);
+    textareaRef.current?.focus();
+  };
 
   const fetchFeed = useCallback(async () => {
     try {
@@ -165,13 +210,38 @@ export default function WarRoomPage() {
               {!isAuditor && (
                 <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                   <p className="text-sm font-medium">Post to War Room</p>
-                  <Textarea
-                    value={newPost}
-                    onChange={(e) => setNewPost(e.target.value)}
-                    placeholder="Share a note, observation, or mention a candidate... Use #candidateId to reference a candidate."
-                    rows={3}
-                    className="resize-none"
-                  />
+                  <div className="relative">
+                    <Textarea
+                      ref={textareaRef}
+                      value={newPost}
+                      onChange={(e) => handlePostTextChange(e.target.value)}
+                      placeholder="Share a note or observation... Type @ to mention a colleague."
+                      rows={3}
+                      className="resize-none"
+                    />
+                    {/* @ mention dropdown */}
+                    {mentionQuery !== null && filteredMentions.length > 0 && (
+                      <div className="absolute left-0 top-full mt-1 z-50 w-64 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                        {filteredMentions.map(u => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 text-sm"
+                            onMouseDown={(e) => { e.preventDefault(); insertMention(u); }}
+                          >
+                            <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                              style={{ backgroundColor: "#c1f11d", color: "#111" }}>
+                              {(u.full_name || u.email).charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{u.full_name || u.email}</div>
+                              {u.full_name && <div className="text-xs text-muted-foreground truncate">{u.email}</div>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"

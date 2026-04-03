@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -164,6 +165,10 @@ func resolveProvider(c *gin.Context, providers AIProviders, defaultProvider stri
 // AnalyzeSingleCandidate creates a handler — providers map is injected from main
 func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot trigger AI analysis"})
+			return
+		}
 		candidateID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})
@@ -292,6 +297,10 @@ var batchStatus struct {
 
 func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders AIBatchProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot trigger AI analysis"})
+			return
+		}
 		analyzeFunc, ok := resolveProvider(c, providers, defaultProvider)
 		if !ok {
 			return

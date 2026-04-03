@@ -648,7 +648,7 @@ export default function CandidateDetailPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Sparkles size={16} className="text-purple-500" /> {t("detail.ai_analysis")}
+                      <Sparkles size={16} className="text-purple-500" /> Stage 1: {t("detail.ai_analysis")}
                     </CardTitle>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge className={riskColors[a.ai_generated_risk]}>
@@ -770,11 +770,11 @@ export default function CandidateDetailPage() {
             </Card>
           )}
 
-          {/* Interview — Stage 2 */}
-          <Card className="overflow-hidden">
+          {/* Stage 2: Interview Status */}
+          <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <BotMessageSquare size={16} /> {t("interview.title")}
+                <BotMessageSquare size={16} /> Stage 2: {t("interview.title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -935,8 +935,31 @@ export default function CandidateDetailPage() {
                     );
                   })()}
 
-                  {/* Interview AI analysis */}
-                  {interviewData.analysis && (() => {
+                  {/* Stage 2 analysis is rendered below the Interview card */}
+
+                  {/* Transcript button */}
+                  <Button size="sm" variant="outline" onClick={handleViewTranscript}>
+                    <Mic size={14} className="mr-1" /> {t("interview.view_transcript")}
+                  </Button>
+
+                  {showTranscript && transcript.length > 0 && (
+                    <div className="max-h-64 overflow-y-auto space-y-2 border border-border rounded-lg p-3 bg-card">
+                      {transcript.map((m, i) => (
+                        <div key={i} className={`text-sm ${m.role === "bot" ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
+                          <span className="font-medium text-xs uppercase">{m.role === "bot" ? "Interviewer" : "Candidate"}</span>
+                          {m.message_type === "voice" && <Mic size={10} className="inline ml-1 text-purple-500" />}
+                          <p className="mt-0.5">{m.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Stage 2: Interview AI Analysis — standalone cards matching Stage 1 format */}
+          {interviewData?.analysis && (() => {
                     const ia = interviewData.analysis;
                     const stage2Scores = [
                       { key: "leadership", label: "Leadership", score: ia.score_leadership, explanation: ia.explanation_leadership },
@@ -988,13 +1011,13 @@ export default function CandidateDetailPage() {
                       },
                     };
                     return (
-                      <div className="space-y-4">
-                        {/* Score overview Card */}
+                      <>
+                        {/* Stage 2: Score overview Card */}
                         <Card>
                           <CardHeader>
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <CardTitle className="text-base flex items-center gap-2">
-                                <Mic size={16} className="text-purple-500" /> Interview AI Analysis
+                                <Mic size={16} className="text-purple-500" /> Stage 2: Interview Analysis
                               </CardTitle>
                             </div>
                           </CardHeader>
@@ -1098,7 +1121,7 @@ export default function CandidateDetailPage() {
                           </Card>
                         )}
 
-                        {/* Footer actions */}
+                        {/* Stage 2: Footer actions */}
                         <div className="flex items-center justify-end gap-2">
                           <Button
                             size="sm"
@@ -1142,31 +1165,10 @@ export default function CandidateDetailPage() {
                             <Trash2 size={12} className="mr-1" /> Delete Analysis
                           </Button>
                         </div>
-                      </div>
+                      </>
                     );
                   })()}
 
-
-                  {/* Transcript button */}
-                  <Button size="sm" variant="outline" onClick={handleViewTranscript}>
-                    <Mic size={14} className="mr-1" /> {t("interview.view_transcript")}
-                  </Button>
-
-                  {showTranscript && transcript.length > 0 && (
-                    <div className="max-h-64 overflow-y-auto space-y-2 border border-border rounded-lg p-3 bg-card">
-                      {transcript.map((m, i) => (
-                        <div key={i} className={`text-sm ${m.role === "bot" ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
-                          <span className="font-medium text-xs uppercase">{m.role === "bot" ? "Interviewer" : "Candidate"}</span>
-                          {m.message_type === "voice" && <Mic size={10} className="inline ml-1 text-purple-500" />}
-                          <p className="mt-0.5">{m.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
           {/* Decision panel */}
           <Card>
             <CardHeader><CardTitle className="text-base">{t("detail.committee")}</CardTitle></CardHeader>

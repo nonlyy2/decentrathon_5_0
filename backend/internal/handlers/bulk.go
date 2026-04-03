@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,6 +28,10 @@ var decisionsWithRecord = map[string]bool{
 
 func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot make bulk decisions"})
+			return
+		}
 		var req BulkDecisionRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
@@ -49,12 +54,12 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		success := 0
 		for _, id := range req.CandidateIDs {
-			// Only insert a committee_decisions record for decisions that require one.
+			// Only insert/update a committee_decisions record for decisions that require one.
 			if decisionsWithRecord[req.Decision] {
 				_, err := pool.Exec(ctx,
 					`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by)
 					 VALUES ($1, $2, $3, $4)
-					 ON CONFLICT DO NOTHING`,
+					 ON CONFLICT (candidate_id, decided_by) DO UPDATE SET decision=$2, notes=$3, decided_at=NOW()`,
 					id, req.Decision, req.Notes, userID)
 				if err != nil {
 					continue
@@ -83,12 +88,22 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 
 // AutoAcceptRequest defines the request body for auto-accepting top N candidates.
 type AutoAcceptRequest struct {
-	Count int `json:"count" binding:"required,min=1"`
+	Count    int      `json:"count" binding:"required,min=1"`
+	Major    string   `json:"major"`
+	MinScore *float64 `json:"min_score"`
+	MaxScore *float64 `json:"max_score"`
+	MinAge   *int     `json:"min_age"`
+	MaxAge   *int     `json:"max_age"`
 }
 
-// AutoAcceptTopN automatically shortlists the top N analyzed candidates by score.
+// AutoAcceptTopN automatically shortlists the top N analyzed candidates by score,
+// respecting any active filters passed from the frontend.
 func AutoAcceptTopN(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot auto-accept candidates"})
+			return
+		}
 		var req AutoAcceptRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
@@ -98,13 +113,45 @@ func AutoAcceptTopN(pool *pgxpool.Pool) gin.HandlerFunc {
 		userID, _ := c.Get("user_id")
 		ctx := c.Request.Context()
 
-		// Get top N analyzed candidates ordered by final_score desc
-		rows, err := pool.Query(ctx, `
+		where := "WHERE c.status = 'analyzed'"
+		args := []interface{}{}
+		argIdx := 1
+
+		if req.Major != "" {
+			where += fmt.Sprintf(" AND c.major = $%d", argIdx)
+			args = append(args, req.Major)
+			argIdx++
+		}
+		if req.MinScore != nil {
+			where += fmt.Sprintf(" AND a.final_score >= $%d", argIdx)
+			args = append(args, *req.MinScore)
+			argIdx++
+		}
+		if req.MaxScore != nil {
+			where += fmt.Sprintf(" AND a.final_score <= $%d", argIdx)
+			args = append(args, *req.MaxScore)
+			argIdx++
+		}
+		if req.MinAge != nil {
+			where += fmt.Sprintf(" AND c.age >= $%d", argIdx)
+			args = append(args, *req.MinAge)
+			argIdx++
+		}
+		if req.MaxAge != nil {
+			where += fmt.Sprintf(" AND c.age <= $%d", argIdx)
+			args = append(args, *req.MaxAge)
+			argIdx++
+		}
+
+		args = append(args, req.Count)
+		query := fmt.Sprintf(`
 			SELECT c.id FROM candidates c
 			JOIN analyses a ON a.candidate_id = c.id
-			WHERE c.status = 'analyzed'
+			%s
 			ORDER BY a.final_score DESC
-			LIMIT $1`, req.Count)
+			LIMIT $%d`, where, argIdx)
+
+		rows, err := pool.Query(ctx, query, args...)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch candidates"})
 			return
@@ -127,7 +174,7 @@ func AutoAcceptTopN(pool *pgxpool.Pool) gin.HandlerFunc {
 		accepted := 0
 		for _, id := range ids {
 			pool.Exec(ctx,
-				`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by) VALUES ($1, 'shortlist', 'Auto-accepted (top N)', $2)`,
+				`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by) VALUES ($1, 'shortlist', 'Auto-accepted (top N)', $2) ON CONFLICT (candidate_id, decided_by) DO UPDATE SET decision='shortlist', decided_at=NOW()`,
 				id, userID)
 			_, err := pool.Exec(ctx, `UPDATE candidates SET status = 'shortlisted' WHERE id = $1`, id)
 			if err == nil {

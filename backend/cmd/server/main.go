@@ -131,7 +131,7 @@ func main() {
 
 	// Public routes
 	api.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
-	api.POST("/apply", handlers.SubmitApplication(pool, emailSvc))
+	api.POST("/apply", handlers.SubmitApplication(pool, cfg.WhisperAPIKey, cfg.WhisperProvider, emailSvc))
 	api.POST("/auth/register", handlers.Register(pool))
 	api.POST("/auth/login", handlers.Login(pool, cfg.JWTSecret))
 	api.GET("/majors", handlers.GetMajors())
@@ -146,12 +146,12 @@ func main() {
 	{
 		// Candidates — manager+
 		protected.GET("/candidates", handlers.ListCandidates(pool))
-		protected.POST("/candidates", handlers.CreateCandidate(pool))
+		protected.POST("/candidates", handlers.CreateCandidate(pool, cfg.WhisperAPIKey, cfg.WhisperProvider))
 		protected.GET("/candidates/:id", handlers.GetCandidate(pool))
-		protected.PATCH("/candidates/:id", handlers.UpdateCandidate(pool))
+		protected.PATCH("/candidates/:id", handlers.UpdateCandidate(pool, cfg.WhisperAPIKey, cfg.WhisperProvider))
 		protected.DELETE("/candidates/:id", handlers.DeleteCandidate(pool))
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
-		protected.POST("/candidates/:id/fetch-transcript", handlers.FetchTranscriptManually(pool))
+		protected.POST("/candidates/:id/fetch-transcript", handlers.FetchTranscriptManually(pool, cfg.WhisperAPIKey, cfg.WhisperProvider))
 
 		// Analysis
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))

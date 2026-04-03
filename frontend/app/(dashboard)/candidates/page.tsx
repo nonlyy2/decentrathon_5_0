@@ -80,6 +80,13 @@ export default function CandidatesPage() {
   const { provider, setProvider } = useAIProvider();
   const { user } = useAuth();
 
+  // Auditors are not permitted on this page — redirect to analytics
+  useEffect(() => {
+    if (user?.role === "auditor") {
+      router.replace("/analytics");
+    }
+  }, [user, router]);
+
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -147,7 +154,14 @@ export default function CandidatesPage() {
     if (!n || n < 1) return;
     setAutoAccepting(true);
     try {
-      const res = await api.post("/candidates/auto-accept", { count: n });
+      const body: Record<string, unknown> = { count: n };
+      // Pass active filters so auto-accept only picks from filtered candidates
+      if (majorFilter) body.major = majorFilter;
+      if (scoreRange[0] > 0) body.min_score = scoreRange[0];
+      if (scoreRange[1] < 100) body.max_score = scoreRange[1];
+      if (ageRange[0] > 14) body.min_age = ageRange[0];
+      if (ageRange[1] < 30) body.max_age = ageRange[1];
+      const res = await api.post("/candidates/auto-accept", body);
       toast.success(res.data.message);
       setAutoAcceptOpen(false);
       fetchCandidates();
@@ -645,6 +659,7 @@ export default function CandidatesPage() {
               <SortableHead column="full_name" label={t("cand.name")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>{t("cand.city")}</TableHead>
               <SortableHead column="final_score" label={t("cand.score")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+              <SortableHead column="net_score" label="Votes" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>{t("cand.status")}</TableHead>
               <SortableHead column="created_at" label={t("cand.created")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <SortableHead column="analyzed_at" label={t("cand.analyzed_col")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
@@ -662,7 +677,7 @@ export default function CandidatesPage() {
               ))
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                   {t("cand.no_found")}
                 </TableCell>
               </TableRow>
@@ -708,6 +723,15 @@ export default function CandidatesPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{c.city || "—"}</TableCell>
                   <TableCell><ScoreBadge score={c.final_score} category={c.category} /></TableCell>
+                  <TableCell>
+                    {c.net_score != null && c.net_score !== 0 ? (
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${c.net_score > 0 ? "text-green-700 bg-green-100" : "text-red-700 bg-red-100"}`}>
+                        {c.net_score > 0 ? `+${c.net_score}` : c.net_score}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell><StatusBadge status={c.status} /></TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     <div>{new Date(c.created_at).toLocaleDateString()}</div>
@@ -836,6 +860,11 @@ export default function CandidatesPage() {
           <p className="text-sm text-muted-foreground">
             Automatically shortlist the top N analyzed candidates by AI score. Only candidates with status &quot;analyzed&quot; will be affected.
           </p>
+          {hasActiveFilters && (
+            <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              Active filters detected — auto-accept will only consider candidates matching your current filters (major, score range, age).
+            </p>
+          )}
           <div className="mt-2">
             <Input
               type="number"
