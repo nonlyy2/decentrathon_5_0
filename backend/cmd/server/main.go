@@ -201,6 +201,7 @@ func main() {
 		protected.GET("/users/:id", middleware.AuditorOrAbove(), handlers.GetUser(pool))
 		protected.PATCH("/users/:id", middleware.TechAdminOrAbove(), handlers.UpdateUser(pool))
 		protected.DELETE("/users/:id", middleware.SuperAdminOnly(), handlers.DeleteUser(pool))
+		protected.POST("/users/:id/reset-password", middleware.SuperAdminOnly(), handlers.ResetUserPassword(pool, emailSvc))
 
 		// Profile
 		protected.GET("/profile", handlers.GetProfile(pool))

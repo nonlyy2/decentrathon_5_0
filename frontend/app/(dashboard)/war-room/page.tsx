@@ -219,6 +219,9 @@ export default function WarRoomPage() {
                             <Link href={`/candidates/${entry.candidate_id}`} className="text-blue-500 hover:underline font-medium">
                               {entry.candidate_name}
                             </Link>
+                            {entry.candidate_id && (
+                              <span className="text-xs text-muted-foreground font-mono ml-1">#{entry.candidate_id}</span>
+                            )}
                           </span>
                         )}
                       </div>

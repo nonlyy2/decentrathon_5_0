@@ -3,13 +3,14 @@
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, Tooltip } from "recharts";
 
 interface ScoreRadarProps {
-  scores: {
+  scores?: {
     leadership: number;
     motivation: number;
     growth: number;
     vision: number;
     communication: number;
   };
+  customData?: { subject: string; score: number }[];
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -24,13 +25,15 @@ function CustomTooltip({ active, payload }: any) {
   );
 }
 
-export default function ScoreRadar({ scores }: ScoreRadarProps) {
-  const data = [
-    { subject: "Leadership", score: scores.leadership, fullMark: 100 },
-    { subject: "Motivation", score: scores.motivation, fullMark: 100 },
-    { subject: "Growth", score: scores.growth, fullMark: 100 },
-    { subject: "Vision", score: scores.vision, fullMark: 100 },
-    { subject: "Communication", score: scores.communication, fullMark: 100 },
+export default function ScoreRadar({ scores, customData }: ScoreRadarProps) {
+  const data = customData
+    ? customData.map((d) => ({ ...d, fullMark: 100 }))
+    : [
+    { subject: "Leadership", score: scores!.leadership, fullMark: 100 },
+    { subject: "Motivation", score: scores!.motivation, fullMark: 100 },
+    { subject: "Growth", score: scores!.growth, fullMark: 100 },
+    { subject: "Vision", score: scores!.vision, fullMark: 100 },
+    { subject: "Communication", score: scores!.communication, fullMark: 100 },
   ];
 
   return (

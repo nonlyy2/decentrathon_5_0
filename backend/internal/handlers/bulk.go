@@ -10,8 +10,19 @@ import (
 
 type BulkDecisionRequest struct {
 	CandidateIDs []int  `json:"candidate_ids" binding:"required,min=1"`
-	Decision     string `json:"decision" binding:"required,oneof=shortlist reject waitlist review pending"`
+	Decision     string `json:"decision" binding:"required,oneof=shortlist reject waitlist review pending upvote downvote"`
 	Notes        string `json:"notes"`
+}
+
+// decisionsWithRecord are decision types that get recorded in committee_decisions.
+// "pending" is a status reset only — no decision record is created.
+var decisionsWithRecord = map[string]bool{
+	"shortlist": true,
+	"reject":    true,
+	"waitlist":  true,
+	"review":    true,
+	"upvote":    true,
+	"downvote":  true,
 }
 
 func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
@@ -31,20 +42,32 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			"waitlist":  "waitlisted",
 			"review":    "analyzed",
 			"pending":   "pending",
+			"upvote":    "",
+			"downvote":  "",
 		}
 		newStatus := statusMap[req.Decision]
 
 		success := 0
 		for _, id := range req.CandidateIDs {
-			// Insert decision
-			_, err := pool.Exec(ctx,
-				`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by) VALUES ($1, $2, $3, $4)`,
-				id, req.Decision, req.Notes, userID)
-			if err != nil {
+			// Only insert a committee_decisions record for decisions that require one.
+			if decisionsWithRecord[req.Decision] {
+				_, err := pool.Exec(ctx,
+					`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by)
+					 VALUES ($1, $2, $3, $4)
+					 ON CONFLICT DO NOTHING`,
+					id, req.Decision, req.Notes, userID)
+				if err != nil {
+					continue
+				}
+			}
+
+			// For vote-only decisions (upvote/downvote), skip the status update.
+			if newStatus == "" {
+				success++
 				continue
 			}
-			// Update status
-			_, err = pool.Exec(ctx, `UPDATE candidates SET status = $1 WHERE id = $2`, newStatus, id)
+
+			_, err := pool.Exec(ctx, `UPDATE candidates SET status = $1 WHERE id = $2`, newStatus, id)
 			if err != nil {
 				continue
 			}
@@ -52,7 +75,7 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": fmt.Sprintf("%d candidates updated to %s", success, newStatus),
+			"message": fmt.Sprintf("%d candidates updated to %s", success, req.Decision),
 			"updated": success,
 		})
 	}

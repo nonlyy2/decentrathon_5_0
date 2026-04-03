@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"net/http"
 
 	"github.com/assylkhan/invisionu-backend/internal/middleware"
@@ -80,37 +83,107 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// tech-admin cannot set superadmin role
+		var req models.UpdateUserRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		// tech-admin cannot set superadmin/admin role
 		if callerRole == "tech-admin" {
-			var req models.UpdateUserRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(400, gin.H{"error": err.Error()})
-				return
-			}
 			if req.Role != nil && (*req.Role == "superadmin" || *req.Role == "admin") {
 				c.JSON(403, gin.H{"error": "tech-admin cannot assign superadmin role"})
 				return
 			}
-			_, err = pool.Exec(c.Request.Context(),
-				`UPDATE users SET role = COALESCE($1, role), full_name = COALESCE($2, full_name) WHERE id = $3`,
-				req.Role, req.FullName, id)
-		} else {
-			var req models.UpdateUserRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(400, gin.H{"error": err.Error()})
-				return
-			}
-			_, err = pool.Exec(c.Request.Context(),
-				`UPDATE users SET role = COALESCE($1, role), full_name = COALESCE($2, full_name) WHERE id = $3`,
-				req.Role, req.FullName, id)
 		}
 
+		// Only superadmin/admin can change another user's email
+		if req.Email != nil && callerRole != "superadmin" && callerRole != "admin" {
+			c.JSON(403, gin.H{"error": "only superadmin can change user email"})
+			return
+		}
+
+		_, err = pool.Exec(c.Request.Context(),
+			`UPDATE users SET role = COALESCE($1, role), full_name = COALESCE($2, full_name), email = COALESCE($3, email) WHERE id = $4`,
+			req.Role, req.FullName, req.Email, id)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to update user"})
 			return
 		}
 		c.JSON(200, gin.H{"message": "user updated"})
 	}
+}
+
+// ResetUserPassword — superadmin generates a new random password and (if SMTP configured) emails it to the user
+func ResetUserPassword(pool *pgxpool.Pool, emailSvc *EmailService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		ctx := c.Request.Context()
+
+		var user struct {
+			ID    int
+			Email string
+			Role  string
+		}
+		err := pool.QueryRow(ctx, `SELECT id, email, role FROM users WHERE id = $1`, id).Scan(&user.ID, &user.Email, &user.Role)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "user not found"})
+			return
+		}
+
+		if user.Role == "superadmin" || user.Role == "admin" {
+			c.JSON(403, gin.H{"error": "cannot reset superadmin password"})
+			return
+		}
+
+		newPassword, err := generateRandomPassword(12)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to generate password"})
+			return
+		}
+
+		hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), 10)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to hash password"})
+			return
+		}
+
+		_, err = pool.Exec(ctx, `UPDATE users SET password_hash = $1 WHERE id = $2`, string(hash), user.ID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to reset password"})
+			return
+		}
+
+		emailSent := false
+		if emailSvc != nil && emailSvc.Enabled() {
+			subject := "Your inVision U Password Has Been Reset"
+			body := fmt.Sprintf("Your inVision U account password has been reset by an administrator.\n\nYour new temporary password is: %s\n\nPlease log in and change your password immediately.", newPassword)
+			if sendErr := emailSvc.sendEmail(user.Email, subject, body, "password_reset", 0); sendErr == nil {
+				emailSent = true
+			}
+		}
+
+		resp := gin.H{"message": "password reset successfully"}
+		if !emailSent {
+			// Return the password in response when email is unavailable (admin copies it manually)
+			resp["new_password"] = newPassword
+			resp["warning"] = "SMTP not configured — copy this password manually, it will not be shown again"
+		}
+		c.JSON(200, resp)
+	}
+}
+
+func generateRandomPassword(length int) (string, error) {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$"
+	result := make([]byte, length)
+	for i := range result {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = chars[n.Int64()]
+	}
+	return string(result), nil
 }
 
 // DeleteUser — only superadmin can delete users (except themselves)

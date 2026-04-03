@@ -41,4 +41,5 @@ type UpdateProfileRequest struct {
 type UpdateUserRequest struct {
 	Role     *string `json:"role" binding:"omitempty,oneof=superadmin tech-admin auditor manager admin committee"`
 	FullName *string `json:"full_name"`
+	Email    *string `json:"email" binding:"omitempty,email"`
 }

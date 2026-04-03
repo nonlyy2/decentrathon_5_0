@@ -361,7 +361,10 @@ export default function CandidateDetailPage() {
           <Button variant="ghost" size="sm" onClick={() => router.push("/candidates")}>
             <ArrowLeft size={16} />
           </Button>
-          <h1 className="text-2xl font-bold">{detail.full_name}</h1>
+          <div>
+            <h1 className="text-2xl font-bold leading-tight">{detail.full_name}</h1>
+            <span className="text-xs text-muted-foreground font-mono">ID #{detail.id}</span>
+          </div>
           <StatusBadge status={detail.status} />
         </div>
         <div className="flex items-center gap-3">
@@ -933,143 +936,174 @@ export default function CandidateDetailPage() {
                   })()}
 
                   {/* Interview AI analysis */}
-                  {interviewData.analysis && (
-                    <div className="space-y-3 bg-muted/50 rounded-lg p-3">
-                      {/* Score grid with collapsible explanations */}
-                      <div className="space-y-2">
-                        {[
-                          { key: "leadership", label: "Leadership", score: interviewData.analysis.score_leadership, explanation: interviewData.analysis.explanation_leadership },
-                          { key: "grit", label: "Grit", score: interviewData.analysis.score_grit, explanation: interviewData.analysis.explanation_grit },
-                          { key: "authenticity", label: "Authenticity", score: interviewData.analysis.score_authenticity, explanation: interviewData.analysis.explanation_authenticity },
-                          { key: "motivation", label: "Motivation", score: interviewData.analysis.score_motivation, explanation: interviewData.analysis.explanation_motivation },
-                          { key: "vision", label: "Vision", score: interviewData.analysis.score_vision, explanation: interviewData.analysis.explanation_vision },
-                        ].map((s) => {
-                          const isExp = expandedStage2Score === s.key;
-                          return (
-                          <div key={s.key} className="bg-card rounded p-2 border border-border">
-                            <button
-                              className="w-full text-left"
-                              onClick={() => setExpandedStage2Score(isExp ? null : s.key)}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
-                                <span className="text-sm font-bold">{s.score}<span className="text-xs text-muted-foreground font-normal">/100</span></span>
+                  {interviewData.analysis && (() => {
+                    const ia = interviewData.analysis;
+                    const stage2Scores = [
+                      { key: "leadership", label: "Leadership", score: ia.score_leadership, explanation: ia.explanation_leadership },
+                      { key: "grit", label: "Grit", score: ia.score_grit, explanation: ia.explanation_grit },
+                      { key: "authenticity", label: "Authenticity", score: ia.score_authenticity, explanation: ia.explanation_authenticity },
+                      { key: "motivation", label: "Motivation", score: ia.score_motivation, explanation: ia.explanation_motivation },
+                      { key: "vision", label: "Vision", score: ia.score_vision, explanation: ia.explanation_vision },
+                    ];
+                    const anticheatFlagInfo: Record<string, { label: string; reason: string }> = {
+                      multiple_fast_responses: {
+                        label: "Multiple fast responses",
+                        reason: "Candidate answered 50+ character messages in under 5 seconds — indicates likely copy-paste from prepared text.",
+                      },
+                      style_shift_detected: {
+                        label: "Writing style shift (behavioral)",
+                        reason: "Significant change in average word length between first and second half of answers — suggests different authorship or outside assistance mid-interview.",
+                      },
+                      too_fast: {
+                        label: "Suspiciously fast answers",
+                        reason: "AI evaluator detected multiple responses submitted faster than humanly possible for their length — strong indicator of pre-written or AI-generated answers.",
+                      },
+                      style_shift: {
+                        label: "Writing style inconsistency",
+                        reason: "AI evaluator detected a notable shift in vocabulary, tone, or complexity across interview answers — suggests answers were not all authored by the same person.",
+                      },
+                      factual_inconsistency: {
+                        label: "Factual inconsistencies",
+                        reason: "AI evaluator found contradictions between statements made at different points in the interview — e.g. conflicting details about background or experience.",
+                      },
+                      generic_answers: {
+                        label: "Overly generic answers",
+                        reason: "AI evaluator flagged answers as formulaic and non-specific — lacking personal detail that would be expected from genuine first-hand experience.",
+                      },
+                      copy_paste: {
+                        label: "Potential copy-paste detected",
+                        reason: "AI evaluator identified answers that closely match common templates or read as directly copied from generic sources rather than personally composed.",
+                      },
+                      failed_verification: {
+                        label: "Failed follow-up verification",
+                        reason: "Candidate could not substantiate or elaborate on a claim when probed — inconsistent with someone who genuinely holds the stated experience.",
+                      },
+                      all_voice: {
+                        label: "All voice messages",
+                        reason: "Candidate used only voice messages, which reduces verifiability of authentic typed responses.",
+                      },
+                      no_responses: {
+                        label: "No responses recorded",
+                        reason: "No candidate messages were logged during the interview session.",
+                      },
+                    };
+                    return (
+                      <div className="space-y-4">
+                        {/* Score overview Card */}
+                        <Card>
+                          <CardHeader>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <CardTitle className="text-base flex items-center gap-2">
+                                <Mic size={16} className="text-purple-500" /> Interview AI Analysis
+                              </CardTitle>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="flex items-center gap-4">
+                              <div className="text-4xl font-bold text-purple-600">{ia.final_score}</div>
+                              <Badge className={categoryColors[ia.category] || ""}>{ia.category}</Badge>
+                            </div>
+                            <ScoreRadar customData={stage2Scores.map((s) => ({ subject: s.label, score: s.score }))} />
+                          </CardContent>
+                        </Card>
+
+                        {/* Summary Card */}
+                        {ia.summary && (
+                          <Card>
+                            <CardHeader><CardTitle className="text-base">Interview Summary</CardTitle></CardHeader>
+                            <CardContent className="space-y-3">
+                              <p className="text-sm leading-relaxed text-foreground">{ia.summary}</p>
+                              {/* Consistency + style match */}
+                              <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+                                <div>
+                                  <p className="text-xs text-muted-foreground mb-1">Essay Consistency</p>
+                                  <p className="text-lg font-bold text-foreground">{ia.consistency_score}<span className="text-xs text-muted-foreground font-normal">/100</span></p>
+                                  <div className="w-full bg-slate-100 rounded-full h-2 mt-1">
+                                    <div className="h-2 rounded-full bg-blue-400 transition-all" style={{ width: `${ia.consistency_score}%` }} />
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground mb-1">Style Match</p>
+                                  <p className="text-lg font-bold text-foreground">{ia.style_match_score}<span className="text-xs text-muted-foreground font-normal">/100</span></p>
+                                  <div className="w-full bg-slate-100 rounded-full h-2 mt-1">
+                                    <div className="h-2 rounded-full bg-green-400 transition-all" style={{ width: `${ia.style_match_score}%` }} />
+                                  </div>
+                                </div>
                               </div>
-                              <div className="w-full bg-muted rounded-full h-1.5 mt-1">
-                                <div className="h-1.5 rounded-full bg-purple-500 transition-all" style={{ width: `${s.score}%` }} />
-                              </div>
-                            </button>
-                            {isExp && s.explanation && (
-                              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed pl-2 border-l-2 border-purple-200 dark:border-purple-700">{s.explanation}</p>
-                            )}
-                          </div>
-                          );
-                        })}
-                      </div>
+                              <p className="text-xs text-muted-foreground">
+                                Analyzed by {ia.model_used} — {new Date(ia.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        )}
 
-                      {/* Final score + category */}
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <div>
-                          <span className="text-sm font-medium">Interview Score: </span>
-                          <span className="text-lg font-bold text-purple-700">{interviewData.analysis.final_score}</span>
-                        </div>
-                        <Badge className={categoryColors[interviewData.analysis.category] || ""}>{interviewData.analysis.category}</Badge>
-                      </div>
+                        {/* Strengths & Concerns */}
+                        {((ia.strengths && ia.strengths.length > 0) || (ia.concerns && ia.concerns.length > 0)) && (
+                          <KeyStrengthsRedFlags
+                            strengths={ia.strengths || []}
+                            redFlags={ia.concerns || []}
+                          />
+                        )}
 
-                      {/* Summary */}
-                      {interviewData.analysis.summary && (
-                        <p className="text-sm text-foreground">{interviewData.analysis.summary}</p>
-                      )}
+                        {/* Score breakdown Card */}
+                        <Card>
+                          <CardHeader><CardTitle className="text-base">Score Breakdown</CardTitle></CardHeader>
+                          <CardContent className="space-y-3">
+                            {stage2Scores.map((s) => {
+                              const isExp = expandedStage2Score === s.key;
+                              return (
+                                <div key={s.key}>
+                                  <button
+                                    className="w-full text-left"
+                                    onClick={() => setExpandedStage2Score(isExp ? null : s.key)}
+                                  >
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-sm font-medium">{s.label}</span>
+                                      <span className="text-sm font-bold">{s.score}</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 rounded-full h-2">
+                                      <div className="h-2 rounded-full bg-purple-500 transition-all" style={{ width: `${s.score}%` }} />
+                                    </div>
+                                  </button>
+                                  {isExp && s.explanation && (
+                                    <p className="text-xs text-muted-foreground mt-1 pl-2 border-l-2 border-purple-200 dark:border-purple-700">
+                                      {s.explanation}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </CardContent>
+                        </Card>
 
-                      {/* Consistency + style match */}
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <div className="bg-card rounded p-2 text-center border border-border">
-                          <p className="text-xs text-muted-foreground">Essay Consistency</p>
-                          <p className="text-base font-bold text-foreground">{interviewData.analysis.consistency_score}</p>
-                          <div className="w-full bg-muted rounded-full h-1 mt-1">
-                            <div className="h-1 rounded-full bg-blue-400" style={{ width: `${interviewData.analysis.consistency_score}%` }} />
-                          </div>
-                        </div>
-                        <div className="bg-card rounded p-2 text-center border border-border">
-                          <p className="text-xs text-muted-foreground">Style Match</p>
-                          <p className="text-base font-bold text-foreground">{interviewData.analysis.style_match_score}</p>
-                          <div className="w-full bg-muted rounded-full h-1 mt-1">
-                            <div className="h-1 rounded-full bg-green-400" style={{ width: `${interviewData.analysis.style_match_score}%` }} />
-                          </div>
-                        </div>
-                      </div>
+                        {/* Anti-cheat flags */}
+                        {ia.suspicion_flags && ia.suspicion_flags.length > 0 && (
+                          <Card className="border-orange-200 dark:border-orange-800">
+                            <CardHeader>
+                              <CardTitle className="text-base flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                                <AlertTriangle size={16} /> Anti-cheat Flags Detected
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              {ia.suspicion_flags.map((f, i) => {
+                                const info = anticheatFlagInfo[f] || { label: f.replace(/_/g, " "), reason: "Unusual behavioral pattern detected by the anti-cheat system." };
+                                return (
+                                  <div key={i} className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded p-3">
+                                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">{info.label}</p>
+                                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 leading-relaxed">{info.reason}</p>
+                                  </div>
+                                );
+                              })}
+                            </CardContent>
+                          </Card>
+                        )}
 
-                      {/* Strengths */}
-                      {interviewData.analysis.strengths && interviewData.analysis.strengths.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-green-700 mb-1">✓ Strengths</p>
-                          <ul className="space-y-1">
-                            {interviewData.analysis.strengths.map((s, i) => (
-                              <li key={i} className="text-xs text-foreground flex items-start gap-1">
-                                <span className="text-green-500 mt-0.5">•</span>{s}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Concerns */}
-                      {interviewData.analysis.concerns && interviewData.analysis.concerns.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-amber-700 mb-1">⚠ Concerns</p>
-                          <ul className="space-y-1">
-                            {interviewData.analysis.concerns.map((c, i) => (
-                              <li key={i} className="text-xs text-foreground flex items-start gap-1">
-                                <span className="text-amber-500 mt-0.5">•</span>{c}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Anti-cheat flags */}
-                      {interviewData.analysis.suspicion_flags && interviewData.analysis.suspicion_flags.length > 0 && (
-                        <div className="pt-1 border-t space-y-1.5">
-                          <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold">⚑ Anti-cheat flags detected</p>
-                          {interviewData.analysis.suspicion_flags.map((f, i) => {
-                            const flagInfo: Record<string, { label: string; reason: string }> = {
-                              multiple_fast_responses: {
-                                label: "Multiple fast responses",
-                                reason: "Candidate answered 50+ character messages in under 5 seconds — indicates likely copy-paste from prepared text.",
-                              },
-                              style_shift_detected: {
-                                label: "Writing style shift",
-                                reason: "Significant change in average word length between first and second half of answers — suggests different authorship or assistance mid-interview.",
-                              },
-                              all_voice: {
-                                label: "All voice messages",
-                                reason: "Candidate used only voice messages, which reduces verifiability of authentic typed responses.",
-                              },
-                              no_responses: {
-                                label: "No responses recorded",
-                                reason: "No candidate messages were logged during the interview session.",
-                              },
-                            };
-                            const info = flagInfo[f] || { label: f.replace(/_/g, " "), reason: "Unusual behavioral pattern detected by the anti-cheat system." };
-                            return (
-                              <div key={i} className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded p-2">
-                                <p className="text-xs font-medium text-orange-700 dark:text-orange-300">{info.label}</p>
-                                <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">{info.reason}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between pt-1 border-t flex-wrap gap-2">
-                        <p className="text-xs text-muted-foreground">
-                          Analyzed by {interviewData.analysis.model_used} — {new Date(interviewData.analysis.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                        <div className="flex items-center gap-1">
+                        {/* Footer actions */}
+                        <div className="flex items-center justify-end gap-2">
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-xs h-6 px-2 text-muted-foreground hover:text-foreground"
+                            className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
                             onClick={async () => {
                               try {
                                 await api.post(`/candidates/${params.id}/interview/re-evaluate`);
@@ -1093,7 +1127,7 @@ export default function CandidateDetailPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="text-xs h-6 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                            className="text-xs h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
                             onClick={async () => {
                               if (!confirm("Delete this interview analysis? This cannot be undone.")) return;
                               try {
@@ -1109,8 +1143,8 @@ export default function CandidateDetailPage() {
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
 
                   {/* Transcript button */}
