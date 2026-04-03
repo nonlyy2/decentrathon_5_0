@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/assylkhan/invisionu-backend/internal/youtube"
 	"github.com/gin-gonic/gin"
@@ -365,6 +366,10 @@ func DeleteCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot modify candidates"})
+			return
+		}
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})
@@ -420,6 +425,10 @@ func UpdateCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 
 func UpdateCandidateStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot change candidate status"})
+			return
+		}
 		id, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})

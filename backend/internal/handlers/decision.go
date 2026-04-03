@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,8 +12,17 @@ import (
 
 const reviewThreshold = 4
 
+// upvoteThreshold: net score (upvotes - downvotes) needed for auto-shortlist
+const upvoteThreshold = 3
+
 func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Auditors cannot make decisions — they are read-only observers
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot make decisions on candidates"})
+			return
+		}
+
 		candidateID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})
@@ -97,8 +107,35 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		consensusReached := false
 		var winningDecision string
-		if totalVotes >= reviewThreshold {
-			// Find majority decision
+
+		// Check for upvote/downvote net score
+		var upvotes, downvotes int
+		hasVoteSystem := false
+		for _, v := range votes {
+			if v.Decision == "upvote" {
+				upvotes += v.Count
+				hasVoteSystem = true
+			} else if v.Decision == "downvote" {
+				downvotes += v.Count
+				hasVoteSystem = true
+			}
+		}
+
+		if hasVoteSystem {
+			netScore := upvotes - downvotes
+			if netScore >= upvoteThreshold {
+				winningDecision = "upvote"
+				consensusReached = true
+				pool.Exec(c.Request.Context(),
+					`UPDATE candidates SET status = 'shortlisted' WHERE id = $1`, candidateID)
+			} else if netScore <= -upvoteThreshold {
+				winningDecision = "downvote"
+				consensusReached = true
+				pool.Exec(c.Request.Context(),
+					`UPDATE candidates SET status = 'rejected' WHERE id = $1`, candidateID)
+			}
+		} else if totalVotes >= reviewThreshold {
+			// Legacy: find majority decision among shortlist/reject/waitlist/review
 			maxCount := 0
 			for _, v := range votes {
 				if v.Count > maxCount {
@@ -107,9 +144,6 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 				}
 			}
 			consensusReached = true
-		}
-
-		if consensusReached {
 			newStatus := statusMap[winningDecision]
 			pool.Exec(c.Request.Context(),
 				`UPDATE candidates SET status = $1 WHERE id = $2`, newStatus, candidateID)
@@ -138,6 +172,10 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			"required_reviews":  reviewThreshold,
 			"consensus_reached": consensusReached,
 			"winning_decision":  winningDecision,
+			"upvotes":           upvotes,
+			"downvotes":         downvotes,
+			"net_score":         upvotes - downvotes,
+			"upvote_threshold":  upvoteThreshold,
 		})
 	}
 }
@@ -189,11 +227,24 @@ func GetDecisions(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
+		var upvotes, downvotes int
+		for _, v := range voteSummary {
+			if v.Decision == "upvote" {
+				upvotes = v.Count
+			} else if v.Decision == "downvote" {
+				downvotes = v.Count
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"decisions":        decisions,
 			"vote_summary":     voteSummary,
 			"total_reviews":    totalVotes,
 			"required_reviews": reviewThreshold,
+			"upvotes":          upvotes,
+			"downvotes":        downvotes,
+			"net_score":        upvotes - downvotes,
+			"upvote_threshold": upvoteThreshold,
 		})
 	}
 }

@@ -238,6 +238,46 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		// AI-recommended major (may differ from candidate's chosen major)
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS recommended_major VARCHAR(100)`,
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS major_reason_note TEXT`,
+
+		// Upvote/downvote system: extend decision CHECK constraint
+		`DO $$ BEGIN
+			ALTER TABLE committee_decisions DROP CONSTRAINT IF EXISTS committee_decisions_decision_check;
+			ALTER TABLE committee_decisions ADD CONSTRAINT committee_decisions_decision_check
+				CHECK (decision IN ('shortlist','reject','waitlist','review','upvote','downvote'));
+		EXCEPTION WHEN OTHERS THEN NULL;
+		END $$`,
+
+		// War Room: activity feed
+		`CREATE TABLE IF NOT EXISTS activity_feed (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
+			action_type VARCHAR(50) NOT NULL,
+			content TEXT,
+			mentions JSONB DEFAULT '[]',
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_activity_feed_candidate ON activity_feed(candidate_id)`,
+
+		// War Room: notifications/mentions
+		`CREATE TABLE IF NOT EXISTS notifications (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			from_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			candidate_id INTEGER REFERENCES candidates(id) ON DELETE CASCADE,
+			activity_id INTEGER REFERENCES activity_feed(id) ON DELETE CASCADE,
+			type VARCHAR(30) NOT NULL DEFAULT 'mention',
+			read BOOLEAN NOT NULL DEFAULT false,
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read)`,
+
+		// War Room: "Needs Discussion" flag on candidates
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS needs_discussion BOOLEAN DEFAULT false`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_note TEXT`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_by INTEGER REFERENCES users(id)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_at TIMESTAMP`,
 	}
 
 	for _, q := range queries {

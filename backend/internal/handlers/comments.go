@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/assylkhan/invisionu-backend/internal/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -50,6 +51,11 @@ func GetComments(pool *pgxpool.Pool) gin.HandlerFunc {
 
 func AddComment(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot add comments on candidates"})
+			return
+		}
+
 		candidateID, err := strconv.Atoi(c.Param("id"))
 		if err != nil {
 			c.JSON(400, gin.H{"error": "invalid candidate id"})

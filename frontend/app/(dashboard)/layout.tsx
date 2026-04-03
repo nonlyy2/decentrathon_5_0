@@ -6,6 +6,7 @@ import { AIProviderContextProvider } from "@/lib/aiProvider";
 import { ThemeProvider } from "@/lib/theme";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Sidebar from "@/components/Sidebar";
+import AIAssistant from "@/components/AIAssistant";
 import { useEffect, useState } from "react";
 
 function MainContent({ children }: { children: React.ReactNode }) {
@@ -55,6 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {children}
                 </main>
                 <MainContent>{children}</MainContent>
+                <AIAssistant />
               </div>
             </ProtectedRoute>
           </AIProviderContextProvider>

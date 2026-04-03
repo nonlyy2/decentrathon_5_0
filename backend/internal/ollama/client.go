@@ -64,8 +64,59 @@ func (c *Client) ModelName() string {
 	return c.model
 }
 
+// GenerateText generates free-form text (not forced JSON).
 func (c *Client) GenerateText(ctx context.Context, systemPrompt, userMessage string) (string, error) {
-	return c.Generate(ctx, systemPrompt, userMessage)
+	return c.generatePlain(ctx, systemPrompt, userMessage)
+}
+
+func (c *Client) generatePlain(ctx context.Context, systemPrompt, userMessage string) (string, error) {
+	url := fmt.Sprintf("%s/api/chat", c.baseURL)
+
+	reqBody := ChatRequest{
+		Model: c.model,
+		Messages: []Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userMessage},
+		},
+		Format: "", // free text, not forced JSON
+		Stream: false,
+		Options: Options{
+			Temperature: 0.7,
+			TopP:        0.95,
+			NumPredict:  4096,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("ollama error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var chatResp ChatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	return chatResp.Message.Content, nil
 }
 
 func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string) (string, error) {

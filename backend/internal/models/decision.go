@@ -13,6 +13,6 @@ type Decision struct {
 }
 
 type CreateDecisionRequest struct {
-	Decision string  `json:"decision" binding:"required,oneof=shortlist reject waitlist review"`
+	Decision string  `json:"decision" binding:"required,oneof=shortlist reject waitlist review upvote downvote"`
 	Notes    *string `json:"notes"`
 }

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { ThumbsUp, ThumbsDown } from "lucide-react";
 
 interface DecisionButtonsProps {
   candidateId: number;
@@ -25,14 +26,11 @@ interface DecisionsResponse {
   vote_summary: VoteSummary[] | null;
   total_reviews: number;
   required_reviews: number;
+  upvotes: number;
+  downvotes: number;
+  net_score: number;
+  upvote_threshold: number;
 }
-
-const decisionColors: Record<string, string> = {
-  shortlist: "bg-green-100 text-green-700",
-  reject: "bg-red-100 text-red-700",
-  waitlist: "bg-yellow-100 text-yellow-700",
-  review: "bg-blue-100 text-blue-700",
-};
 
 export default function DecisionButtons({ candidateId, onDecisionMade }: DecisionButtonsProps) {
   const { t } = useI18n();
@@ -47,13 +45,6 @@ export default function DecisionButtons({ candidateId, onDecisionMade }: Decisio
   }, [candidateId]);
 
   useEffect(() => { fetchReviewInfo(); }, [fetchReviewInfo]);
-
-  const decisions = [
-    { value: "shortlist", label: t("dec.shortlist"), className: "bg-green-600 hover:bg-green-700 text-white" },
-    { value: "waitlist", label: t("dec.waitlist"), className: "bg-yellow-500 hover:bg-yellow-600 text-white" },
-    { value: "review", label: t("dec.review"), className: "bg-blue-600 hover:bg-blue-700 text-white" },
-    { value: "reject", label: t("dec.reject"), className: "bg-red-600 hover:bg-red-700 text-white" },
-  ];
 
   const handleClick = (decision: string) => {
     setSelected(decision);
@@ -71,9 +62,16 @@ export default function DecisionButtons({ candidateId, onDecisionMade }: Decisio
       });
       const data = res.data;
       if (data.consensus_reached) {
-        toast.success(`Consensus reached: ${data.winning_decision} (${data.total_reviews}/${data.required_reviews} reviews)`);
+        if (data.winning_decision === "upvote") {
+          toast.success(`Auto-shortlisted! Net score: +${data.net_score}`);
+        } else if (data.winning_decision === "downvote") {
+          toast.error(`Auto-rejected! Net score: ${data.net_score}`);
+        } else {
+          toast.success(`Consensus reached: ${data.winning_decision}`);
+        }
       } else {
-        toast.success(`Vote recorded (${data.total_reviews}/${data.required_reviews} reviews)`);
+        const netStr = data.net_score >= 0 ? `+${data.net_score}` : `${data.net_score}`;
+        toast.success(`Vote recorded. Net score: ${netStr} (need +${data.upvote_threshold} to auto-shortlist)`);
       }
       setIsOpen(false);
       fetchReviewInfo();
@@ -85,63 +83,80 @@ export default function DecisionButtons({ candidateId, onDecisionMade }: Decisio
     }
   };
 
-  const totalVotes = reviewInfo?.total_reviews || 0;
-  const requiredVotes = reviewInfo?.required_reviews || 4;
-  const progress = Math.min((totalVotes / requiredVotes) * 100, 100);
+  const upvotes = reviewInfo?.upvotes ?? 0;
+  const downvotes = reviewInfo?.downvotes ?? 0;
+  const netScore = reviewInfo?.net_score ?? 0;
+  const threshold = reviewInfo?.upvote_threshold ?? 3;
+  const hasVotes = upvotes > 0 || downvotes > 0;
 
   return (
     <>
       <div className="flex gap-2 flex-wrap">
-        {decisions.map((d) => (
-          <Button
-            key={d.value}
-            size="sm"
-            className={d.className}
-            onClick={() => handleClick(d.value)}
-          >
-            {d.label}
-          </Button>
-        ))}
+        <Button
+          size="sm"
+          className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1.5"
+          onClick={() => handleClick("upvote")}
+        >
+          <ThumbsUp size={14} />
+          Upvote
+        </Button>
+        <Button
+          size="sm"
+          className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5"
+          onClick={() => handleClick("downvote")}
+        >
+          <ThumbsDown size={14} />
+          Downvote
+        </Button>
       </div>
 
-      {/* Review progress */}
-      {totalVotes > 0 && (
+      {/* Score display */}
+      {hasVotes && (
         <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Reviews: {totalVotes}/{requiredVotes}</span>
-            {totalVotes < requiredVotes && (
-              <span className="text-orange-500 font-medium">{requiredVotes - totalVotes} more needed</span>
-            )}
-            {totalVotes >= requiredVotes && (
-              <span className="text-green-600 font-medium">Consensus reached</span>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="flex items-center gap-1 text-green-600">
+              <ThumbsUp size={13} /> {upvotes}
+            </span>
+            <span className="flex items-center gap-1 text-red-500">
+              <ThumbsDown size={13} /> {downvotes}
+            </span>
+            <span className={`font-bold ${netScore >= 0 ? "text-green-600" : "text-red-500"}`}>
+              Net: {netScore >= 0 ? `+${netScore}` : netScore}
+            </span>
+            {netScore >= threshold ? (
+              <Badge className="bg-green-100 text-green-700 text-xs">Auto-shortlist at +{threshold}</Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Need +{threshold - netScore} more for shortlist
+              </span>
             )}
           </div>
+          {/* Progress bar toward threshold */}
           <div className="w-full bg-slate-100 rounded-full h-2">
             <div
-              className={`h-2 rounded-full transition-all ${totalVotes >= requiredVotes ? "bg-green-500" : "bg-purple-500"}`}
-              style={{ width: `${progress}%` }}
+              className={`h-2 rounded-full transition-all ${netScore >= threshold ? "bg-green-500" : netScore >= 0 ? "bg-lime-400" : "bg-red-400"}`}
+              style={{ width: `${Math.min(Math.max((netScore / threshold) * 100, 0), 100)}%` }}
             />
           </div>
-          {reviewInfo?.vote_summary && reviewInfo.vote_summary.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap">
-              {reviewInfo.vote_summary.map((v) => (
-                <Badge key={v.decision} variant="outline" className={`text-xs ${decisionColors[v.decision] || ""}`}>
-                  {v.decision}: {v.count}
-                </Badge>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("dec.confirm_title")}: {selected?.charAt(0).toUpperCase()}{selected?.slice(1)}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {selected === "upvote" ? (
+                <><ThumbsUp size={18} className="text-green-600" /> Upvote Candidate</>
+              ) : (
+                <><ThumbsDown size={18} className="text-red-500" /> Downvote Candidate</>
+              )}
+            </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Your vote will be recorded. The final decision requires {requiredVotes} reviews.
-            {totalVotes > 0 && ` Currently ${totalVotes} vote(s) recorded.`}
+            {selected === "upvote"
+              ? `Your upvote will raise this candidate's score. At +${threshold}, they are automatically shortlisted.`
+              : `Your downvote will lower this candidate's score. At -${threshold}, they are automatically rejected.`}
+            {hasVotes && ` Current net score: ${netScore >= 0 ? `+${netScore}` : netScore}.`}
           </p>
           <Textarea
             placeholder={t("dec.notes_placeholder")}
@@ -151,8 +166,12 @@ export default function DecisionButtons({ candidateId, onDecisionMade }: Decisio
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOpen(false)}>{t("dec.cancel")}</Button>
-            <Button onClick={handleConfirm} disabled={submitting}>
-              {submitting ? t("dec.saving") : t("dec.confirm")}
+            <Button
+              onClick={handleConfirm}
+              disabled={submitting}
+              className={selected === "upvote" ? "bg-green-600 hover:bg-green-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"}
+            >
+              {submitting ? t("dec.saving") : `Confirm ${selected === "upvote" ? "Upvote" : "Downvote"}`}
             </Button>
           </DialogFooter>
         </DialogContent>

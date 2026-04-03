@@ -26,6 +26,12 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 		return
 	}
 
+	// Handle /status command — let candidate check their application status
+	if msg.IsCommand() && msg.Command() == "status" {
+		b.handleStatusCommand(ctx, chatID)
+		return
+	}
+
 	// Check if there's an active session
 	val, ok := b.sessions.Load(chatID)
 	if !ok {
@@ -420,4 +426,45 @@ func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *active
 		}
 		b.sessions.Delete(chatID)
 	}()
+}
+
+// handleStatusCommand lets a candidate check their own application status via /status.
+// It looks up the candidate by telegram_chat_id and returns status without vote counts.
+func (b *Bot) handleStatusCommand(ctx context.Context, chatID int64) {
+	var candidateName, status string
+	err := b.pool.QueryRow(ctx,
+		`SELECT c.full_name, c.status
+		 FROM candidates c
+		 WHERE c.telegram_chat_id = $1
+		 ORDER BY c.created_at DESC LIMIT 1`, chatID).Scan(&candidateName, &status)
+
+	if err != nil {
+		// Try looking up by telegram_invites chat_id link
+		err2 := b.pool.QueryRow(ctx,
+			`SELECT c.full_name, c.status
+			 FROM candidates c
+			 JOIN telegram_invites ti ON ti.candidate_id = c.id
+			 WHERE ti.telegram_chat_id = $1
+			 ORDER BY c.created_at DESC LIMIT 1`, chatID).Scan(&candidateName, &status)
+		if err2 != nil {
+			b.sendMessage(chatID, "⚠️ We could not find your application linked to this Telegram account.\n\nIf you applied, please make sure you used the invite link provided by the admissions team.")
+			return
+		}
+	}
+
+	statusLabels := map[string]string{
+		"pending":     "🕐 Under Review — Your application has been received and is being reviewed.",
+		"analyzed":    "🔍 Analysis Complete — Your application has been evaluated by our AI system.",
+		"shortlisted": "✅ Shortlisted — Congratulations! You have been shortlisted for the next stage.",
+		"waitlisted":  "⏳ Waitlisted — You are on the waitlist. We will notify you of any updates.",
+		"rejected":    "❌ Not Selected — Unfortunately, your application was not selected at this time.",
+	}
+
+	label, ok := statusLabels[status]
+	if !ok {
+		label = "Status: " + status
+	}
+
+	msg := "📋 *Application Status for " + candidateName + "*\n\n" + label + "\n\nIf you have questions, please contact the inVision U admissions team."
+	b.sendMarkdown(chatID, msg)
 }

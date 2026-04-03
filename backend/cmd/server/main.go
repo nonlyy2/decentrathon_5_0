@@ -182,9 +182,23 @@ func main() {
 		protected.POST("/candidates/auto-accept", handlers.AutoAcceptTopN(pool))
 		protected.GET("/candidates/:id/similar", handlers.GetSimilarCandidates(pool))
 
-		// User management — tech-admin+
-		protected.GET("/users", middleware.TechAdminOrAbove(), handlers.ListUsers(pool))
-		protected.GET("/users/:id", middleware.TechAdminOrAbove(), handlers.GetUser(pool))
+		// Auditor analytics — manager performance (auditor+)
+		protected.GET("/auditor/manager-performance", middleware.AuditorOrAbove(), handlers.GetManagerPerformance(pool))
+
+		// AI Assistant (manager gets full data context; regular users get FAQ mode)
+		protected.POST("/ai/assistant", handlers.AssistantChat(pool, textGens, defaultProvider))
+
+		// Committee War Room
+		protected.GET("/war-room/feed", handlers.GetActivityFeed(pool))
+		protected.POST("/war-room/feed", handlers.PostActivityFeed(pool))
+		protected.GET("/war-room/discussion", handlers.GetDiscussionCandidates(pool))
+		protected.POST("/candidates/:id/discuss", handlers.MarkForDiscussion(pool))
+		protected.GET("/notifications", handlers.GetNotifications(pool))
+		protected.POST("/notifications/read", handlers.MarkNotificationsRead(pool))
+
+		// User management — auditor can read, tech-admin+ can modify
+		protected.GET("/users", middleware.AuditorOrAbove(), handlers.ListUsers(pool))
+		protected.GET("/users/:id", middleware.AuditorOrAbove(), handlers.GetUser(pool))
 		protected.PATCH("/users/:id", middleware.TechAdminOrAbove(), handlers.UpdateUser(pool))
 		protected.DELETE("/users/:id", middleware.SuperAdminOnly(), handlers.DeleteUser(pool))
 

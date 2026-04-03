@@ -6,9 +6,10 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import api from "@/lib/api";
 import {
   LayoutDashboard, Users, LogOut, ChevronLeft,
-  ChevronRight, UserCog, Moon, Sun, Menu,
+  ChevronRight, UserCog, Moon, Sun, Menu, Flame, Bell, BarChart2,
 } from "lucide-react";
 
 // Role level helpers
@@ -44,6 +45,17 @@ export default function Sidebar() {
   const role = user?.role ?? "manager";
   const auditorOnly = isAuditorOnly(role);
 
+  // Notification badge count
+  const [unreadCount, setUnreadCount] = useState(0);
+  useEffect(() => {
+    const fetchUnread = () => {
+      api.get("/notifications").then((r) => setUnreadCount(r.data.unread || 0)).catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Navigation items based on role
   const navItems = [
     {
@@ -57,7 +69,19 @@ export default function Sidebar() {
       label: t("nav.candidates"),
       icon: Users,
       show: true,
-      disabled: auditorOnly, // auditors can see candidates read-only
+      disabled: false,
+    },
+    {
+      href: "/war-room",
+      label: "War Room",
+      icon: Flame,
+      show: !auditorOnly,
+    },
+    {
+      href: "/auditor",
+      label: "Analytics",
+      icon: BarChart2,
+      show: hasLevel(role, "auditor"), // auditor and above
     },
     {
       href: "/users",
@@ -194,6 +218,33 @@ export default function Sidebar() {
             </span>
           )}
         </button>
+
+        {/* Notifications */}
+        <Link
+          href="/war-room"
+          className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sidebar-muted hover:text-sidebar-text hover:bg-sidebar-hover transition-colors text-sm relative"
+          title={collapsed ? "Notifications" : undefined}
+          onClick={() => {
+            // Mark as read when clicking
+            api.post("/notifications/read").catch(() => {});
+            setUnreadCount(0);
+          }}
+        >
+          <div className="relative shrink-0">
+            <Bell size={15} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[9px] flex items-center justify-center font-bold text-black"
+                style={{ backgroundColor: "#c1f11d" }}>
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </div>
+          {!collapsed && (
+            <span className="animate-fade-in whitespace-nowrap text-[12px] flex-1">
+              Notifications {unreadCount > 0 && <span className="ml-1 px-1 rounded text-[10px] font-bold text-black" style={{ backgroundColor: "#c1f11d" }}>{unreadCount}</span>}
+            </span>
+          )}
+        </Link>
 
         {/* Sign out */}
         <button

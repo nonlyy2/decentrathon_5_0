@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward, GitCompare, Brain, Video, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Sparkles, Loader2, AlertTriangle, Trash2, Send, MessageSquare, BotMessageSquare, Copy, Check, Mic, ExternalLink, Pencil, UserX, SkipForward, GitCompare, Brain, Video, ChevronDown, ChevronUp, Flame } from "lucide-react";
 import { toast } from "sonner";
 
 const categoryColors: Record<string, string> = {
@@ -1161,6 +1161,9 @@ export default function CandidateDetailPage() {
             </CardContent>
           </Card>
 
+          {/* War Room: Flag for Discussion */}
+          <FlagForDiscussionCard candidateId={detail.id} />
+
           {/* Comments */}
           <Card>
             <CardHeader>
@@ -1401,5 +1404,92 @@ function FetchTranscriptButton({ candidateId, onDone }: { candidateId: string; o
         <p className={`text-xs ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>
       )}
     </div>
+  );
+}
+
+function FlagForDiscussionCard({ candidateId }: { candidateId: number }) {
+  const [flagged, setFlagged] = useState(false);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const handleFlag = async () => {
+    setLoading(true);
+    try {
+      await api.post(`/candidates/${candidateId}/discuss`, { note, remove: false });
+      setFlagged(true);
+      setOpen(false);
+      toast.success("Flagged for discussion in War Room");
+    } catch {
+      toast.error("Failed to flag candidate");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setLoading(true);
+    try {
+      await api.post(`/candidates/${candidateId}/discuss`, { remove: true });
+      setFlagged(false);
+      toast.success("Removed from discussion");
+    } catch {
+      toast.error("Failed to remove flag");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Flame size={16} style={{ color: "#c1f11d" }} />
+          War Room
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!open && !flagged && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-orange-300 text-orange-600 hover:bg-orange-50"
+            onClick={() => setOpen(true)}
+          >
+            <Flame size={14} className="mr-1.5" />
+            Flag for Discussion
+          </Button>
+        )}
+        {open && (
+          <div className="space-y-2">
+            <Textarea
+              placeholder="Add a note for the committee (optional)..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="text-sm"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleFlag} disabled={loading}
+                className="bg-orange-500 hover:bg-orange-600 text-white">
+                {loading ? <Loader2 size={13} className="animate-spin mr-1" /> : <Flame size={13} className="mr-1" />}
+                Flag
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+        {flagged && (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-orange-600 font-medium flex items-center gap-1">
+              <Flame size={14} /> Flagged for discussion
+            </span>
+            <Button size="sm" variant="outline" className="text-xs" onClick={handleRemove} disabled={loading}>
+              Remove flag
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

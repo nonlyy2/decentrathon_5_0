@@ -604,20 +604,17 @@ export default function CandidatesPage() {
         <div className="flex items-center gap-3 border rounded-lg px-4 py-2 flex-wrap" style={{ backgroundColor: "#c1f11d22", borderColor: "#c1f11d" }}>
           <span className="text-sm font-medium text-foreground">{selectedIds.size} {t("cand.selected")}</span>
           <div className="flex gap-2 flex-wrap">
-            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("shortlist")}>
-              {bulkAction === "shortlist" && <Loader2 size={14} className="animate-spin mr-1" />} {t("dec.shortlist")}
+            <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1" disabled={!!bulkAction} onClick={() => handleBulkDecision("upvote")}>
+              {bulkAction === "upvote" ? <Loader2 size={14} className="animate-spin" /> : "👍"} Upvote
+            </Button>
+            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white flex items-center gap-1" disabled={!!bulkAction} onClick={() => handleBulkDecision("downvote")}>
+              {bulkAction === "downvote" ? <Loader2 size={14} className="animate-spin" /> : "👎"} Downvote
             </Button>
             <Button size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("waitlist")}>
               {t("dec.waitlist")}
             </Button>
-            <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" disabled={!!bulkAction} onClick={() => handleBulkDecision("reject")}>
-              {t("dec.reject")}
-            </Button>
             <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" disabled={!!bulkAction} onClick={() => handleBulkDecision("review")}>
               {bulkAction === "review" && <Loader2 size={14} className="animate-spin mr-1" />} → Review
-            </Button>
-            <Button size="sm" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50" disabled={!!bulkAction} onClick={() => handleBulkDecision("pending")}>
-              {bulkAction === "pending" && <Loader2 size={14} className="animate-spin mr-1" />} → Pending
             </Button>
           </div>
           {selectedIds.size >= 2 && (

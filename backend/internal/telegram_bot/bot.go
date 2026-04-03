@@ -353,6 +353,15 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	}
 }
 
+// sendMarkdown sends a markdown-formatted message.
+func (b *Bot) sendMarkdown(chatID int64, text string) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
+	if _, err := b.api.Send(msg); err != nil {
+		log.Printf("[TG-BOT] Failed to send markdown message to %d: %v", chatID, err)
+	}
+}
+
 // sendMessageWithKeyboard sends a message with an inline keyboard.
 func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
 	msg := tgbotapi.NewMessage(chatID, text)
