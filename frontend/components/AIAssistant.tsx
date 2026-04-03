@@ -32,7 +32,7 @@ export default function AIAssistant() {
       };
       setMessages([intro]);
     }
-  }, [open, isManager]);
+  }, [open, isManager, messages.length]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
