@@ -217,6 +217,9 @@ func main() {
 		// Analysis History
 		protected.GET("/candidates/:id/analysis-history", handlers.GetAnalysisHistory(pool))
 
+		// Recalculate review complexity for all candidates
+		protected.POST("/candidates/recalc-complexity", handlers.RecalcComplexity(pool))
+
 		// Profile
 		protected.GET("/profile", handlers.GetProfile(pool))
 		protected.PATCH("/profile", handlers.UpdateProfile(pool))

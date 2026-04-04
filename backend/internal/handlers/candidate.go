@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -28,27 +27,46 @@ func nilIntIfZero(i int) *int {
 	return &i
 }
 
-// calculateReviewComplexity computes a complexity score based on total character count
-// of the 4 essay fields. Formula: normalized log scale from 0-100.
-// Fewer characters = lower complexity (easier to review).
-// Base: 200 chars ≈ 14, 500 chars ≈ 32, 1000 chars ≈ 46, 2000 chars ≈ 60, 5000 chars ≈ 78, 10000 chars ≈ 92
-func calculateReviewComplexity(achievements, extracurriculars, essay, motivation string) float64 {
-	total := len(achievements) + len(extracurriculars) + len(essay) + len(motivation)
-	if total == 0 {
-		return 0
+// countTotalChars returns the total character count of the 4 essay fields
+func countTotalChars(achievements, extracurriculars, essay, motivation string) int {
+	return len(achievements) + len(extracurriculars) + len(essay) + len(motivation)
+}
+
+// recalcAllComplexity recalculates review_complexity for ALL candidates as a percentage
+// of the current global maximum total_chars. The candidate with the most text = 100%.
+func recalcAllComplexity(pool *pgxpool.Pool) {
+	ctx := context.Background()
+
+	// Find current global max total_chars
+	var maxChars int
+	err := pool.QueryRow(ctx,
+		`SELECT COALESCE(MAX(
+			COALESCE(LENGTH(achievements),0) + COALESCE(LENGTH(extracurriculars),0) +
+			COALESCE(LENGTH(essay),0) + COALESCE(LENGTH(motivation_statement),0)
+		), 1) FROM candidates`,
+	).Scan(&maxChars)
+	if err != nil || maxChars == 0 {
+		maxChars = 1
 	}
-	ratio := float64(total) / 100.0
-	if ratio < 1 {
-		return 1
+
+	// Update all candidates' review_complexity as percentage of max
+	_, err = pool.Exec(ctx,
+		`UPDATE candidates SET review_complexity = ROUND(
+			(COALESCE(LENGTH(achievements),0) + COALESCE(LENGTH(extracurriculars),0) +
+			 COALESCE(LENGTH(essay),0) + COALESCE(LENGTH(motivation_statement),0))::numeric
+			/ $1 * 100, 2
+		)`, maxChars)
+	if err != nil {
+		log.Printf("recalcAllComplexity: %v", err)
 	}
-	complexity := 20.0 * math.Log(ratio)
-	if complexity < 1 {
-		return 1
+}
+
+// RecalcComplexity is an HTTP handler to manually trigger recalculation
+func RecalcComplexity(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		recalcAllComplexity(pool)
+		c.JSON(200, gin.H{"message": "review complexity recalculated for all candidates"})
 	}
-	if complexity > 100 {
-		return 100
-	}
-	return math.Round(complexity*100) / 100
 }
 
 func validateCandidateFields(req *models.CreateCandidateRequest) map[string]string {
@@ -135,6 +153,7 @@ func CreateCandidate(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.Hand
 		}
 
 		go fetchAndStoreTranscript(pool, candidate.ID, req.YouTubeURL, sttAPIKey, sttProvider)
+		go recalcAllComplexity(pool)
 
 		c.JSON(201, candidate)
 	}
@@ -158,8 +177,9 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 			return
 		}
 
-		// Calculate review complexity based on essay text lengths
-		reviewComplexity := calculateReviewComplexity(req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement)
+		// Initial review_complexity will be recalculated after insert
+		totalChars := countTotalChars(req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement)
+		reviewComplexity := float64(totalChars) // temporary, will be recalculated
 
 		// Build full_name from first_name + last_name if provided
 		fullNameVal := req.FullName
@@ -197,6 +217,9 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 
 		// Async: validate YouTube URL and fetch transcript
 		go fetchAndStoreTranscript(pool, id, req.YouTubeURL, sttAPIKey, sttProvider)
+
+		// Recalculate complexity for ALL candidates (new max may have changed)
+		go recalcAllComplexity(pool)
 
 		// Send confirmation email (fire-and-forget)
 		if len(emailSvc) > 0 && emailSvc[0] != nil && emailSvc[0].Enabled() {
