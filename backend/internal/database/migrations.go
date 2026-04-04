@@ -278,6 +278,90 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_note TEXT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_by INTEGER REFERENCES users(id)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_at TIMESTAMP`,
+
+		// ─── New fields: personal info expansion ──────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS patronymic VARCHAR(255)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS date_of_birth DATE`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS gender VARCHAR(20)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS nationality VARCHAR(100)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS iin VARCHAR(12)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS identity_doc_type VARCHAR(50)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS instagram VARCHAR(255)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS home_country VARCHAR(100)`,
+
+		// ─── English proficiency ──────────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS exam_type VARCHAR(10)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS ielts_score NUMERIC(3,1)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS toefl_score INTEGER`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS english_cert_url VARCHAR(512)`,
+
+		// ─── Certificate ──────────────────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(50)`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS certificate_url VARCHAR(512)`,
+
+		// ─── Additional documents ─────────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS additional_docs_url VARCHAR(512)`,
+
+		// ─── Personality test ─────────────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS personality_answers JSONB DEFAULT '[]'`,
+
+		// ─── Review complexity scoring ────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS review_complexity NUMERIC(5,2)`,
+
+		// ─── Private notes (per-user per-candidate) ──────────────────────────────
+		`CREATE TABLE IF NOT EXISTS private_notes (
+			id SERIAL PRIMARY KEY,
+			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+			content TEXT NOT NULL DEFAULT '',
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(user_id, candidate_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_private_notes_user_candidate ON private_notes(user_id, candidate_id)`,
+
+		// ─── Tasks (round-robin assignment) ───────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS review_tasks (
+			id SERIAL PRIMARY KEY,
+			candidate_id INTEGER UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+			assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','completed')),
+			created_at TIMESTAMP DEFAULT NOW(),
+			completed_at TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_review_tasks_assigned ON review_tasks(assigned_to, status)`,
+
+		// ─── Analysis history (keep old analyses instead of overwriting) ──────────
+		`CREATE TABLE IF NOT EXISTS analysis_history (
+			id SERIAL PRIMARY KEY,
+			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+			score_leadership INTEGER NOT NULL,
+			score_motivation INTEGER NOT NULL,
+			score_growth INTEGER NOT NULL,
+			score_vision INTEGER NOT NULL,
+			score_communication INTEGER NOT NULL,
+			final_score NUMERIC(5,2) NOT NULL,
+			category VARCHAR(30) NOT NULL,
+			ai_generated_risk VARCHAR(10) DEFAULT 'low',
+			ai_generated_score INTEGER DEFAULT 0,
+			summary TEXT,
+			key_strengths TEXT[],
+			red_flags TEXT[],
+			model_used VARCHAR(50),
+			analyzed_at TIMESTAMP DEFAULT NOW(),
+			duration_ms INTEGER DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_analysis_history_candidate ON analysis_history(candidate_id, analyzed_at DESC)`,
+
+		// ─── Update status constraint for new stages ──────────────────────────────
+		`DO $$ BEGIN
+			ALTER TABLE candidates DROP CONSTRAINT IF EXISTS candidates_status_check;
+			ALTER TABLE candidates ADD CONSTRAINT candidates_status_check
+				CHECK (status IN ('pending','in_progress','initial_screening','application_review','interview_stage','committee_review','decision','analyzed','shortlisted','rejected','waitlisted'));
+		EXCEPTION WHEN OTHERS THEN NULL;
+		END $$`,
 	}
 
 	for _, q := range queries {

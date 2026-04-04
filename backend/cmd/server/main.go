@@ -137,6 +137,8 @@ func main() {
 	api.GET("/majors", handlers.GetMajors())
 	// Photo upload is public so the apply page (no JWT) can attach a photo right after submission
 	api.POST("/candidates/:id/photo", handlers.UploadCandidatePhoto(pool, cfg.UploadDir, cfg.GeminiAPIKey))
+	// Document uploads (english cert, certificate, additional docs) — public for apply page
+	api.POST("/candidates/:id/document/:docType", handlers.UploadCandidateDocument(pool, cfg.UploadDir))
 
 	// Public Telegram Mini App status endpoint (validated by initData)
 	api.GET("/tma/status", handlers.GetTMAStatusByChatID(pool, cfg.TelegramBotToken))
@@ -157,21 +159,21 @@ func main() {
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
 		protected.GET("/candidates/:id/analysis-status", handlers.GetCandidateAnalysisStatus())
 		protected.DELETE("/candidates/:id/analysis", handlers.DeleteAnalysis(pool))
-		protected.POST("/candidates/:id/analyze", handlers.AnalyzeSingleCandidate(pool, aiProviders, defaultProvider))
+		protected.POST("/candidates/:id/analyze", middleware.TechAdminRestricted(), handlers.AnalyzeSingleCandidate(pool, aiProviders, defaultProvider))
 		protected.DELETE("/analyses", handlers.DeleteAllAnalyses(pool))
 
-		// Decisions
-		protected.POST("/candidates/:id/decision", handlers.MakeDecision(pool))
+		// Decisions (tech-admin cannot vote)
+		protected.POST("/candidates/:id/decision", middleware.TechAdminRestricted(), handlers.MakeDecision(pool))
 		protected.GET("/candidates/:id/decisions", handlers.GetDecisions(pool))
 
-		// Comments
+		// Comments (tech-admin cannot comment)
 		protected.GET("/candidates/:id/comments", handlers.GetComments(pool))
-		protected.POST("/candidates/:id/comments", handlers.AddComment(pool))
+		protected.POST("/candidates/:id/comments", middleware.TechAdminRestricted(), handlers.AddComment(pool))
 		protected.DELETE("/comments/:commentId", handlers.DeleteComment(pool))
 
 		// Stats / Export / Bulk
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
-		protected.POST("/analyze-all", handlers.AnalyzeAllPending(pool, aiProviders, batchProviders, defaultProvider))
+		protected.POST("/analyze-all", middleware.TechAdminRestricted(), handlers.AnalyzeAllPending(pool, aiProviders, batchProviders, defaultProvider))
 		protected.POST("/analyze-all/stop", handlers.StopBatch())
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
 		protected.POST("/candidates/ai-recommend", handlers.RecommendCandidates(pool, textGens, defaultProvider))
@@ -190,7 +192,7 @@ func main() {
 
 		// Committee War Room
 		protected.GET("/war-room/feed", handlers.GetActivityFeed(pool))
-		protected.POST("/war-room/feed", handlers.PostActivityFeed(pool))
+		protected.POST("/war-room/feed", middleware.TechAdminRestricted(), handlers.PostActivityFeed(pool))
 		protected.GET("/war-room/discussion", handlers.GetDiscussionCandidates(pool))
 		protected.POST("/candidates/:id/discuss", handlers.MarkForDiscussion(pool))
 		protected.GET("/notifications", handlers.GetNotifications(pool))
@@ -202,6 +204,18 @@ func main() {
 		protected.PATCH("/users/:id", middleware.TechAdminOrAbove(), handlers.UpdateUser(pool))
 		protected.DELETE("/users/:id", middleware.SuperAdminOnly(), handlers.DeleteUser(pool))
 		protected.POST("/users/:id/reset-password", middleware.SuperAdminOnly(), handlers.ResetUserPassword(pool, emailSvc))
+
+		// Private Notes
+		protected.GET("/candidates/:id/notes", handlers.GetPrivateNote(pool))
+		protected.PUT("/candidates/:id/notes", handlers.SavePrivateNote(pool))
+
+		// Review Tasks
+		protected.GET("/tasks", handlers.GetTasks(pool))
+		protected.POST("/tasks/assign", handlers.AssignNewTasks(pool))
+		protected.PATCH("/tasks/:taskId", handlers.UpdateTaskStatus(pool))
+
+		// Analysis History
+		protected.GET("/candidates/:id/analysis-history", handlers.GetAnalysisHistory(pool))
 
 		// Profile
 		protected.GET("/profile", handlers.GetProfile(pool))

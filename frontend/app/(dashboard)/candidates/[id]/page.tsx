@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useFetch } from "@/lib/hooks";
 import { useI18n } from "@/lib/i18n";
 import { useAIProvider } from "@/lib/aiProvider";
+import { useAuth } from "@/lib/auth";
 import api from "@/lib/api";
 import { CandidateDetail, InterviewStatus, InterviewMessage, MajorOption } from "@/lib/types";
 import StatusBadge from "@/components/StatusBadge";
@@ -40,6 +41,8 @@ export default function CandidateDetailPage() {
   const { t } = useI18n();
   const { data: detail, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
   const { provider, setProvider } = useAIProvider();
+  const { user } = useAuth();
+  const isTechAdmin = user?.role === "tech-admin";
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisFailed, setAnalysisFailed] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -490,7 +493,34 @@ export default function CandidateDetailPage() {
                 {detail.major && (
                   <div><span className="text-muted-foreground">Major:</span> {majors.find((m) => m.tag === detail.major)?.en || detail.major}</div>
                 )}
+                {detail.date_of_birth && <div><span className="text-muted-foreground">DOB:</span> {detail.date_of_birth}</div>}
+                {detail.gender && <div><span className="text-muted-foreground">Gender:</span> {detail.gender}</div>}
+                {detail.nationality && <div><span className="text-muted-foreground">Nationality:</span> {detail.nationality}</div>}
+                {detail.iin && <div><span className="text-muted-foreground">IIN:</span> {detail.iin}</div>}
+                {detail.instagram && <div><span className="text-muted-foreground">Instagram:</span> {detail.instagram}</div>}
+                {detail.whatsapp && <div><span className="text-muted-foreground">WhatsApp:</span> {detail.whatsapp}</div>}
+                {detail.home_country && <div><span className="text-muted-foreground">Country:</span> {detail.home_country}</div>}
+                {detail.exam_type && <div><span className="text-muted-foreground">{detail.exam_type}:</span> {detail.ielts_score || detail.toefl_score || "—"}</div>}
+                {detail.certificate_type && <div><span className="text-muted-foreground">Certificate:</span> {detail.certificate_type}</div>}
               </div>
+              {/* Review Complexity */}
+              {detail.review_complexity != null && (
+                <div className="mt-3 pt-3 border-t">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Review Complexity:</span>
+                    <Badge className={`text-xs ${
+                      detail.review_complexity > 60 ? "bg-red-100 text-red-700" :
+                      detail.review_complexity > 35 ? "bg-yellow-100 text-yellow-700" :
+                      "bg-green-100 text-green-700"
+                    }`}>
+                      {detail.review_complexity.toFixed(0)}/100
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      ({detail.review_complexity > 60 ? "complex" : detail.review_complexity > 35 ? "moderate" : "easy"} to review)
+                    </span>
+                  </div>
+                </div>
+              )}
               {/* Recommended major from AI analysis */}
               {detail.analysis?.recommended_major && (
                 <div className={`mt-3 pt-3 border-t flex items-start gap-2 text-sm rounded-lg px-3 py-2 ${
@@ -1173,10 +1203,14 @@ export default function CandidateDetailPage() {
           <Card>
             <CardHeader><CardTitle className="text-base">{t("detail.committee")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <DecisionButtons
-                candidateId={detail.id}
-                onDecisionMade={refetch}
-              />
+              {isTechAdmin ? (
+                <p className="text-sm text-muted-foreground italic">Tech admins cannot vote on candidates.</p>
+              ) : (
+                <DecisionButtons
+                  candidateId={detail.id}
+                  onDecisionMade={refetch}
+                />
+              )}
               {detail.decisions.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase">{t("detail.history")}</p>
@@ -1199,6 +1233,9 @@ export default function CandidateDetailPage() {
 
           {/* War Room: Flag for Discussion */}
           <FlagForDiscussionCard candidateId={detail.id} />
+
+          {/* Private Notes */}
+          <PrivateNotesCard candidateId={detail.id} />
 
           {/* Comments */}
           <Card>
@@ -1440,6 +1477,56 @@ function FetchTranscriptButton({ candidateId, onDone }: { candidateId: string; o
         <p className={`text-xs ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>
       )}
     </div>
+  );
+}
+
+function PrivateNotesCard({ candidateId }: { candidateId: number }) {
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.get(`/candidates/${candidateId}/notes`).then((res) => {
+      setNote(res.data.content || "");
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, [candidateId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.put(`/candidates/${candidateId}/notes`, { content: note });
+      toast.success("Note saved");
+    } catch {
+      toast.error("Failed to save note");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <span className="text-lg">📝</span> My Notes
+          <span className="text-xs text-muted-foreground font-normal">(private)</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Textarea
+          placeholder="Write private notes about this candidate..."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          className="text-sm"
+          disabled={!loaded}
+        />
+        <Button size="sm" variant="outline" onClick={handleSave} disabled={saving || !loaded}>
+          {saving ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
+          Save Note
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

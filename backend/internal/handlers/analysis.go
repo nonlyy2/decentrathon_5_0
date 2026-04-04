@@ -122,6 +122,19 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	}
 	defer tx.Rollback(ctx)
 
+	// Save existing analysis to history before overwriting
+	tx.Exec(ctx,
+		`INSERT INTO analysis_history (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
+		 score_communication, final_score, category, ai_generated_risk, ai_generated_score, summary,
+		 key_strengths, red_flags, model_used, analyzed_at, duration_ms)
+		 SELECT candidate_id, score_leadership, score_motivation, score_growth, score_vision,
+		 score_communication, final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0), summary,
+		 key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms, 0)
+		 FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
+
+	// Delete existing analysis and insert new one
+	tx.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
+
 	_, err = tx.Exec(ctx,
 		`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision, score_communication,
 		 final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,

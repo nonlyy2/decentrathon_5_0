@@ -10,6 +10,7 @@ import api from "@/lib/api";
 import {
   LayoutDashboard, Users, LogOut, ChevronLeft,
   ChevronRight, UserCog, Moon, Sun, Menu, Flame, Bell, BarChart2,
+  StickyNote, ClipboardList,
 } from "lucide-react";
 
 // Role level helpers
@@ -81,6 +82,18 @@ export default function Sidebar() {
       label: "Analytics",
       icon: BarChart2,
       show: true,
+    },
+    {
+      href: "/tasks",
+      label: "Tasks",
+      icon: ClipboardList,
+      show: !auditorOnly && role !== "tech-admin",
+    },
+    {
+      href: "/my-notes",
+      label: "My Notes",
+      icon: StickyNote,
+      show: !auditorOnly && role !== "tech-admin",
     },
     {
       href: "/users",

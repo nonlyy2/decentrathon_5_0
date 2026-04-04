@@ -74,8 +74,9 @@ export default function WarRoomPage() {
 
   const filteredMentions = mentionQuery !== null
     ? staffUsers.filter(u =>
-        u.email.toLowerCase().includes(mentionQuery.toLowerCase()) ||
-        (u.full_name ?? "").toLowerCase().includes(mentionQuery.toLowerCase())
+        u.id !== user?.id &&
+        (u.email.toLowerCase().includes(mentionQuery.toLowerCase()) ||
+        (u.full_name ?? "").toLowerCase().includes(mentionQuery.toLowerCase()))
       ).slice(0, 6)
     : [];
 

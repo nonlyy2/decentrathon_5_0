@@ -1,13 +1,24 @@
 export interface Candidate {
   id: number;
   full_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  patronymic: string | null;
   email: string;
   phone: string | null;
   telegram: string | null;
   age: number | null;
+  date_of_birth: string | null;
+  gender: string | null;
   city: string | null;
+  home_country: string | null;
   school: string | null;
   graduation_year: number | null;
+  nationality: string | null;
+  iin: string | null;
+  identity_doc_type: string | null;
+  instagram: string | null;
+  whatsapp: string | null;
   achievements: string | null;
   extracurriculars: string | null;
   essay: string;
@@ -23,6 +34,15 @@ export interface Candidate {
   youtube_url: string | null;
   youtube_transcript: string | null;
   youtube_url_valid: boolean | null;
+  exam_type: string | null;
+  ielts_score: number | null;
+  toefl_score: number | null;
+  english_cert_url: string | null;
+  certificate_type: string | null;
+  certificate_url: string | null;
+  additional_docs_url: string | null;
+  personality_answers: string | null;
+  review_complexity: number | null;
 }
 
 export interface CandidateListItem {

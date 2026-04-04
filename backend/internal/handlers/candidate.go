@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -19,6 +20,36 @@ import (
 
 var phoneRegex = regexp.MustCompile(`^\+?[0-9\s\-()]+$`)
 var telegramRegex = regexp.MustCompile(`^@?[a-zA-Z0-9_]+$`)
+
+func nilIntIfZero(i int) *int {
+	if i == 0 {
+		return nil
+	}
+	return &i
+}
+
+// calculateReviewComplexity computes a complexity score based on total character count
+// of the 4 essay fields. Formula: normalized log scale from 0-100.
+// Fewer characters = lower complexity (easier to review).
+// Base: 200 chars ≈ 14, 500 chars ≈ 32, 1000 chars ≈ 46, 2000 chars ≈ 60, 5000 chars ≈ 78, 10000 chars ≈ 92
+func calculateReviewComplexity(achievements, extracurriculars, essay, motivation string) float64 {
+	total := len(achievements) + len(extracurriculars) + len(essay) + len(motivation)
+	if total == 0 {
+		return 0
+	}
+	ratio := float64(total) / 100.0
+	if ratio < 1 {
+		return 1
+	}
+	complexity := 20.0 * math.Log(ratio)
+	if complexity < 1 {
+		return 1
+	}
+	if complexity > 100 {
+		return 100
+	}
+	return math.Round(complexity*100) / 100
+}
 
 func validateCandidateFields(req *models.CreateCandidateRequest) map[string]string {
 	errs := map[string]string{}
@@ -127,14 +158,32 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 			return
 		}
 
+		// Calculate review complexity based on essay text lengths
+		reviewComplexity := calculateReviewComplexity(req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement)
+
+		// Build full_name from first_name + last_name if provided
+		fullNameVal := req.FullName
+		if fullNameVal == "" && (req.FirstName != "" || req.LastName != "") {
+			fullNameVal = strings.TrimSpace(req.LastName + " " + req.FirstName)
+		}
+
 		var id int
 		var fullName, email string
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_url, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'pending')
+			`INSERT INTO candidates (full_name, first_name, last_name, patronymic, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, identity_doc_type, instagram, whatsapp, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_url, exam_type, ielts_score, toefl_score, certificate_type, personality_answers, review_complexity, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,'pending')
 			 RETURNING id, full_name, email`,
-			req.FullName, req.Email, req.Phone, req.Telegram, req.Age, req.City, req.School, req.GraduationYear,
-			req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement, req.Disability, req.Major, req.YouTubeURL,
+			fullNameVal, nilIfEmpty(req.FirstName), nilIfEmpty(req.LastName), nilIfEmpty(req.Patronymic),
+			req.Email, nilIfEmpty(req.Phone), nilIfEmpty(req.Telegram),
+			nilIntIfZero(req.Age), nilIfEmpty(req.DateOfBirth), nilIfEmpty(req.Gender),
+			nilIfEmpty(req.City), nilIfEmpty(req.HomeCountry), nilIfEmpty(req.School), nilIntIfZero(req.GraduationYear),
+			nilIfEmpty(req.Nationality), nilIfEmpty(req.IIN), nilIfEmpty(req.IdentityDocType),
+			nilIfEmpty(req.Instagram), nilIfEmpty(req.WhatsApp),
+			nilIfEmpty(req.Achievements), nilIfEmpty(req.Extracurriculars), req.Essay,
+			nilIfEmpty(req.MotivationStatement), req.Disability, req.Major, nilIfEmpty(req.YouTubeURL),
+			nilIfEmpty(req.ExamType), req.IELTSScore, req.TOEFLScore,
+			nilIfEmpty(req.CertificateType), nilIfEmpty(req.PersonalityAnswers),
+			reviewComplexity,
 		).Scan(&id, &fullName, &email)
 
 		if err != nil {
@@ -292,7 +341,12 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year,
 				achievements, extracurriculars, essay, motivation_statement, disability, major,
 				photo_url, photo_ai_flag, photo_ai_note, COALESCE(keywords, '{}'), created_at, status,
-				youtube_url, youtube_transcript, youtube_url_valid
+				youtube_url, youtube_transcript, youtube_url_valid,
+				first_name, last_name, patronymic, date_of_birth, gender, nationality, iin,
+				identity_doc_type, instagram, whatsapp, home_country,
+				exam_type, ielts_score, toefl_score, english_cert_url,
+				certificate_type, certificate_url, additional_docs_url,
+				personality_answers, review_complexity
 			 FROM candidates WHERE id = $1`, id,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram,
 			&candidate.Age, &candidate.City, &candidate.School, &candidate.GraduationYear,
@@ -300,7 +354,13 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			&candidate.MotivationStatement, &candidate.Disability, &candidate.Major,
 			&candidate.PhotoURL, &candidate.PhotoAIFlag, &candidate.PhotoAINote,
 			&candidate.Keywords, &candidate.CreatedAt, &candidate.Status,
-			&candidate.YouTubeURL, &candidate.YouTubeTranscript, &candidate.YouTubeURLValid)
+			&candidate.YouTubeURL, &candidate.YouTubeTranscript, &candidate.YouTubeURLValid,
+			&candidate.FirstName, &candidate.LastName, &candidate.Patronymic,
+			&candidate.DateOfBirth, &candidate.Gender, &candidate.Nationality, &candidate.IIN,
+			&candidate.IdentityDocType, &candidate.Instagram, &candidate.WhatsApp, &candidate.HomeCountry,
+			&candidate.ExamType, &candidate.IELTSScore, &candidate.TOEFLScore, &candidate.EnglishCertURL,
+			&candidate.CertificateType, &candidate.CertificateURL, &candidate.AdditionalDocsURL,
+			&candidate.PersonalityAnswers, &candidate.ReviewComplexity)
 
 		if err != nil {
 			c.JSON(404, gin.H{"error": "candidate not found"})

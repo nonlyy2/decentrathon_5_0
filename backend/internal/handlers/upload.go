@@ -102,6 +102,73 @@ func nilIfEmpty(s string) *string {
 	return &s
 }
 
+const maxDocSize = 10 << 20 // 10 MB
+
+// UploadCandidateDocument uploads a document (cert, english cert, additional docs)
+func UploadCandidateDocument(pool *pgxpool.Pool, uploadDir string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		candidateID := c.Param("id")
+		docType := c.Param("docType") // english_cert, certificate, additional_docs
+
+		if err := c.Request.ParseMultipartForm(maxDocSize); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file too large (max 10 MB)"})
+			return
+		}
+
+		file, header, err := c.Request.FormFile("file")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no file provided"})
+			return
+		}
+		defer file.Close()
+
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".heic": true, ".pdf": true}
+		if !allowed[ext] {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file type not allowed"})
+			return
+		}
+
+		filename := fmt.Sprintf("candidate_%s_%s_%d%s", candidateID, docType, time.Now().UnixNano(), ext)
+		savePath := filepath.Join(uploadDir, filename)
+		out, err := os.Create(savePath)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to save file"})
+			return
+		}
+		defer out.Close()
+		if _, err := io.Copy(out, file); err != nil {
+			c.JSON(500, gin.H{"error": "failed to save file"})
+			return
+		}
+
+		fileURL := "/uploads/" + filename
+
+		var column string
+		switch docType {
+		case "english_cert":
+			column = "english_cert_url"
+		case "certificate":
+			column = "certificate_url"
+		case "additional_docs":
+			column = "additional_docs_url"
+		default:
+			c.JSON(400, gin.H{"error": "invalid document type"})
+			return
+		}
+
+		_, err = pool.Exec(context.Background(),
+			fmt.Sprintf("UPDATE candidates SET %s = $1 WHERE id = $2", column),
+			fileURL, candidateID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to update candidate"})
+			return
+		}
+
+		c.JSON(200, gin.H{"url": fileURL})
+	}
+}
+
 type geminiVisionRequest struct {
 	Contents []geminiVisionContent `json:"contents"`
 }

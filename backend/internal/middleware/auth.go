@@ -123,3 +123,23 @@ func HasLevel(c *gin.Context, required string) bool {
 	role := c.GetString("user_role")
 	return roleLevel[role] >= roleLevel[required]
 }
+
+// GetUserID extracts the user ID from the context
+func GetUserID(c *gin.Context) int {
+	id, _ := c.Get("user_id")
+	if v, ok := id.(int); ok {
+		return v
+	}
+	return 0
+}
+
+// TechAdminRestricted blocks tech-admin from certain actions
+func TechAdminRestricted() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if IsRole(c, "tech-admin") {
+			c.AbortWithStatusJSON(403, gin.H{"error": "tech admins cannot perform this action"})
+			return
+		}
+		c.Next()
+	}
+}

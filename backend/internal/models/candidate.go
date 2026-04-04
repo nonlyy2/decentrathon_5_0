@@ -5,13 +5,24 @@ import "time"
 type Candidate struct {
 	ID                  int       `json:"id"`
 	FullName            string    `json:"full_name"`
+	FirstName           *string   `json:"first_name"`
+	LastName            *string   `json:"last_name"`
+	Patronymic          *string   `json:"patronymic"`
 	Email               string    `json:"email"`
 	Phone               *string   `json:"phone"`
 	Telegram            *string   `json:"telegram"`
 	Age                 *int      `json:"age"`
+	DateOfBirth         *string   `json:"date_of_birth"`
+	Gender              *string   `json:"gender"`
 	City                *string   `json:"city"`
+	HomeCountry         *string   `json:"home_country"`
 	School              *string   `json:"school"`
 	GraduationYear      *int      `json:"graduation_year"`
+	Nationality         *string   `json:"nationality"`
+	IIN                 *string   `json:"iin"`
+	IdentityDocType     *string   `json:"identity_doc_type"`
+	Instagram           *string   `json:"instagram"`
+	WhatsApp            *string   `json:"whatsapp"`
 	Achievements        *string   `json:"achievements"`
 	Extracurriculars    *string   `json:"extracurriculars"`
 	Essay               string    `json:"essay"`
@@ -27,6 +38,15 @@ type Candidate struct {
 	YouTubeURL          *string   `json:"youtube_url"`
 	YouTubeTranscript   *string   `json:"youtube_transcript"`
 	YouTubeURLValid     *bool     `json:"youtube_url_valid"`
+	ExamType            *string   `json:"exam_type"`
+	IELTSScore          *float64  `json:"ielts_score"`
+	TOEFLScore          *int      `json:"toefl_score"`
+	EnglishCertURL      *string   `json:"english_cert_url"`
+	CertificateType     *string   `json:"certificate_type"`
+	CertificateURL      *string   `json:"certificate_url"`
+	AdditionalDocsURL   *string   `json:"additional_docs_url"`
+	PersonalityAnswers  *string   `json:"personality_answers"`
+	ReviewComplexity    *float64  `json:"review_complexity"`
 }
 
 type CandidateListItem struct {
@@ -56,20 +76,36 @@ type CandidateDetail struct {
 
 type CreateCandidateRequest struct {
 	FullName            string   `json:"full_name" binding:"required"`
+	FirstName           string   `json:"first_name"`
+	LastName            string   `json:"last_name"`
+	Patronymic          string   `json:"patronymic"`
 	Email               string   `json:"email" binding:"required,email"`
 	Phone               string   `json:"phone" binding:"required"`
 	Telegram            string   `json:"telegram" binding:"required"`
-	Age                 int      `json:"age" binding:"required"`
+	Age                 int      `json:"age"`
+	DateOfBirth         string   `json:"date_of_birth"`
+	Gender              string   `json:"gender"`
 	City                string   `json:"city" binding:"required"`
-	School              string   `json:"school" binding:"required"`
-	GraduationYear      int      `json:"graduation_year" binding:"required"`
-	Achievements        string   `json:"achievements" binding:"required"`
-	Extracurriculars    string   `json:"extracurriculars" binding:"required"`
+	HomeCountry         string   `json:"home_country"`
+	School              string   `json:"school"`
+	GraduationYear      int      `json:"graduation_year"`
+	Nationality         string   `json:"nationality"`
+	IIN                 string   `json:"iin"`
+	IdentityDocType     string   `json:"identity_doc_type"`
+	Instagram           string   `json:"instagram"`
+	WhatsApp            string   `json:"whatsapp"`
+	Achievements        string   `json:"achievements"`
+	Extracurriculars    string   `json:"extracurriculars"`
 	Essay               string   `json:"essay" binding:"required"`
-	MotivationStatement string   `json:"motivation_statement" binding:"required"`
+	MotivationStatement string   `json:"motivation_statement"`
 	Disability          *string  `json:"disability"`
 	Major               *string  `json:"major"`
-	YouTubeURL          string   `json:"youtube_url" binding:"required"`
+	YouTubeURL          string   `json:"youtube_url"`
+	ExamType            string   `json:"exam_type"`
+	IELTSScore          *float64 `json:"ielts_score"`
+	TOEFLScore          *int     `json:"toefl_score"`
+	CertificateType     string   `json:"certificate_type"`
+	PersonalityAnswers  string   `json:"personality_answers"`
 }
 
 // Majors maps tag → display name (multilingual)
@@ -103,6 +139,12 @@ var Majors = []MajorOption{
 		En:   "Digital Media and Marketing",
 		Ru:   "Цифровые медиа и маркетинг",
 		Kk:   "Цифрлық медиа және маркетинг",
+	},
+	{
+		Tag:  "Foundation",
+		En:   "Foundation Program",
+		Ru:   "Подготовительная программа",
+		Kk:   "Дайындық бағдарламасы",
 	},
 }
 

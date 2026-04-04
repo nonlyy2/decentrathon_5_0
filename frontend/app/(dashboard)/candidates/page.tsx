@@ -23,6 +23,7 @@ const MAJORS = [
   { tag: "Society", label: "Sociology: Leadership and Innovation" },
   { tag: "Policy Reform", label: "Public Policy and Development" },
   { tag: "Art + Media", label: "Digital Media and Marketing" },
+  { tag: "Foundation", label: "Foundation Program" },
 ];
 
 const MAJOR_FULL_NAMES: Record<string, string> = {
@@ -31,6 +32,7 @@ const MAJOR_FULL_NAMES: Record<string, string> = {
   Society: "Sociology: Leadership and Innovation",
   "Policy Reform": "Public Policy and Development",
   "Art + Media": "Digital Media and Marketing",
+  Foundation: "Foundation Program",
 };
 
 function RangeSlider({
@@ -179,6 +181,11 @@ export default function CandidatesPage() {
   const STATUS_TABS = [
     { value: "all", label: t("cand.all") },
     { value: "pending", label: t("status.pending") },
+    { value: "in_progress", label: t("status.in_progress") },
+    { value: "initial_screening", label: t("status.initial_screening") },
+    { value: "application_review", label: t("status.application_review") },
+    { value: "interview_stage", label: t("status.interview_stage") },
+    { value: "committee_review", label: t("status.committee_review") },
     { value: "analyzed", label: t("status.analyzed") },
     { value: "shortlisted", label: t("status.shortlisted") },
     { value: "waitlisted", label: t("status.waitlisted") },
@@ -757,10 +764,7 @@ export default function CandidatesPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            {t("cand.showing")} {page * limit + 1}–{Math.min((page + 1) * limit, total)} {t("cand.of")} {total}
-          </p>
+        <div className="flex flex-col items-center gap-2">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 0}>
               {t("cand.previous")}
@@ -769,6 +773,9 @@ export default function CandidatesPage() {
               {t("cand.next")}
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground">
+            {t("cand.showing")} {page * limit + 1}–{Math.min((page + 1) * limit, total)} {t("cand.of")} {total}
+          </p>
         </div>
       )}
 
