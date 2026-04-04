@@ -53,24 +53,22 @@ Score based on: structure of thought, ability to explain complex ideas simply, c
 - 40-59: Unclear in places, poor structure, hard to follow
 - 0-39: Incoherent, very poor communication
 
-AI-GENERATED TEXT DETECTION:
-Evaluate the essay and motivation statement for signs of AI generation. Provide BOTH a percentage score AND a risk level.
+AI-GENERATED TEXT & CHEAT DETECTION:
+Perform a strict forensic linguistic analysis on the essay, motivation statement, and transcript to detect AI generation or heavy AI editing. Provide an 'ai_generated_score' (0-100) and 'ai_generated_risk'.
 
-ai_generated_score (0-100): Probability that the text was AI-generated. Use these signals:
-- Perplexity analysis: AI text tends to have low perplexity (predictable word choices). Human text is more varied and surprising.
-- Burstiness: Humans write with varying sentence lengths and complexity. AI tends to be uniform.
-- Vocabulary diversity: AI often uses a narrow set of "sophisticated" words repeatedly (e.g., "delve", "tapestry", "multifaceted", "foster", "leverage", "beacon", "embark", "resonate").
-- Personal specificity: Real essays contain very specific personal details (exact names, dates, places, emotions). AI text tends to be generic.
-- Structural patterns: AI tends to use parallel structure, numbered lists, and formulaic transitions excessively.
-- Tonal consistency: AI maintains an unnaturally consistent "inspirational" or "professional" tone throughout.
-- Error patterns: Some human-like errors (typos, grammar mistakes, casual language) actually indicate human authorship.
+Evaluate based on these 5 critical markers:
+1. Burstiness (Sentence Variation): Human writing naturally oscillates between short, punchy sentences and long, complex ones. AI defaults to a rhythmic, uniform, and predictable sentence length.
+2. Perplexity (Word Predictability): AI chooses statistically probable words. Look for unnaturally formal vocabulary that feels out of sync with a young student's profile.
+3. The "LLM Glossary": Flag the unnatural density of RLHF-trained clichés. Strongly penalize: "delve", "tapestry", "multifaceted", "foster", "beacon", "embark", "navigate", "testament", "synergy", "unwavering", "in conclusion".
+4. Structural Homogeneity: AI relies heavily on a rigid 5-paragraph structure, parallel lists, and formulaic transitions. It lacks idiosyncratic human narrative tangents.
+5. Authentic Specificity (The Strongest Signal): Human essays contain visceral, hyper-specific details (e.g., "the smell of burned solder", "my younger brother's torn jacket"). AI uses sweeping, generic generalizations even when describing personal trauma or achievements.
 
-Score guide:
-- 0-20: Almost certainly human-written. Strong personal voice, specific details, natural imperfections.
-- 21-40: Likely human-written with some polished sections.
-- 41-60: Mixed signals. Some sections feel AI-assisted, others feel authentic.
-- 61-80: Likely AI-generated. Generic language, formulaic structure, lacks personal specifics.
-- 81-100: Almost certainly AI-generated. All classic AI hallmarks present.
+Score guide (ai_generated_score):
+- 0-20: Authentic Human. High burstiness, visceral personal details, natural imperfections.
+- 21-40: Likely Human. Authentic core ideas, but potentially polished or heavily proofread using basic tools.
+- 41-60: Mixed/Frankenstein. Authentic bullet points heavily expanded and rewritten by AI. Lacks deep emotional resonance in the phrasing.
+- 61-80: Likely AI. Formulaic structure, dense with LLM clichés, entirely lacks visceral human specificity.
+- 81-100: Definitively AI. Zero burstiness, extreme predictability, textbook LLM buzzwords from start to finish.
 
 ai_generated_risk: Derived from score — "low" (0-35), "medium" (36-65), "high" (66-100)
 
