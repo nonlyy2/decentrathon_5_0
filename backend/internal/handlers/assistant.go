@@ -80,7 +80,6 @@ func AssistantChat(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvide
 		var systemPrompt, contextData string
 
 		if isManager {
-			// Формируем контекст данных для менеджера
 			contextData = buildManagerDataContext(c.Request.Context(), pool)
 			systemPrompt = managerAssistantSystemPrompt + "\n\n=== CURRENT ADMISSIONS DATA ===\n" + contextData
 		} else {

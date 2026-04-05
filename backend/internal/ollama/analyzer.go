@@ -12,8 +12,7 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 )
 
-// AnalyzeCandidate uses the dedicated Ollama prompt (much shorter than the Gemini one)
-// and a robust parser that handles common local-model quirks.
+// AnalyzeCandidate — анализ через Ollama с парсером для локальных моделей
 func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error) {
 	userMsg := BuildPrompt(candidate)
 
@@ -50,8 +49,7 @@ func (c *Client) AnalyzeCandidate(ctx context.Context, candidate *models.Candida
 	return toAnalysis(parsed, candidate.ID, modelUsed), nil
 }
 
-// AnalyzeBatch processes each candidate individually for Ollama.
-// Local models can't handle batch prompts reliably — too much context.
+// AnalyzeBatch — поштучно; локальные модели не тянут пакетный промпт
 func (c *Client) AnalyzeBatch(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error) {
 	analyses := make([]*models.Analysis, len(candidates))
 	for i := range candidates {

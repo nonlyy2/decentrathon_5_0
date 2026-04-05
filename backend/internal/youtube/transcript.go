@@ -20,7 +20,7 @@ import (
 
 var videoIDRegex = regexp.MustCompile(`(?:youtube\.com/watch\?(?:.*&)?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})`)
 
-// общий HTTP клиент с browser-заголовками
+// httpClient с browser-заголовками
 var httpClient = &http.Client{Timeout: 15 * time.Second}
 
 func browserGet(rawURL string) (*http.Response, error) {
@@ -33,7 +33,7 @@ func browserGet(rawURL string) (*http.Response, error) {
 	return httpClient.Do(req)
 }
 
-// извлекает 11-символьный ID из любого формата YouTube URL
+// ExtractVideoID — ID из любого формата YouTube URL
 func ExtractVideoID(rawURL string) (string, error) {
 	matches := videoIDRegex.FindStringSubmatch(rawURL)
 	if len(matches) < 2 {
@@ -42,7 +42,7 @@ func ExtractVideoID(rawURL string) (string, error) {
 	return matches[1], nil
 }
 
-// true если видео доступно; 404 из oEmbed = невалидное; сетевые ошибки → assume valid
+// CheckAccessibility — 404 из oEmbed = недоступно; сетевые ошибки → true
 func CheckAccessibility(videoID string) bool {
 	videoURL := url.QueryEscape("https://www.youtube.com/watch?v=" + videoID)
 	oembedURL := "https://www.youtube.com/oembed?url=" + videoURL + "&format=json"
@@ -55,14 +55,13 @@ func CheckAccessibility(videoID string) bool {
 	return resp.StatusCode != 404
 }
 
-// часть ytInitialPlayerResponse captions JSON
 type captionTrack struct {
 	BaseURL      string `json:"baseUrl"`
 	LanguageCode string `json:"languageCode"`
-	Kind         string `json:"kind"` // "asr" = автогенерация
+	Kind         string `json:"kind"` // "asr" = авто
 }
 
-// получает текст субтитров: скрейпинг watch-страницы → captionTracks → timed-text XML
+// FetchTranscript — скрейпинг watch-страницы → captionTracks → timed-text XML
 func FetchTranscript(videoID string) (string, error) {
 	watchURL := "https://www.youtube.com/watch?v=" + videoID
 	resp, err := browserGet(watchURL)
@@ -77,13 +76,11 @@ func FetchTranscript(videoID string) (string, error) {
 	}
 	page := string(body)
 
-	// извлекаем captionTracks из ytInitialPlayerResponse
 	tracks, err := extractCaptionTracks(page)
 	if err != nil || len(tracks) == 0 {
 		return "", fmt.Errorf("no captions found for video %s", videoID)
 	}
 
-	// приоритет: en ручные > en ASR > любые ручные > любые ASR
 	best := chooseBestTrack(tracks)
 	if best == nil {
 		return "", fmt.Errorf("no suitable caption track found")
@@ -92,7 +89,6 @@ func FetchTranscript(videoID string) (string, error) {
 	return fetchTimedText(best.BaseURL)
 }
 
-// извлекает caption tracks из ytInitialPlayerResponse
 var (
 	captionTracksRe = regexp.MustCompile(`(?s)"captionTracks"\s*:\s*(\[.*?\])`)
 	initRespMarkers = []string{
@@ -116,7 +112,7 @@ func extractCaptionTracks(page string) ([]captionTrack, error) {
 		}
 	}
 
-	// фоллбэк для нестандартных разметок страницы
+	// фоллбэк: regex
 	m := captionTracksRe.FindStringSubmatch(page)
 	if len(m) < 2 {
 		return nil, fmt.Errorf("captionTracks not found in page")
@@ -185,8 +181,8 @@ func extractBalancedJSONObject(s string) string {
 	return ""
 }
 
+// chooseBestTrack — en ручные > en ASR > любые ручные > первый
 func chooseBestTrack(tracks []captionTrack) *captionTrack {
-	// порядок приоритета
 	for _, lang := range []string{"en", "en-US", "en-GB"} {
 		for i := range tracks {
 			if tracks[i].LanguageCode == lang && tracks[i].Kind != "asr" {
@@ -201,20 +197,17 @@ func chooseBestTrack(tracks []captionTrack) *captionTrack {
 			}
 		}
 	}
-	// любые ручные
 	for i := range tracks {
 		if tracks[i].Kind != "asr" {
 			return &tracks[i]
 		}
 	}
-	// любые
 	if len(tracks) > 0 {
 		return &tracks[0]
 	}
 	return nil
 }
 
-// XML от caption track URL
 type timedTextXML struct {
 	XMLName xml.Name        `xml:"transcript"`
 	Texts   []timedTextNode `xml:"text"`
@@ -225,7 +218,7 @@ type timedTextNode struct {
 }
 
 func fetchTimedText(baseURL string) (string, error) {
-	// принудительно XML: YouTube часто возвращает fmt=json3/srv3
+	// fmt=xml: YouTube может вернуть json3/srv3
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid timed text URL: %w", err)
@@ -262,7 +255,7 @@ func fetchTimedText(baseURL string) (string, error) {
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// проверяет URL и получает транскрипт; фоллбэк на аудио+STT если субтитры недоступны
+// ValidateAndFetch — валидация URL + транскрипт, фоллбэк на STT
 func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript string, isValid bool, err error) {
 	videoID, err := ExtractVideoID(rawURL)
 	if err != nil {
@@ -276,13 +269,11 @@ func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript 
 
 	transcript, err = FetchTranscript(videoID)
 	if err != nil {
-		// фоллбэк 1: innertube API
+		// фоллбэк: innertube → yt-dlp → STT
 		transcript, err = FetchTranscriptViaInnertube(videoID)
 		if err != nil {
-			// фоллбэк 2: yt-dlp субтитры
 			transcript, err = FetchTranscriptViaYtDlpSubs(videoID)
 			if err != nil {
-				// фоллбэк 3: аудио STT
 				if sttAPIKey != "" {
 					transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
 					if err != nil {
@@ -298,7 +289,7 @@ func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript 
 	return transcript, true, nil
 }
 
-// использует innertube API — надёжнее скрейпинга при изменениях разметки
+// FetchTranscriptViaInnertube — надёжнее скрейпинга
 func FetchTranscriptViaInnertube(videoID string) (string, error) {
 	payload := fmt.Sprintf(`{
 		"context": {
@@ -353,7 +344,7 @@ func FetchTranscriptViaInnertube(videoID string) (string, error) {
 	return fetchTimedText(best.BaseURL)
 }
 
-// скачивает субтитры через yt-dlp
+// FetchTranscriptViaYtDlpSubs — субтитры через yt-dlp
 func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not installed")
@@ -368,7 +359,7 @@ func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 	videoURL := "https://www.youtube.com/watch?v=" + videoID
 	outTemplate := filepath.Join(tmpDir, "subs")
 
-	// сначала ручные субтитры, потом авто
+	// ручные, потом авто-субтитры
 	for _, args := range [][]string{
 		{"--write-subs", "--sub-langs", "en,en-US,en-GB,ru,kk", "--skip-download", "--sub-format", "vtt/srt/best", "-o", outTemplate, videoURL},
 		{"--write-auto-subs", "--sub-langs", "en,en-US,en-GB,ru,kk", "--skip-download", "--sub-format", "vtt/srt/best", "-o", outTemplate, videoURL},
@@ -376,9 +367,8 @@ func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 		cmd := exec.Command("yt-dlp", args...)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		_ = cmd.Run() // ошибку игнорируем — проверяем файлы
+		_ = cmd.Run()
 
-		// ищем файлы субтитров
 		matches, _ := filepath.Glob(filepath.Join(tmpDir, "subs.*"))
 		for _, m := range matches {
 			ext := strings.ToLower(filepath.Ext(m))
@@ -398,7 +388,7 @@ func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 	return "", fmt.Errorf("yt-dlp found no subtitles for video %s", videoID)
 }
 
-// извлекает plain text из VTT/SRT
+// parseSubtitleFile — VTT/SRT → plain text
 func parseSubtitleFile(content string) string {
 	lines := strings.Split(content, "\n")
 	var sb strings.Builder
@@ -406,25 +396,21 @@ func parseSubtitleFile(content string) string {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		// пустые, временны́е метки, VTT-заголовки
 		if line == "" || line == "WEBVTT" || strings.HasPrefix(line, "Kind:") || strings.HasPrefix(line, "Language:") {
 			continue
 		}
-		// строки тайм-кодов
 		if strings.Contains(line, "-->") {
 			continue
 		}
-		// порядковые номера SRT
 		if isNumericLine(line) {
 			continue
 		}
-		// убираем VTT-теги: <c>, </c>, <00:00:01.000>
+		// убираем VTT-теги
 		cleaned := stripVTTTags(line)
 		cleaned = strings.TrimSpace(cleaned)
 		if cleaned == "" {
 			continue
 		}
-		// дедупликация (авто-субтитры часто дублируют строки)
 		if !seen[cleaned] {
 			seen[cleaned] = true
 			sb.WriteString(cleaned)
@@ -449,7 +435,7 @@ func stripVTTTags(s string) string {
 	return vttTagRe.ReplaceAllString(s, "")
 }
 
-// скачивает аудио через yt-dlp и транскрибирует через Whisper/Alem STT
+// FetchTranscriptViaAudio — аудио через yt-dlp + STT
 func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not installed — cannot extract audio")
@@ -464,7 +450,7 @@ func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
 	audioPath := filepath.Join(tmpDir, "audio.mp3")
 	videoURL := "https://www.youtube.com/watch?v=" + videoID
 
-	// только аудио, лимит 50 МБ
+	// только аудио, макс 50 МБ
 	cmd := exec.Command("yt-dlp",
 		"--extract-audio",
 		"--audio-format", "mp3",
@@ -488,13 +474,13 @@ func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
 	return transcribeAudio(audioData, "audio.mp3", apiKey, provider)
 }
 
-// отправляет аудио в Whisper (OpenAI) или Alem STT
+// transcribeAudio — Whisper/Alem STT
 func transcribeAudio(audioData []byte, filename, apiKey, provider string) (string, error) {
 	var apiURL string
 	switch provider {
 	case "alem":
 		apiURL = "https://llm.alem.ai/v1/audio/transcriptions"
-	default: // openai / whisper
+	default: // openai/whisper
 		apiURL = "https://api.openai.com/v1/audio/transcriptions"
 	}
 

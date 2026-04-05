@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// OllamaAnalysisResponse mirrors the JSON the local model should produce.
+// OllamaAnalysisResponse — JSON от локальной модели
 type OllamaAnalysisResponse struct {
 	ScoreLeadership          int      `json:"score_leadership"`
 	ScoreMotivation          int      `json:"score_motivation"`
@@ -29,17 +29,14 @@ type OllamaAnalysisResponse struct {
 
 var jsonCodeFenceRe = regexp.MustCompile("(?s)```(?:json)?\\s*(\\{.*?\\})\\s*```")
 
-// extractJSON pulls the first valid JSON object out of a response string.
-// Local models often wrap their output in markdown fences or add text before/after.
+// extractJSON — первый JSON-объект из ответа (снимает markdown-обёртку)
 func extractJSON(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 
-	// Try stripping markdown code fences first
 	if m := jsonCodeFenceRe.FindStringSubmatch(raw); len(m) == 2 {
 		return m[1], nil
 	}
 
-	// Find first { and last } to extract the JSON object
 	start := strings.Index(raw, "{")
 	end := strings.LastIndex(raw, "}")
 	if start >= 0 && end > start {
@@ -49,8 +46,7 @@ func extractJSON(raw string) (string, error) {
 	return "", fmt.Errorf("no JSON object found in response")
 }
 
-// ParseOllamaResponse parses and validates the local model's output.
-// Returns an error if all scores are zero (model failed silently).
+// ParseOllamaResponse — парсит и валидирует ответ модели
 func ParseOllamaResponse(raw string) (*OllamaAnalysisResponse, error) {
 	jsonStr, err := extractJSON(raw)
 	if err != nil {
@@ -62,7 +58,6 @@ func ParseOllamaResponse(raw string) (*OllamaAnalysisResponse, error) {
 		return nil, fmt.Errorf("JSON parse failed: %w (extracted: %.300s)", err, jsonStr)
 	}
 
-	// Clamp all scores
 	resp.ScoreLeadership = clampInt(resp.ScoreLeadership)
 	resp.ScoreMotivation = clampInt(resp.ScoreMotivation)
 	resp.ScoreGrowth = clampInt(resp.ScoreGrowth)
@@ -70,7 +65,7 @@ func ParseOllamaResponse(raw string) (*OllamaAnalysisResponse, error) {
 	resp.ScoreCommunication = clampInt(resp.ScoreCommunication)
 	resp.AIGeneratedScore = clampInt(resp.AIGeneratedScore)
 
-	// Reject zero-analysis — model failed to actually evaluate
+	// Все нули — модель не обработала промпт
 	total := resp.ScoreLeadership + resp.ScoreMotivation + resp.ScoreGrowth +
 		resp.ScoreVision + resp.ScoreCommunication
 	if total == 0 {

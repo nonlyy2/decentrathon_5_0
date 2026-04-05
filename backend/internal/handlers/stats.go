@@ -17,7 +17,6 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			CategoryCounts: make(map[string]int),
 		}
 
-		// Счётчики по статусам
 		rows, err := pool.Query(ctx, `SELECT status, COUNT(*) FROM candidates GROUP BY status`)
 		if err == nil {
 			defer rows.Close()
@@ -47,10 +46,9 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Средний балл
 		pool.QueryRow(ctx, `SELECT COALESCE(AVG(final_score), 0) FROM analyses`).Scan(&stats.AvgScore)
 
-		// Распределение баллов
+		// Распределение по баллам
 		buckets := []struct {
 			label string
 			min   float64
@@ -72,7 +70,6 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			})
 		}
 
-		// Счётчики по категориям
 		catRows, err := pool.Query(ctx, `SELECT category, COUNT(*) FROM analyses GROUP BY category`)
 		if err == nil {
 			defer catRows.Close()
@@ -85,14 +82,13 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Статистика для графиков
 		var mean, median float64
 		pool.QueryRow(ctx, `SELECT COALESCE(AVG(final_score), 0) FROM analyses`).Scan(&mean)
 		pool.QueryRow(ctx, `SELECT COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY final_score), 0) FROM analyses`).Scan(&median)
 		stats.ScoreMean = mean
 		stats.ScoreMedian = median
 
-		// Средние по измерениям
+		// Средние по измерениям (5 критериев)
 		var meanL, meanM, meanG, meanV, meanC float64
 		pool.QueryRow(ctx, `SELECT COALESCE(AVG(score_leadership),0), COALESCE(AVG(score_motivation),0),
 			COALESCE(AVG(score_growth),0), COALESCE(AVG(score_vision),0), COALESCE(AVG(score_communication),0) FROM analyses`).Scan(
@@ -105,7 +101,7 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			"communication": meanC,
 		}
 
-		// Распределение по измерениям (бакеты по 10); top_n фильтрует топ-N по final_score
+		// Бакеты по 10; top_n — фильтр топ-N
 		topNParam := c.Query("top_n")
 		topN := 0
 		if topNParam != "" {
@@ -135,13 +131,12 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 					Count: cnt,
 				})
 			}
-			// Убираем префикс "score_"
-			key := dim[6:]
+				key := dim[6:] // убираем "score_"
 			dimDistributions[key] = buckets
 		}
 		stats.DimensionDistributions = dimDistributions
 
-		// Пересчёт средних по измерениям для top-N
+		// Пересчёт средних для top-N
 		if topN > 0 {
 			pool.QueryRow(ctx, fmt.Sprintf(`SELECT COALESCE(AVG(score_leadership),0), COALESCE(AVG(score_motivation),0),
 				COALESCE(AVG(score_growth),0), COALESCE(AVG(score_vision),0), COALESCE(AVG(score_communication),0) FROM %s AS a`, dimTable)).Scan(
@@ -155,7 +150,7 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Распределение IELTS
+		// IELTS
 		ieltsRanges := []struct{ label string; lo, hi float64 }{
 			{"5.0-5.5", 4.5, 5.99}, {"6.0-6.5", 6.0, 6.99}, {"7.0-7.5", 7.0, 7.99}, {"8.0-9.0", 8.0, 9.0},
 		}
@@ -166,7 +161,7 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE exam_type='IELTS' AND ielts_score IS NOT NULL`).Scan(&stats.IELTSCount)
 
-		// Распределение TOEFL
+		// TOEFL
 		toeflRanges := []struct{ label string; lo, hi int }{
 			{"60-70", 60, 70}, {"71-80", 71, 80}, {"81-90", 81, 90}, {"91-100", 91, 100}, {"101-120", 101, 120},
 		}
@@ -177,7 +172,7 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE exam_type='TOEFL' AND toefl_score IS NOT NULL`).Scan(&stats.TOEFLCount)
 
-		// Распределение UNT
+		// UNT
 		untRanges := []struct{ label string; lo, hi int }{
 			{"0-50", 0, 50}, {"51-80", 51, 80}, {"81-100", 81, 100}, {"101-120", 101, 120}, {"121-140", 121, 140},
 		}
@@ -188,7 +183,7 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE certificate_type='UNT' AND unt_score IS NOT NULL`).Scan(&stats.UNTCount)
 
-		// Распределение NIS Grade
+		// NIS Grade
 		nisGrades := []string{"A", "B", "C", "D"}
 		for _, g := range nisGrades {
 			var cnt int

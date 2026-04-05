@@ -7,8 +7,7 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 )
 
-// System prompt for local LLMs — expanded for better evaluation quality
-// while keeping it structured enough for small models to follow.
+// SystemPrompt — для локальных LLM, сбалансирован под малые модели
 const SystemPrompt = `You are an admissions evaluator for inVision U, a 100% scholarship university.
 Evaluate the candidate application and respond with ONLY valid JSON. No markdown, no explanations.
 
@@ -35,8 +34,7 @@ final_score = leadership*0.25 + motivation*0.25 + growth*0.20 + vision*0.15 + co
 category: 80-100="Strong Recommend", 65-79="Recommend", 50-64="Borderline", 0-49="Not Recommended"
 ai_generated_risk: 0-35="low", 36-65="medium", 66-100="high"`
 
-// BuildPrompt creates the user message with depersonalized candidate data and JSON template.
-// PII (name, email, phone, age, city, telegram) is excluded to prevent bias.
+// BuildPrompt — анонимизированный промпт (без PII) + JSON-шаблон
 func BuildPrompt(c *models.Candidate) string {
 	var sb strings.Builder
 

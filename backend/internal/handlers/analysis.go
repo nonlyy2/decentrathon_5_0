@@ -18,13 +18,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AIProviders провайдеры для анализа одного кандидата
+// AIProviders — одиночный анализ
 type AIProviders map[string]func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
 
-// AIBatchProviders провайдеры для пакетного анализа
+// AIBatchProviders — пакетный анализ
 type AIBatchProviders map[string]func(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error)
 
-// GetAIProviders возвращает список доступных AI-провайдеров
+// GetAIProviders — список провайдеров
 func GetAIProviders(providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		available := make([]string, 0, len(providers))
@@ -80,20 +80,19 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		ctx := c.Request.Context()
 
-		// Удаляем только текущий анализ
 		tag, err := pool.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, candidateID)
 		if err != nil || tag.RowsAffected() == 0 {
 			c.JSON(404, gin.H{"error": "analysis not found"})
 			return
 		}
 
-		// Если есть история — восстанавливаем предыдущий анализ
+		// Восстанавливаем из истории если есть
 		var prevID int
 		err = pool.QueryRow(ctx,
 			`SELECT id FROM analysis_history WHERE candidate_id = $1 ORDER BY analyzed_at DESC LIMIT 1`,
 			candidateID).Scan(&prevID)
 		if err == nil {
-			// Промоутим последнюю запись истории обратно в analyses.
+			// Промоутим последнюю запись в analyses
 			pool.Exec(ctx,
 				`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
 				 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
@@ -107,10 +106,9 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 				 summary, key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms,0),
 				 recommended_major, major_reason_note
 				 FROM analysis_history WHERE id = $1`, prevID)
-			// Убираем из истории, чтобы не дублировалось
 			pool.Exec(ctx, `DELETE FROM analysis_history WHERE id = $1`, prevID)
 		} else {
-			// Истории нет — сбрасываем статус
+			// Нет истории — сброс статуса
 			pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1 AND status IN ('analyzed','initial_screening')`, candidateID)
 		}
 
@@ -122,7 +120,7 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 func DeleteAllAnalyses(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		// Удаляем только у кандидатов без финального решения комитета
+		// Без финального решения комитета
 		tag, err := pool.Exec(ctx,
 			`DELETE FROM analyses WHERE candidate_id IN (
 				SELECT id FROM candidates WHERE status NOT IN ('shortlisted', 'rejected', 'waitlisted')
@@ -131,9 +129,8 @@ func DeleteAllAnalyses(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(500, gin.H{"error": "failed to delete analyses"})
 			return
 		}
-		// Сбрасываем статус
 		pool.Exec(ctx, `UPDATE candidates SET status = 'in_progress' WHERE status IN ('analyzed','initial_screening')`)
-		// Очищаем кэш статусов
+		// Очищаем кэш
 		candidateAnalyses.Range(func(key, _ any) bool {
 			candidateAnalyses.Delete(key)
 			return true
@@ -149,7 +146,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	}
 	defer tx.Rollback(ctx)
 
-	// Переносим текущий анализ в историю перед заменой.
+	// Архивируем текущий анализ
 	tx.Exec(ctx,
 		`INSERT INTO analysis_history (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
 		 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
@@ -164,7 +161,6 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		 recommended_major, major_reason_note
 		 FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
-	// Заменяем текущий анализ
 	tx.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
 	_, err = tx.Exec(ctx,
@@ -185,7 +181,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		return err
 	}
 
-	// Устанавливаем статус initial_screening
+	// Статус → initial_screening
 	_, err = tx.Exec(ctx, `UPDATE candidates SET status = 'initial_screening' WHERE id = $1 AND status IN ('pending','in_progress','analyzed')`, analysis.CandidateID)
 	if err != nil {
 		return err
@@ -194,7 +190,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	return tx.Commit(ctx)
 }
 
-// resolveProvider выбирает функцию анализа по параметру ?provider= или дефолту
+// resolveProvider — провайдер из ?provider= или дефолт
 func resolveProvider(c *gin.Context, providers AIProviders, defaultProvider string) (func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error), bool) {
 	providerName := c.Query("provider")
 	if providerName == "" {
@@ -208,7 +204,7 @@ func resolveProvider(c *gin.Context, providers AIProviders, defaultProvider stri
 	return fn, true
 }
 
-// AnalyzeSingleCandidate хэндлер анализа одного кандидата
+// AnalyzeSingleCandidate — анализ одного кандидата
 func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if middleware.IsRole(c, "auditor") {
@@ -226,7 +222,6 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			return
 		}
 
-		// Загружаем кандидата
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
 			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_transcript, created_at, status
@@ -239,14 +234,11 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			return
 		}
 
-		// SaveAnalysis сам архивирует предыдущий анализ — повторный запуск всегда разрешён.
-
 		if analyzeFunc == nil {
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return
 		}
 
-		// Проверяем, не запущен ли уже анализ
 		if raw, ok := candidateAnalyses.Load(candidateID); ok {
 			if raw.(candidateAnalysisState).Running {
 				c.JSON(409, gin.H{"error": "analysis already running"})
@@ -254,7 +246,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			}
 		}
 
-		// Помечаем как запущенный, отвечаем 202 — анализ в фоне
+		// Запускаем, отвечаем 202
 		startedAt := time.Now()
 		candidateAnalyses.Store(candidateID, candidateAnalysisState{Running: true, StartedAt: startedAt})
 		c.JSON(202, gin.H{"message": "analysis started", "started_at": startedAt.UnixMilli()})
@@ -280,7 +272,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 	}
 }
 
-// Отслеживание статуса асинхронного анализа по кандидату
+// candidateAnalysisState — статус фонового анализа
 type candidateAnalysisState struct {
 	Running    bool
 	Failed     bool
@@ -289,7 +281,7 @@ type candidateAnalysisState struct {
 	DurationMs int
 }
 
-var candidateAnalyses sync.Map // map[int]candidateAnalysisState
+var candidateAnalyses sync.Map
 
 func GetCandidateAnalysisStatus() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -319,7 +311,6 @@ func GetCandidateAnalysisStatus() gin.HandlerFunc {
 	}
 }
 
-// Пакетный анализ
 var batchCancel context.CancelFunc
 
 var batchStatus struct {
@@ -348,7 +339,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 		if providerName == "" {
 			providerName = defaultProvider
 		}
-		batchFunc := batchProviders[providerName] // may be nil
+		batchFunc := batchProviders[providerName]
 
 		batchStatus.Lock()
 		if batchStatus.Running {
@@ -409,7 +400,6 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 					strings.Contains(msg, "rate-limited") || strings.Contains(msg, "rate limit")
 			}
 
-			// Разбиваем на пачки
 			var batches [][]models.Candidate
 			for i := 0; i < len(candidates); i += batchSize {
 				end := i + batchSize
@@ -435,7 +425,6 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 				if rateLimitHit {
 					break
 				}
-				// Проверяем отмену
 				select {
 				case <-ctx.Done():
 					batchStatus.Lock()
@@ -476,7 +465,6 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 			}
 
 		done:
-			// Закрываем канал результатов после завершения всех горутин
 			go func() {
 				wg.Wait()
 				close(results)
@@ -491,7 +479,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 						batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("rate limit hit at batch %d: %v", r.batchIdx, r.err))
 						batchStatus.Unlock()
 					} else {
-						// Пакет упал по другой причине — обрабатываем поштучно
+						// Пакет упал — поштучный фоллбэк
 						for i := range r.batch {
 							select {
 							case <-ctx.Done():
@@ -740,16 +728,16 @@ func AnalyzeAllCandidates(pool *pgxpool.Pool, providers AIProviders, batchProvid
 	}
 }
 
-// AITextGenerators провайдеры для генерации текста
+// AITextGenerators — генерация текста
 type AITextGenerators map[string]func(ctx context.Context, systemPrompt, userMsg string) (string, error)
 
-// AIRecommendRequest тело запроса POST /candidates/ai-recommend
+// AIRecommendRequest — тело POST /candidates/ai-recommend
 type AIRecommendRequest struct {
 	CandidateIDs []int `json:"candidate_ids" binding:"required,min=2"`
 	SelectCount  int   `json:"select_count" binding:"required,min=1"`
 }
 
-// RecommendCandidates выбирает лучших N кандидатов с помощью AI
+// RecommendCandidates — AI выбирает топ-N
 func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req AIRecommendRequest
@@ -828,7 +816,7 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			return
 		}
 
-		// Убираем markdown-обёртку если есть
+		// Снимаем markdown-обёртку
 		cleaned := strings.TrimSpace(responseText)
 		if strings.HasPrefix(cleaned, "```") {
 			if idx := strings.Index(cleaned, "\n"); idx >= 0 {
@@ -839,7 +827,6 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			}
 			cleaned = strings.TrimSpace(cleaned)
 		}
-		// Извлекаем JSON-объект
 		if idx := strings.Index(cleaned, "{"); idx > 0 {
 			cleaned = cleaned[idx:]
 		}

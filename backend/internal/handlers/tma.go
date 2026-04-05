@@ -13,8 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// GetTMAStatus — верифицирует initData и возвращает статус кандидата.
-// GET /api/tma/status?initData=<url-encoded-initData>
+// GetTMAStatus — верификация initData, статус кандидата
 func GetTMAStatus(pool *pgxpool.Pool, botToken string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		initDataRaw := c.Query("initData")
@@ -23,14 +22,12 @@ func GetTMAStatus(pool *pgxpool.Pool, botToken string) gin.HandlerFunc {
 			return
 		}
 
-		// Проверка подписи initData
 		chatID, ok := validateTelegramInitData(initDataRaw, botToken)
 		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid initData"})
 			return
 		}
 
-		// Поиск кандидата по telegram_chat_id
 		var result struct {
 			CandidateID     int     `json:"candidate_id"`
 			FullName        string  `json:"full_name"`
@@ -59,7 +56,7 @@ func GetTMAStatus(pool *pgxpool.Pool, botToken string) gin.HandlerFunc {
 		)
 
 		if err != nil {
-			// Не найден по chat_id — проверяем telegram_invites
+			// Не найден по chat_id — ищем через telegram_invites
 			var inviteCandidateID int
 			invErr := pool.QueryRow(c.Request.Context(),
 				`SELECT ti.candidate_id FROM telegram_invites ti WHERE ti.telegram_chat_id = $1`, chatID,
@@ -68,7 +65,6 @@ func GetTMAStatus(pool *pgxpool.Pool, botToken string) gin.HandlerFunc {
 				c.JSON(http.StatusNotFound, gin.H{"error": "no application found for this Telegram account"})
 				return
 			}
-			// Повторный запрос по candidate ID
 			err2 := pool.QueryRow(c.Request.Context(), `
 				SELECT c.id, c.full_name, c.status, c.interview_status,
 					a.final_score, ia.final_score, c.combined_score, a.category, c.major, c.photo_url
@@ -91,8 +87,7 @@ func GetTMAStatus(pool *pgxpool.Pool, botToken string) gin.HandlerFunc {
 	}
 }
 
-// validateTelegramInitData — валидация Telegram WebApp initData.
-// Возвращает (userID int64, valid bool)
+// validateTelegramInitData — проверка подписи Telegram WebApp
 func validateTelegramInitData(initDataRaw, botToken string) (int64, bool) {
 	parsed, err := url.ParseQuery(initDataRaw)
 	if err != nil {
@@ -104,7 +99,7 @@ func validateTelegramInitData(initDataRaw, botToken string) (int64, bool) {
 		return 0, false
 	}
 
-	// data-check-string: все поля кроме hash, отсортированные по алфавиту, через \n
+	// data-check-string: поля без hash, сорт по алфавиту, через \n
 	var pairs []string
 	for k, vs := range parsed {
 		if k == "hash" {
@@ -115,7 +110,6 @@ func validateTelegramInitData(initDataRaw, botToken string) (int64, bool) {
 	sort.Strings(pairs)
 	dataCheckString := strings.Join(pairs, "\n")
 
-	// HMAC-SHA256(data-check-string), ключ = HMAC-SHA256("WebAppData", botToken)
 	mac1 := hmac.New(sha256.New, []byte("WebAppData"))
 	mac1.Write([]byte(botToken))
 	secretKey := mac1.Sum(nil)
@@ -128,13 +122,12 @@ func validateTelegramInitData(initDataRaw, botToken string) (int64, bool) {
 		return 0, false
 	}
 
-	return 0, true // Валидно — chat_id ищется отдельно
+	return 0, true // chat_id ищется отдельно
 }
 
-// GetTMAStatusByChatID — поиск по chat_id (после привязки бота)
+// GetTMAStatusByChatID — поиск по token после привязки бота
 func GetTMAStatusByChatID(pool *pgxpool.Pool, botToken string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// В проде валидируется initData; для демо — по token
 		token := c.Query("token")
 		if token == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "token required"})

@@ -62,7 +62,6 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 		callerRole := c.GetString("user_role")
 		callerID := c.GetInt("user_id")
 
-		// Текущая роль целевого пользователя
 		var targetRole string
 		var targetID int
 		err := pool.QueryRow(c.Request.Context(), `SELECT id, role FROM users WHERE id = $1`, id).Scan(&targetID, &targetRole)
@@ -71,13 +70,12 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Редактировать superadmin/admin может только superadmin
 		if (targetRole == "superadmin" || targetRole == "admin") && !middleware.IsRole(c, "superadmin", "admin") {
 			c.JSON(403, gin.H{"error": "cannot modify superadmin accounts"})
 			return
 		}
 
-		// Себя редактировать через этот эндпоинт нельзя — использовать /profile
+		// Себя — только через /profile
 		if targetID == callerID {
 			c.JSON(400, gin.H{"error": "use /profile to edit your own account"})
 			return
@@ -89,7 +87,6 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// tech-admin не может назначить роль superadmin/admin
 		if callerRole == "tech-admin" {
 			if req.Role != nil && (*req.Role == "superadmin" || *req.Role == "admin") {
 				c.JSON(403, gin.H{"error": "tech-admin cannot assign superadmin role"})
@@ -97,7 +94,6 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Менять email другого пользователя — только superadmin/admin
 		if req.Email != nil && callerRole != "superadmin" && callerRole != "admin" {
 			c.JSON(403, gin.H{"error": "only superadmin can change user email"})
 			return
@@ -165,7 +161,7 @@ func ResetUserPassword(pool *pgxpool.Pool, emailSvc *EmailService) gin.HandlerFu
 
 		resp := gin.H{"message": "password reset successfully"}
 		if !emailSent {
-			// SMTP недоступен — возвращаем пароль в ответе (разовый показ)
+			// SMTP недоступен — пароль в ответе разово
 			resp["new_password"] = newPassword
 			resp["warning"] = "SMTP not configured — copy this password manually, it will not be shown again"
 		}
@@ -246,7 +242,6 @@ func UpdateProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Смена email — только superadmin
 		if req.Email != nil {
 			if userRole != "superadmin" && userRole != "admin" {
 				c.JSON(403, gin.H{"error": "only superadmin can change email"})

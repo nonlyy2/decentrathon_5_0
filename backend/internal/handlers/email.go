@@ -131,7 +131,7 @@ func (e *EmailService) sendEmail(to, subject, body string, template string, cand
 
 	err := smtp.SendMail(addr, auth, e.cfg.SMTPFrom, []string{to}, []byte(msg))
 
-	// Логируем отправку в БД (некритично, ошибки игнорируем)
+	// Лог в БД, некритично
 	if e.pool != nil {
 		logStatus := "sent"
 		if err != nil {

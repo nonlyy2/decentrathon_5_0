@@ -21,7 +21,7 @@ type ManagerStats struct {
 	Waitlists       int     `json:"waitlists"`
 	Reviews         int     `json:"reviews"`
 	SuccessfulCases int     `json:"successful_cases"` // решения, где кандидат попал в шортлист
-	EfficiencyScore float64 `json:"efficiency_score"` // successful / total * 100
+	EfficiencyScore float64 `json:"efficiency_score"` // успешных / всего * 100
 	LastActiveAt    *string `json:"last_active_at"`
 }
 
@@ -30,8 +30,7 @@ func GetManagerPerformance(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
-		// Статистика решений по всем менеджерам
-		rows, err := pool.Query(ctx, `
+			rows, err := pool.Query(ctx, `
 			SELECT
 				u.id,
 				u.email,
@@ -75,14 +74,13 @@ func GetManagerPerformance(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Общая сводка
 		var totalCandidates, shortlisted, rejected, pending int
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates`).Scan(&totalCandidates)
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE status='shortlisted'`).Scan(&shortlisted)
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE status='rejected'`).Scan(&rejected)
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE status='pending'`).Scan(&pending)
 
-		// Тренд решений за последние 30 дней (по дням)
+		// Тренд решений за 30 дней
 		trendRows, err := pool.Query(ctx, `
 			SELECT DATE(decided_at) as day, COUNT(*) as count
 			FROM committee_decisions
