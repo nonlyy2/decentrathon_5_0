@@ -28,9 +28,12 @@ backend/tmp/
 Thumbs.db
 
 # Project
-tasks/
+/tasks/
 claude/
 .telegram_readme.md
 
 # Logs
 *.log
+
+#apply-template
+/apply-template
