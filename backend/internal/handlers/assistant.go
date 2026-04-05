@@ -14,14 +14,21 @@ import (
 const managerAssistantSystemPrompt = `You are an AI data assistant for inVision U admissions managers.
 You have been given a summary of the current admissions data and can help managers:
 - Analyze candidate distributions and trends
-- Answer questions about specific cohorts (by major, score, status)
+- Answer questions about specific cohorts (by major, score, status, city, school)
 - Suggest which candidates need attention
 - Generate textual summaries of data
 - Help prioritize workload
+- Provide statistical analysis of score distributions
 
-When the manager asks for a chart or graph, describe the data clearly and say what kind of chart would best display it. Provide data in a structured format that can be used to render a chart.
+When the manager asks for a chart, graph, table, or diagram, respond with the data in a structured JSON block wrapped in ` + "`" + `~~~chart` + "`" + ` markers. Use this format:
+~~~chart
+{"type":"bar","title":"Chart Title","data":[{"label":"X","value":123}]}
+~~~
+Supported chart types: bar, pie, table.
+For tables: {"type":"table","title":"Table Title","headers":["Col1","Col2"],"rows":[["val1","val2"]]}
 
-Be concise, data-driven, and actionable. Always base your answers on the provided data context.`
+Be concise, data-driven, and actionable. Always base your answers on the provided data context.
+IMPORTANT: You have access to city, school, and partner school distribution data. Use it when asked about geographic or school-based questions.`
 
 const userAssistantSystemPrompt = `You are a helpful FAQ assistant for inVision U applicants.
 inVision U is a 100% scholarship university founded by inDrive in Kazakhstan.
@@ -152,19 +159,68 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 	pool.QueryRow(ctx, `SELECT COUNT(*) FROM analyses WHERE ai_generated_risk='low'`).Scan(&lowRisk)
 	sb.WriteString(fmt.Sprintf("\nAI-generated text risk:\n  High: %d | Medium: %d | Low: %d\n", highRisk, medRisk, lowRisk))
 
-	// Top 5 candidates by score
-	topRows, _ := pool.Query(ctx, `SELECT c.full_name, a.final_score, a.category, c.status FROM candidates c JOIN analyses a ON c.id=a.candidate_id ORDER BY a.final_score DESC LIMIT 5`)
+	// Top 5 candidates by score (name only, no personal data)
+	topRows, _ := pool.Query(ctx, `SELECT c.full_name, a.final_score, a.category, COALESCE(c.major,'Unknown') FROM candidates c JOIN analyses a ON c.id=a.candidate_id ORDER BY a.final_score DESC LIMIT 5`)
 	if topRows != nil {
 		sb.WriteString("\nTop 5 candidates by AI score:\n")
 		for topRows.Next() {
-			var name, cat, status string
+			var name, cat, major string
 			var score float64
-			if topRows.Scan(&name, &score, &cat, &status) == nil {
-				sb.WriteString(fmt.Sprintf("  - %s: %.1f (%s) — status: %s\n", name, score, cat, status))
+			if topRows.Scan(&name, &score, &cat, &major) == nil {
+				sb.WriteString(fmt.Sprintf("  - %s: %.1f (%s) — major: %s\n", name, score, cat, major))
 			}
 		}
 		topRows.Close()
 	}
+
+	// City distribution
+	cityRows, _ := pool.Query(ctx, `SELECT COALESCE(city,'Unknown'), COUNT(*) FROM candidates GROUP BY city ORDER BY COUNT(*) DESC LIMIT 15`)
+	if cityRows != nil {
+		sb.WriteString("\nCity distribution:\n")
+		for cityRows.Next() {
+			var city string
+			var cnt int
+			if cityRows.Scan(&city, &cnt) == nil {
+				sb.WriteString(fmt.Sprintf("  - %s: %d\n", city, cnt))
+			}
+		}
+		cityRows.Close()
+	}
+
+	// School distribution
+	schoolRows, _ := pool.Query(ctx, `SELECT COALESCE(school,'Unknown'), COUNT(*) FROM candidates GROUP BY school ORDER BY COUNT(*) DESC LIMIT 10`)
+	if schoolRows != nil {
+		sb.WriteString("\nSchool distribution (top 10):\n")
+		for schoolRows.Next() {
+			var school string
+			var cnt int
+			if schoolRows.Scan(&school, &cnt) == nil {
+				sb.WriteString(fmt.Sprintf("  - %s: %d\n", school, cnt))
+			}
+		}
+		schoolRows.Close()
+	}
+
+	// Partner school distribution
+	partnerRows, _ := pool.Query(ctx, `SELECT COALESCE(partner_school,'No partner'), COUNT(*) FROM candidates WHERE partner_school IS NOT NULL GROUP BY partner_school ORDER BY COUNT(*) DESC`)
+	if partnerRows != nil {
+		sb.WriteString("\nPartner school candidates:\n")
+		for partnerRows.Next() {
+			var ps string
+			var cnt int
+			if partnerRows.Scan(&ps, &cnt) == nil {
+				sb.WriteString(fmt.Sprintf("  - %s: %d\n", ps, cnt))
+			}
+		}
+		partnerRows.Close()
+	}
+
+	// IELTS/TOEFL summary
+	var ieltsCount, toeflCount int
+	var avgIELTS, avgTOEFL float64
+	pool.QueryRow(ctx, `SELECT COUNT(*), COALESCE(AVG(ielts_score),0) FROM candidates WHERE exam_type='IELTS' AND ielts_score IS NOT NULL`).Scan(&ieltsCount, &avgIELTS)
+	pool.QueryRow(ctx, `SELECT COUNT(*), COALESCE(AVG(toefl_score),0) FROM candidates WHERE exam_type='TOEFL' AND toefl_score IS NOT NULL`).Scan(&toeflCount, &avgTOEFL)
+	sb.WriteString(fmt.Sprintf("\nEnglish proficiency:\n  IELTS: %d candidates, avg: %.1f\n  TOEFL: %d candidates, avg: %.0f\n", ieltsCount, avgIELTS, toeflCount, avgTOEFL))
 
 	return sb.String()
 }

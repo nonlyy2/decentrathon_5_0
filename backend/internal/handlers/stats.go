@@ -26,9 +26,11 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 				if rows.Scan(&status, &count) == nil {
 					stats.TotalCandidates += count
 					switch status {
-					case "pending":
-						stats.Pending = count
-					case "analyzed":
+					case "pending", "in_progress":
+						stats.Pending += count
+					case "analyzed", "initial_screening", "application_review":
+						stats.Analyzed += count
+					case "interview_stage", "committee_review":
 						stats.Analyzed += count
 					case "shortlisted":
 						stats.Shortlisted = count
@@ -124,6 +126,48 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			dimDistributions[key] = buckets
 		}
 		stats.DimensionDistributions = dimDistributions
+
+		// IELTS distribution (buckets: 5.0-5.5, 6.0-6.5, 7.0-7.5, 8.0-8.5, 9.0)
+		ieltsRanges := []struct{ label string; lo, hi float64 }{
+			{"5.0-5.5", 4.5, 5.99}, {"6.0-6.5", 6.0, 6.99}, {"7.0-7.5", 7.0, 7.99}, {"8.0-9.0", 8.0, 9.0},
+		}
+		for _, r := range ieltsRanges {
+			var cnt int
+			pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE exam_type='IELTS' AND ielts_score >= $1 AND ielts_score <= $2`, r.lo, r.hi).Scan(&cnt)
+			stats.IELTSDistribution = append(stats.IELTSDistribution, models.ScoreBucket{Range: r.label, Count: cnt})
+		}
+		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE exam_type='IELTS' AND ielts_score IS NOT NULL`).Scan(&stats.IELTSCount)
+
+		// TOEFL distribution
+		toeflRanges := []struct{ label string; lo, hi int }{
+			{"60-70", 60, 70}, {"71-80", 71, 80}, {"81-90", 81, 90}, {"91-100", 91, 100}, {"101-120", 101, 120},
+		}
+		for _, r := range toeflRanges {
+			var cnt int
+			pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE exam_type='TOEFL' AND toefl_score >= $1 AND toefl_score <= $2`, r.lo, r.hi).Scan(&cnt)
+			stats.TOEFLDistribution = append(stats.TOEFLDistribution, models.ScoreBucket{Range: r.label, Count: cnt})
+		}
+		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE exam_type='TOEFL' AND toefl_score IS NOT NULL`).Scan(&stats.TOEFLCount)
+
+		// UNT distribution
+		untRanges := []struct{ label string; lo, hi int }{
+			{"0-50", 0, 50}, {"51-80", 51, 80}, {"81-100", 81, 100}, {"101-120", 101, 120}, {"121-140", 121, 140},
+		}
+		for _, r := range untRanges {
+			var cnt int
+			pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE certificate_type='UNT' AND unt_score >= $1 AND unt_score <= $2`, r.lo, r.hi).Scan(&cnt)
+			stats.UNTDistribution = append(stats.UNTDistribution, models.ScoreBucket{Range: r.label, Count: cnt})
+		}
+		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE certificate_type='UNT' AND unt_score IS NOT NULL`).Scan(&stats.UNTCount)
+
+		// NIS Grade distribution
+		nisGrades := []string{"A", "B", "C", "D"}
+		for _, g := range nisGrades {
+			var cnt int
+			pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE certificate_type='NIS 12 Grade Certificate' AND nis_grade = $1`, g).Scan(&cnt)
+			stats.NISDistribution = append(stats.NISDistribution, models.ScoreBucket{Range: g, Count: cnt})
+		}
+		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE certificate_type='NIS 12 Grade Certificate' AND nis_grade IS NOT NULL`).Scan(&stats.NISCount)
 
 		c.JSON(http.StatusOK, stats)
 	}

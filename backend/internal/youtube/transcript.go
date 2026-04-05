@@ -283,18 +283,118 @@ func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript 
 
 	transcript, err = FetchTranscript(videoID)
 	if err != nil {
-		// No captions found — try audio-based transcription if STT is configured
-		if sttAPIKey != "" {
-			transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
-			if err != nil {
-				return "", true, fmt.Errorf("captions unavailable, audio transcription failed: %w", err)
+		// Fallback 1: try yt-dlp subtitle extraction (more reliable than page scraping)
+		transcript, err = FetchTranscriptViaYtDlpSubs(videoID)
+		if err != nil {
+			// Fallback 2: audio-based transcription if STT is configured
+			if sttAPIKey != "" {
+				transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
+				if err != nil {
+					return "", true, fmt.Errorf("captions unavailable, audio transcription failed: %w", err)
+				}
+				return transcript, true, nil
 			}
-			return transcript, true, nil
+			return "", true, fmt.Errorf("no captions available (configure WHISPER_API_KEY to enable audio transcription)")
 		}
-		return "", true, fmt.Errorf("no captions available (configure WHISPER_API_KEY to enable audio transcription)")
 	}
 
 	return transcript, true, nil
+}
+
+// FetchTranscriptViaYtDlpSubs uses yt-dlp to download subtitles (more reliable than page scraping).
+func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		return "", fmt.Errorf("yt-dlp not installed")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "ytsubs-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	videoURL := "https://www.youtube.com/watch?v=" + videoID
+	outTemplate := filepath.Join(tmpDir, "subs")
+
+	// Try manual subs first, then auto-generated
+	for _, args := range [][]string{
+		{"--write-subs", "--sub-langs", "en,en-US,en-GB,ru,kk", "--skip-download", "--sub-format", "vtt/srt/best", "-o", outTemplate, videoURL},
+		{"--write-auto-subs", "--sub-langs", "en,en-US,en-GB,ru,kk", "--skip-download", "--sub-format", "vtt/srt/best", "-o", outTemplate, videoURL},
+	} {
+		cmd := exec.Command("yt-dlp", args...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		_ = cmd.Run() // ignore error, check for files
+
+		// Look for any subtitle file
+		matches, _ := filepath.Glob(filepath.Join(tmpDir, "subs.*"))
+		for _, m := range matches {
+			ext := strings.ToLower(filepath.Ext(m))
+			if ext == ".vtt" || ext == ".srt" {
+				data, err := os.ReadFile(m)
+				if err != nil {
+					continue
+				}
+				text := parseSubtitleFile(string(data))
+				if len(text) > 20 {
+					return text, nil
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf("yt-dlp found no subtitles for video %s", videoID)
+}
+
+// parseSubtitleFile extracts plain text from VTT/SRT subtitle content.
+func parseSubtitleFile(content string) string {
+	lines := strings.Split(content, "\n")
+	var sb strings.Builder
+	seen := make(map[string]bool)
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Skip empty lines, timestamps, sequence numbers, and VTT headers
+		if line == "" || line == "WEBVTT" || strings.HasPrefix(line, "Kind:") || strings.HasPrefix(line, "Language:") {
+			continue
+		}
+		// Skip timestamp lines (00:00:01.000 --> 00:00:04.000)
+		if strings.Contains(line, "-->") {
+			continue
+		}
+		// Skip pure numeric lines (SRT sequence numbers)
+		if isNumericLine(line) {
+			continue
+		}
+		// Strip VTT tags like <c>, </c>, <00:00:01.000>
+		cleaned := stripVTTTags(line)
+		cleaned = strings.TrimSpace(cleaned)
+		if cleaned == "" {
+			continue
+		}
+		// Deduplicate (auto-subs often repeat lines)
+		if !seen[cleaned] {
+			seen[cleaned] = true
+			sb.WriteString(cleaned)
+			sb.WriteString(" ")
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func isNumericLine(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
+}
+
+var vttTagRe = regexp.MustCompile(`<[^>]+>`)
+
+func stripVTTTags(s string) string {
+	return vttTagRe.ReplaceAllString(s, "")
 }
 
 // FetchTranscriptViaAudio downloads the video audio using yt-dlp and transcribes it via Whisper/Alem STT.

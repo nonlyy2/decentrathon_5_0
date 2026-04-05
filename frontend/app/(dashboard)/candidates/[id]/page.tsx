@@ -7,7 +7,8 @@ import { useI18n } from "@/lib/i18n";
 import { useAIProvider } from "@/lib/aiProvider";
 import { useAuth } from "@/lib/auth";
 import api from "@/lib/api";
-import { CandidateDetail, InterviewStatus, InterviewMessage, MajorOption } from "@/lib/types";
+import { CandidateDetail, InterviewStatus, InterviewMessage, MajorOption, AnalysisHistoryEntry } from "@/lib/types";
+import AnalysisCardStack from "@/components/AnalysisCardStack";
 import StatusBadge from "@/components/StatusBadge";
 import ScoreRadar from "@/components/ScoreRadar";
 import DecisionButtons from "@/components/DecisionButtons";
@@ -87,6 +88,14 @@ export default function CandidateDetailPage() {
   useEffect(() => {
     if (detail?.analysis) {
       api.get(`/candidates/${params.id}/similar`).then((res) => setSimilarCandidates(res.data || [])).catch(() => {});
+    }
+  }, [detail?.analysis, params.id]);
+
+  // Analysis history (for card stack)
+  const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryEntry[]>([]);
+  useEffect(() => {
+    if (detail?.analysis) {
+      api.get(`/candidates/${params.id}/analysis-history`).then((res) => setAnalysisHistory(res.data.history || [])).catch(() => {});
     }
   }, [detail?.analysis, params.id]);
 
@@ -377,7 +386,8 @@ export default function CandidateDetailPage() {
           <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 dark:hover:bg-red-950" onClick={() => { setDeleteCandidateText(""); setShowDeleteCandidate(true); }}>
             <UserX size={14} className="mr-1" /> Delete Candidate
           </Button>
-          {/* Provider toggle */}
+          {/* Provider toggle — hidden for tech-admin */}
+          {!isTechAdmin && (
           <div className="flex items-center gap-1 bg-muted border border-border rounded-lg p-1">
             <button
               onClick={() => setProvider("gemini")}
@@ -398,20 +408,23 @@ export default function CandidateDetailPage() {
               ⚙ Ollama <span className="text-[10px] opacity-70">privacy</span>
             </button>
           </div>
-          {a ? (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
-                {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.re_analyzing")}</> : t("detail.reanalyze")}
+          )}
+          {!isTechAdmin && (
+            a ? (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleAnalyze(true)} disabled={analyzing || deletingAnalysis}>
+                  {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.re_analyzing")}</> : t("detail.reanalyze")}
+                </Button>
+                <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 dark:hover:bg-orange-950" onClick={() => setShowDeleteAnalysis(true)} disabled={deletingAnalysis}>
+                  {deletingAnalysis ? <Loader2 className="animate-spin mr-1" size={14} /> : <Trash2 size={14} className="mr-1" />}
+                  <span className="text-xs">Del Analysis</span>
+                </Button>
+              </div>
+            ) : (
+              <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => handleAnalyze()} disabled={analyzing}>
+                {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.analyzing")}</> : <><Sparkles size={16} className="mr-2" /> {t("detail.analyze")}</>}
               </Button>
-              <Button variant="outline" size="sm" className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 dark:hover:bg-orange-950" onClick={() => setShowDeleteAnalysis(true)} disabled={deletingAnalysis}>
-                {deletingAnalysis ? <Loader2 className="animate-spin mr-1" size={14} /> : <Trash2 size={14} className="mr-1" />}
-                <span className="text-xs">Del Analysis</span>
-              </Button>
-            </div>
-          ) : (
-            <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => handleAnalyze()} disabled={analyzing}>
-              {analyzing ? <><Loader2 className="animate-spin mr-2" size={14} /> {t("detail.analyzing")}</> : <><Sparkles size={16} className="mr-2" /> {t("detail.analyze")}</>}
-            </Button>
+            )
           )}
         </div>
       </div>
@@ -449,10 +462,15 @@ export default function CandidateDetailPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   {detail.major && (
-                    <div className="mb-2">
+                    <div className="mb-2 flex items-center gap-1.5 flex-wrap">
                       <span className="inline-block bg-lime-100 text-lime-800 text-xs font-semibold px-2 py-0.5 rounded">
                         {majors.find((m) => m.tag === detail.major)?.en || detail.major}
                       </span>
+                      {detail.partner_school && (
+                        <span className="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">
+                          Partner: {detail.partner_school}
+                        </span>
+                      )}
                     </div>
                   )}
                   <div className="text-sm text-muted-foreground">{detail.email}</div>
@@ -723,6 +741,20 @@ export default function CandidateDetailPage() {
                 </CardContent>
               </Card>
 
+              {/* Analysis history card stack */}
+              {analysisHistory.length > 0 && (
+                <AnalysisCardStack
+                  current={{
+                    final_score: a.final_score,
+                    category: a.category,
+                    model_used: a.model_used,
+                    analyzed_at: a.analyzed_at,
+                    summary: a.summary,
+                  }}
+                  history={analysisHistory}
+                />
+              )}
+
               <KeyStrengthsRedFlags strengths={a.key_strengths} redFlags={a.red_flags} />
 
               {/* Score breakdown */}
@@ -800,8 +832,8 @@ export default function CandidateDetailPage() {
             </Card>
           )}
 
-          {/* Stage 2: Interview Status */}
-          <Card>
+          {/* Stage 2: Interview Status — hidden for tech-admin */}
+          {!isTechAdmin && (<Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <BotMessageSquare size={16} /> Stage 2: {t("interview.title")}
@@ -986,10 +1018,10 @@ export default function CandidateDetailPage() {
                 </div>
               )}
             </CardContent>
-          </Card>
+          </Card>)}
 
           {/* Stage 2: Interview AI Analysis — standalone cards matching Stage 1 format */}
-          {interviewData?.analysis && (() => {
+          {!isTechAdmin && interviewData?.analysis && (() => {
                     const ia = interviewData.analysis;
                     const stage2Scores = [
                       { key: "leadership", label: "Leadership", score: ia.score_leadership, explanation: ia.explanation_leadership },
@@ -1199,18 +1231,15 @@ export default function CandidateDetailPage() {
                     );
                   })()}
 
-          {/* Decision panel */}
+          {/* Decision panel — hidden for tech-admin */}
+          {!isTechAdmin && (
           <Card>
             <CardHeader><CardTitle className="text-base">{t("detail.committee")}</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {isTechAdmin ? (
-                <p className="text-sm text-muted-foreground italic">Tech admins cannot vote on candidates.</p>
-              ) : (
                 <DecisionButtons
                   candidateId={detail.id}
                   onDecisionMade={refetch}
                 />
-              )}
               {detail.decisions.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase">{t("detail.history")}</p>
@@ -1230,14 +1259,16 @@ export default function CandidateDetailPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
-          {/* War Room: Flag for Discussion */}
-          <FlagForDiscussionCard candidateId={detail.id} />
+          {/* War Room: Flag for Discussion — hidden for tech-admin */}
+          {!isTechAdmin && <FlagForDiscussionCard candidateId={detail.id} />}
 
-          {/* Private Notes */}
-          <PrivateNotesCard candidateId={detail.id} />
+          {/* Private Notes — hidden for tech-admin */}
+          {!isTechAdmin && <PrivateNotesCard candidateId={detail.id} />}
 
-          {/* Comments */}
+          {/* Comments — hidden for tech-admin */}
+          {!isTechAdmin && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -1279,6 +1310,7 @@ export default function CandidateDetailPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </div>
       </div>
 

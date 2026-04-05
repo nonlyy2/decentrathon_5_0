@@ -362,6 +362,37 @@ func RunMigrations(pool *pgxpool.Pool) error {
 				CHECK (status IN ('pending','in_progress','initial_screening','application_review','interview_stage','committee_review','decision','analyzed','shortlisted','rejected','waitlisted'));
 		EXCEPTION WHEN OTHERS THEN NULL;
 		END $$`,
+
+		// ─── UNT / NIS score fields ──────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS unt_score INTEGER`,
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS nis_grade VARCHAR(5)`,
+
+		// ─── Partner school tag ──────────────────────────────────────────────────
+		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS partner_school VARCHAR(255)`,
+
+		// ─── Partner schools table ───────────────────────────────────────────────
+		`CREATE TABLE IF NOT EXISTS partner_schools (
+			id SERIAL PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			city VARCHAR(100),
+			contact_email VARCHAR(255),
+			contact_phone VARCHAR(50),
+			graduates_per_year INTEGER DEFAULT 0,
+			created_at TIMESTAMP DEFAULT NOW()
+		)`,
+
+		// ─── Analysis history: add explanation columns ────────────────────────────
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_leadership TEXT`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_motivation TEXT`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_growth TEXT`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_vision TEXT`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_communication TEXT`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS incomplete_flag BOOLEAN DEFAULT false`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS recommended_major VARCHAR(100)`,
+		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS major_reason_note TEXT`,
+
+		// ─── Notes: add created_at ────────────────────────────────────────────────
+		`ALTER TABLE private_notes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
 	}
 
 	for _, q := range queries {

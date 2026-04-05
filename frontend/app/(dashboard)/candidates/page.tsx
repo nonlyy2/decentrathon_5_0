@@ -180,13 +180,11 @@ export default function CandidatesPage() {
 
   const STATUS_TABS = [
     { value: "all", label: t("cand.all") },
-    { value: "pending", label: t("status.pending") },
     { value: "in_progress", label: t("status.in_progress") },
     { value: "initial_screening", label: t("status.initial_screening") },
     { value: "application_review", label: t("status.application_review") },
     { value: "interview_stage", label: t("status.interview_stage") },
     { value: "committee_review", label: t("status.committee_review") },
-    { value: "analyzed", label: t("status.analyzed") },
     { value: "shortlisted", label: t("status.shortlisted") },
     { value: "waitlisted", label: t("status.waitlisted") },
     { value: "rejected", label: t("status.rejected") },

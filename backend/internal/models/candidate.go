@@ -47,6 +47,9 @@ type Candidate struct {
 	AdditionalDocsURL   *string   `json:"additional_docs_url"`
 	PersonalityAnswers  *string   `json:"personality_answers"`
 	ReviewComplexity    *float64  `json:"review_complexity"`
+	UNTScore            *int      `json:"unt_score"`
+	NISGrade            *string   `json:"nis_grade"`
+	PartnerSchool       *string   `json:"partner_school"`
 }
 
 type CandidateListItem struct {
@@ -106,6 +109,8 @@ type CreateCandidateRequest struct {
 	TOEFLScore          *int     `json:"toefl_score"`
 	CertificateType     string   `json:"certificate_type"`
 	PersonalityAnswers  string   `json:"personality_answers"`
+	UNTScore            *int     `json:"unt_score"`
+	NISGrade            string   `json:"nis_grade"`
 }
 
 // Majors maps tag → display name (multilingual)

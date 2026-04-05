@@ -444,7 +444,7 @@ export default function ApplyPage() {
     home_country: "Kazakhstan", city: "", instagram: "", whatsapp: "",
     school: "", major: "", youtube_url: "",
     exam_type: "", ielts_score: "", toefl_score: "",
-    certificate_type: "",
+    certificate_type: "", unt_score: "", nis_grade: "",
     achievements: "", extracurriculars: "", essay: "", motivation_statement: "",
     disability: "",
   });
@@ -547,6 +547,8 @@ export default function ApplyPage() {
         ielts_score: form.ielts_score ? parseFloat(form.ielts_score) : null,
         toefl_score: form.toefl_score ? parseInt(form.toefl_score) : null,
         certificate_type: form.certificate_type || null,
+        unt_score: form.unt_score ? parseInt(form.unt_score) : null,
+        nis_grade: form.nis_grade || null,
         achievements: form.achievements || null,
         extracurriculars: form.extracurriculars || null,
         essay: form.essay,
@@ -603,8 +605,18 @@ export default function ApplyPage() {
             <p className="text-green-700 mt-2 text-sm">
               Thank you for applying to inVision U. We will review your application and contact you via email.
             </p>
+            <a
+              href="https://www.invisionu.education/ru/contacts"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block mt-6"
+            >
+              <Button className="w-full py-5 text-base font-semibold" style={{ backgroundColor: "#c1f11d", color: "#111827" }}>
+                Have more questions? Contact us
+              </Button>
+            </a>
             <Link href="/">
-              <Button variant="outline" className="mt-6">
+              <Button variant="outline" className="mt-3 w-full">
                 <ArrowLeft size={16} className="mr-2" /> Back to Home
               </Button>
             </Link>
@@ -629,6 +641,14 @@ export default function ApplyPage() {
               <h1 className="text-xl font-bold text-gray-900">inVision U</h1>
               <p className="text-xs text-gray-500">Application Form</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href="mailto:info@invisionu.education?subject=Support&body=I have a question about the application process"
+              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              Support
+            </a>
           </div>
         </div>
       </div>
@@ -879,6 +899,29 @@ export default function ApplyPage() {
                           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                         </div>
                       </Field>
+                      {form.certificate_type === "UNT" && (
+                        <Field label="UNT Score *" htmlFor="unt_score">
+                          <Input id="unt_score" type="number" min="0" max="140" value={form.unt_score || ""}
+                            onChange={(e) => update("unt_score", e.target.value)} placeholder="e.g. 120" required />
+                          <p className="text-xs text-gray-400 mt-1">Maximum 140</p>
+                        </Field>
+                      )}
+                      {form.certificate_type === "NIS 12 Grade Certificate" && (
+                        <Field label="Minimum Grade *" htmlFor="nis_grade">
+                          <div className="relative">
+                            <select value={form.nis_grade || ""} onChange={(e) => update("nis_grade", e.target.value)} required
+                              className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                              <option value="">Select grade...</option>
+                              <option value="A">A</option>
+                              <option value="B">B</option>
+                              <option value="C">C</option>
+                              <option value="D">D</option>
+                            </select>
+                            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">Minimum grade across subjects</p>
+                        </Field>
+                      )}
                       <FileUploadField label="Copy of your certificate *" file={certificateFile}
                         onClear={() => setCertificateFile(null)} onClickUpload={() => certificateRef.current?.click()} />
                       <input ref={certificateRef} type="file" accept=".jpg,.jpeg,.png,.heic,.pdf" className="hidden"

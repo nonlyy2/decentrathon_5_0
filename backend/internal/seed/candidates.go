@@ -560,11 +560,65 @@ I dont have achievements to list but I think potential matters more than past ac
 			homeCountry = &h
 		}
 
+		// Generate exam type and scores
+		r2 := rand.New(rand.NewSource(int64(inserted + 99)))
+		examType := "IELTS"
+		if r2.Intn(3) == 0 {
+			examType = "TOEFL"
+		}
+		var ieltsScore *float64
+		var toeflScore *int
+		if examType == "IELTS" {
+			s := 5.5 + float64(r2.Intn(7))*0.5 // 5.5 to 8.5
+			ieltsScore = &s
+		} else {
+			s := 60 + r2.Intn(60) // 60 to 119
+			toeflScore = &s
+		}
+
+		// Generate certificate type and score
+		certType := "UNT"
+		if r2.Intn(3) == 0 {
+			certType = "NIS 12 Grade Certificate"
+		}
+		var untScore *int
+		var nisGrade *string
+		if certType == "UNT" {
+			s := 60 + r2.Intn(80) // 60-139
+			untScore = &s
+		} else {
+			grades := []string{"A", "B", "C"}
+			g := grades[r2.Intn(len(grades))]
+			nisGrade = &g
+		}
+
+		// Generate fake personality answers (40 questions, 4 options each)
+		answers := "{"
+		for q := 0; q < 40; q++ {
+			if q > 0 {
+				answers += ","
+			}
+			answers += fmt.Sprintf(`"%d":%d`, q, r2.Intn(4))
+		}
+		answers += "}"
+
+		// Partner school: 16 out of ~100 candidates get a partner school tag
+		partnerSchools := []string{
+			"NIS Astana", "BIL Almaty", "Haileybury Almaty",
+			"NIS Shymkent", "Miras International School",
+		}
+		var partnerSchool *string
+		if r2.Intn(7) == 0 { // ~14% chance
+			ps := partnerSchools[r2.Intn(len(partnerSchools))]
+			partnerSchool = &ps
+		}
+
 		_, err := pool.Exec(ctx,
-			`INSERT INTO candidates (full_name, first_name, last_name, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, achievements, extracurriculars, essay, motivation_statement, major, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'pending')`,
+			`INSERT INTO candidates (full_name, first_name, last_name, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, achievements, extracurriculars, essay, motivation_statement, major, exam_type, ielts_score, toefl_score, certificate_type, unt_score, nis_grade, personality_answers, partner_school, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,'in_progress')`,
 			c.FullName, firstName, lastName, c.Email, c.Phone, c.Telegram, c.Age, dob, gender, c.City, homeCountry, c.School, c.GraduationYear,
 			nationality, iin, c.Achievements, c.Extracurriculars, c.Essay, c.MotivationStatement, major,
+			examType, ieltsScore, toeflScore, certType, untScore, nisGrade, answers, partnerSchool,
 		)
 		if err != nil {
 			log.Printf("SEED ERROR [%s / %s]: %v", c.FullName, c.Email, err)
@@ -578,7 +632,39 @@ I dont have achievements to list but I think potential matters more than past ac
 	if inserted == 0 {
 		return fmt.Errorf("all %d inserts failed — check logs above for details", len(candidates))
 	}
+
+	// Seed partner schools
+	seedPartnerSchools(pool)
+
 	return nil
+}
+
+func seedPartnerSchools(pool *pgxpool.Pool) {
+	ctx := context.Background()
+	var count int
+	pool.QueryRow(ctx, `SELECT COUNT(*) FROM partner_schools`).Scan(&count)
+	if count > 0 {
+		return
+	}
+
+	schools := []struct {
+		Name, City, Email, Phone string
+		Graduates                int
+	}{
+		{"NIS Astana", "Astana", "nis.astana@edu.kz", "+7 7172 50 00 01", 180},
+		{"BIL Almaty", "Almaty", "bil.almaty@edu.kz", "+7 727 250 00 02", 120},
+		{"Haileybury Almaty", "Almaty", "admissions@haileybury.kz", "+7 727 355 00 03", 80},
+		{"NIS Shymkent", "Shymkent", "nis.shymkent@edu.kz", "+7 7252 30 00 04", 150},
+		{"Miras International School", "Astana", "info@miras.edu.kz", "+7 7172 44 00 05", 100},
+		{"Nazarbayev University School", "Astana", "nu.school@nu.edu.kz", "+7 7172 70 00 06", 90},
+		{"QSI International School", "Atyrau", "qsi.atyrau@qsi.org", "+7 7122 55 00 07", 40},
+	}
+	for _, s := range schools {
+		pool.Exec(ctx,
+			`INSERT INTO partner_schools (name, city, contact_email, contact_phone, graduates_per_year) VALUES ($1,$2,$3,$4,$5)`,
+			s.Name, s.City, s.Email, s.Phone, s.Graduates)
+	}
+	log.Println("Partner schools seeded")
 }
 
 func generateAdditionalCandidates() []seedCandidate {

@@ -79,14 +79,36 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 		ctx := c.Request.Context()
+
+		// Delete only the current (latest) analysis from the analyses table
 		tag, err := pool.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, candidateID)
 		if err != nil || tag.RowsAffected() == 0 {
 			c.JSON(404, gin.H{"error": "analysis not found"})
 			return
 		}
-		// Only reset to pending if no committee decision has been made
-		// (candidates with shortlisted/rejected/waitlisted keep their status)
-		pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1 AND status = 'analyzed'`, candidateID)
+
+		// Check if there's a previous analysis in history — promote it to current
+		var prevID int
+		err = pool.QueryRow(ctx,
+			`SELECT id FROM analysis_history WHERE candidate_id = $1 ORDER BY analyzed_at DESC LIMIT 1`,
+			candidateID).Scan(&prevID)
+		if err == nil {
+			// Promote the most recent history entry back to the analyses table
+			pool.Exec(ctx,
+				`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
+				 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
+				 summary, key_strengths, red_flags, model_used, analyzed_at, duration_ms)
+				 SELECT candidate_id, score_leadership, score_motivation, score_growth, score_vision,
+				 score_communication, final_score, category, COALESCE(ai_generated_risk,'low'), COALESCE(ai_generated_score,0), false,
+				 summary, key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms,0)
+				 FROM analysis_history WHERE id = $1`, prevID)
+			// Remove that entry from history so it doesn't appear twice
+			pool.Exec(ctx, `DELETE FROM analysis_history WHERE id = $1`, prevID)
+		} else {
+			// No history left — reset status to pending
+			pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1 AND status IN ('analyzed','initial_screening')`, candidateID)
+		}
+
 		candidateAnalyses.Delete(candidateID)
 		c.JSON(200, gin.H{"message": "analysis deleted"})
 	}
@@ -104,8 +126,8 @@ func DeleteAllAnalyses(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(500, gin.H{"error": "failed to delete analyses"})
 			return
 		}
-		// Reset those candidates back to pending
-		pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE status = 'analyzed'`)
+		// Reset those candidates back to in_progress
+		pool.Exec(ctx, `UPDATE candidates SET status = 'in_progress' WHERE status IN ('analyzed','initial_screening')`)
 		// Clear in-memory status cache
 		candidateAnalyses.Range(func(key, _ any) bool {
 			candidateAnalyses.Delete(key)
@@ -122,7 +144,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	}
 	defer tx.Rollback(ctx)
 
-	// Save existing analysis to history before overwriting
+	// Move existing analysis to history (keep all previous analyses)
 	tx.Exec(ctx,
 		`INSERT INTO analysis_history (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
 		 score_communication, final_score, category, ai_generated_risk, ai_generated_score, summary,
@@ -132,7 +154,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		 key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms, 0)
 		 FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
-	// Delete existing analysis and insert new one
+	// Replace current analysis with the new one
 	tx.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
 	_, err = tx.Exec(ctx,
@@ -153,7 +175,8 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		return err
 	}
 
-	_, err = tx.Exec(ctx, `UPDATE candidates SET status = 'analyzed' WHERE id = $1`, analysis.CandidateID)
+	// Set status to initial_screening (replaces old 'analyzed')
+	_, err = tx.Exec(ctx, `UPDATE candidates SET status = 'initial_screening' WHERE id = $1 AND status IN ('pending','in_progress','analyzed')`, analysis.CandidateID)
 	if err != nil {
 		return err
 	}
@@ -206,7 +229,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			return
 		}
 
-		// Check existing analysis
+		// Check existing analysis — re-analyze always allowed (appends to history)
 		force := c.Query("force") == "true"
 		var existingID int
 		err = pool.QueryRow(c.Request.Context(),
@@ -215,9 +238,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			c.JSON(409, gin.H{"error": "candidate already analyzed, use ?force=true to re-analyze"})
 			return
 		}
-		if err == nil && force {
-			pool.Exec(c.Request.Context(), `DELETE FROM analyses WHERE candidate_id = $1`, candidateID)
-		}
+		// Don't delete here — SaveAnalysis moves old to history automatically
 
 		if analyzeFunc == nil {
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
@@ -338,7 +359,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 
 		rows, err := pool.Query(c.Request.Context(),
 			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status
-			 FROM candidates WHERE status = 'pending'`)
+			 FROM candidates WHERE status IN ('pending','in_progress')`)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to query candidates"})
 			return

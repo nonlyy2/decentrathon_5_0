@@ -43,6 +43,9 @@ export interface Candidate {
   additional_docs_url: string | null;
   personality_answers: string | null;
   review_complexity: number | null;
+  unt_score: number | null;
+  nis_grade: string | null;
+  partner_school: string | null;
 }
 
 export interface CandidateListItem {
@@ -89,6 +92,26 @@ export interface Analysis {
   model_used: string;
   recommended_major: string | null;
   major_reason_note: string | null;
+}
+
+export interface AnalysisHistoryEntry {
+  id: number;
+  candidate_id: number;
+  score_leadership: number;
+  score_motivation: number;
+  score_growth: number;
+  score_vision: number;
+  score_communication: number;
+  final_score: number;
+  category: string;
+  ai_generated_risk: string;
+  ai_generated_score: number;
+  summary: string | null;
+  key_strengths: string[];
+  red_flags: string[];
+  model_used: string | null;
+  analyzed_at: string;
+  duration_ms: number;
 }
 
 export interface Decision {
@@ -179,6 +202,14 @@ export interface DashboardStats {
   score_median: number;
   dimension_means: Record<string, number>;
   dimension_distributions: Record<string, { range: string; count: number }[]>;
+  ielts_distribution: { range: string; count: number }[];
+  toefl_distribution: { range: string; count: number }[];
+  unt_distribution: { range: string; count: number }[];
+  nis_distribution: { range: string; count: number }[];
+  ielts_count: number;
+  toefl_count: number;
+  unt_count: number;
+  nis_count: number;
 }
 
 export interface MajorOption {

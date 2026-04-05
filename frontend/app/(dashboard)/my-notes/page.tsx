@@ -5,7 +5,8 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, Search, StickyNote } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Search, StickyNote, Trash2 } from "lucide-react";
 
 interface CandidateNote {
   id: number;
@@ -114,9 +115,30 @@ export default function MyNotesPage() {
                   <p className="font-medium text-foreground">{c.full_name}</p>
                   <p className="text-xs text-muted-foreground">{c.email}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {c.note_updated_at ? new Date(c.note_updated_at).toLocaleDateString() : ""}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    {c.note_updated_at ? new Date(c.note_updated_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!confirm("Delete this note?")) return;
+                      try {
+                        await api.delete(`/candidates/${c.id}/notes`);
+                        setCandidates(prev => prev.filter(n => n.id !== c.id));
+                        toast.success("Note deleted");
+                      } catch {
+                        toast.error("Failed to delete note");
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
               </div>
               <p className="text-sm text-muted-foreground mt-2 line-clamp-3 whitespace-pre-wrap">
                 {c.note_content}

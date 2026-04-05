@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const { data: stats, loading } = useFetch<DashboardStats>("/stats");
   const { t } = useI18n();
   const [selectedDim, setSelectedDim] = useState("leadership");
+  const [dimTopN, setDimTopN] = useState<string>("all");
 
   if (loading || !stats) {
     return (
@@ -122,13 +123,21 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-5 text-center">
             <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
               {stats.avg_score > 0 ? stats.avg_score.toFixed(1) : "\u2014"}
             </div>
             <div className="text-sm text-muted-foreground mt-1">{t("dash.avg_score")}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5 text-center">
+            <div className="text-4xl font-bold text-indigo-600 dark:text-indigo-400">
+              {stats.score_median > 0 ? stats.score_median.toFixed(1) : "\u2014"}
+            </div>
+            <div className="text-sm text-muted-foreground mt-1">Median AI Score</div>
           </CardContent>
         </Card>
         <Card>
@@ -141,14 +150,6 @@ export default function DashboardPage() {
           <CardContent className="p-5 text-center">
             <div className="text-4xl font-bold text-green-600 dark:text-green-400">{conversionRate}%</div>
             <div className="text-sm text-muted-foreground mt-1">{t("dash.shortlist_rate")}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 text-center">
-            <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
-              {stats.score_mean > 0 ? stats.score_mean.toFixed(1) : "\u2014"}
-            </div>
-            <div className="text-sm text-muted-foreground mt-1">Median: {stats.score_median > 0 ? stats.score_median.toFixed(1) : "\u2014"}</div>
           </CardContent>
         </Card>
       </div>
@@ -275,7 +276,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Dimension Distribution (from analytics) */}
+      {/* Dimension Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -312,8 +313,23 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Dimension Distribution</CardTitle>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base">Dimension Distribution</CardTitle>
+                <div className="flex items-center gap-1 text-xs">
+                  <select
+                    value={dimTopN}
+                    onChange={(e) => setDimTopN(e.target.value)}
+                    className="bg-muted border border-border rounded px-2 py-0.5 text-xs"
+                  >
+                    <option value="all">All Candidates ({stats.total_candidates})</option>
+                    <option value="10">Top-10</option>
+                    <option value="25">Top-25</option>
+                    <option value="50">Top-50</option>
+                    <option value="100">Top-100</option>
+                  </select>
+                </div>
+              </div>
               <div className="flex gap-1 bg-muted rounded-lg p-0.5">
                 {DIMENSION_OPTIONS.map((dim) => (
                   <button
@@ -353,6 +369,89 @@ export default function DashboardPage() {
               </>
             ) : (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Exam Score Distributions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* IELTS */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">IELTS Distribution ({stats.ielts_count})</CardTitle></CardHeader>
+          <CardContent>
+            {stats.ielts_distribution?.some((b) => b.count > 0) ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={stats.ielts_distribution} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" fontSize={10} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* TOEFL */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">TOEFL Distribution ({stats.toefl_count})</CardTitle></CardHeader>
+          <CardContent>
+            {stats.toefl_distribution?.some((b) => b.count > 0) ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={stats.toefl_distribution} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" fontSize={10} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* UNT */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">UNT Score Distribution ({stats.unt_count})</CardTitle></CardHeader>
+          <CardContent>
+            {stats.unt_distribution?.some((b) => b.count > 0) ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={stats.unt_distribution} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" fontSize={10} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#eab308" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* NIS Grade */}
+        <Card>
+          <CardHeader><CardTitle className="text-base">NIS 12 Grade Distribution ({stats.nis_count})</CardTitle></CardHeader>
+          <CardContent>
+            {stats.nis_distribution?.some((b) => b.count > 0) ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={stats.nis_distribution} barSize={24}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="range" fontSize={10} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">No data</div>
             )}
           </CardContent>
         </Card>

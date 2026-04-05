@@ -190,8 +190,8 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 		var id int
 		var fullName, email string
 		err := pool.QueryRow(c.Request.Context(),
-			`INSERT INTO candidates (full_name, first_name, last_name, patronymic, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, identity_doc_type, instagram, whatsapp, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_url, exam_type, ielts_score, toefl_score, certificate_type, personality_answers, review_complexity, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,'pending')
+			`INSERT INTO candidates (full_name, first_name, last_name, patronymic, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, identity_doc_type, instagram, whatsapp, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_url, exam_type, ielts_score, toefl_score, certificate_type, personality_answers, review_complexity, unt_score, nis_grade, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,'in_progress')
 			 RETURNING id, full_name, email`,
 			fullNameVal, nilIfEmpty(req.FirstName), nilIfEmpty(req.LastName), nilIfEmpty(req.Patronymic),
 			req.Email, nilIfEmpty(req.Phone), nilIfEmpty(req.Telegram),
@@ -203,7 +203,7 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 			nilIfEmpty(req.MotivationStatement), req.Disability, req.Major, nilIfEmpty(req.YouTubeURL),
 			nilIfEmpty(req.ExamType), req.IELTSScore, req.TOEFLScore,
 			nilIfEmpty(req.CertificateType), nilIfEmpty(req.PersonalityAnswers),
-			reviewComplexity,
+			reviewComplexity, req.UNTScore, nilIfEmpty(req.NISGrade),
 		).Scan(&id, &fullName, &email)
 
 		if err != nil {
@@ -369,7 +369,7 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 				identity_doc_type, instagram, whatsapp, home_country,
 				exam_type, ielts_score, toefl_score, english_cert_url,
 				certificate_type, certificate_url, additional_docs_url,
-				personality_answers, review_complexity
+				personality_answers, review_complexity, unt_score, nis_grade, partner_school
 			 FROM candidates WHERE id = $1`, id,
 		).Scan(&candidate.ID, &candidate.FullName, &candidate.Email, &candidate.Phone, &candidate.Telegram,
 			&candidate.Age, &candidate.City, &candidate.School, &candidate.GraduationYear,
@@ -383,7 +383,8 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			&candidate.IdentityDocType, &candidate.Instagram, &candidate.WhatsApp, &candidate.HomeCountry,
 			&candidate.ExamType, &candidate.IELTSScore, &candidate.TOEFLScore, &candidate.EnglishCertURL,
 			&candidate.CertificateType, &candidate.CertificateURL, &candidate.AdditionalDocsURL,
-			&candidate.PersonalityAnswers, &candidate.ReviewComplexity)
+			&candidate.PersonalityAnswers, &candidate.ReviewComplexity,
+			&candidate.UNTScore, &candidate.NISGrade, &candidate.PartnerSchool)
 
 		if err != nil {
 			c.JSON(404, gin.H{"error": "candidate not found"})

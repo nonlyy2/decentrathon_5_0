@@ -184,8 +184,12 @@ func main() {
 		protected.POST("/candidates/auto-accept", handlers.AutoAcceptTopN(pool))
 		protected.GET("/candidates/:id/similar", handlers.GetSimilarCandidates(pool))
 
+		// Partner schools (auditor+ can view)
+		protected.GET("/partner-schools", middleware.AuditorOrAbove(), handlers.GetPartnerSchools(pool))
+
 		// Auditor analytics — manager performance (auditor+)
 		protected.GET("/auditor/manager-performance", middleware.AuditorOrAbove(), handlers.GetManagerPerformance(pool))
+		protected.GET("/auditor/analysis-variance", handlers.GetAnalysisVariance(pool))
 
 		// AI Assistant (manager gets full data context; regular users get FAQ mode)
 		protected.POST("/ai/assistant", handlers.AssistantChat(pool, textGens, defaultProvider))
@@ -208,6 +212,7 @@ func main() {
 		// Private Notes
 		protected.GET("/candidates/:id/notes", handlers.GetPrivateNote(pool))
 		protected.PUT("/candidates/:id/notes", handlers.SavePrivateNote(pool))
+		protected.DELETE("/candidates/:id/notes", handlers.DeletePrivateNote(pool))
 
 		// Review Tasks
 		protected.GET("/tasks", handlers.GetTasks(pool))

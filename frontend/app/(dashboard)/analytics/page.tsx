@@ -8,6 +8,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BarChart3, TrendingUp, Users, Target, Award, Activity } from "lucide-react";
 
+interface CandidateScoreVariance {
+  candidate_id: number;
+  full_name: string;
+  analysis_count: number;
+  mean_score: number;
+  std_dev: number;
+  min_score: number;
+  max_score: number;
+  score_range: number;
+}
+
+interface VarianceSummary {
+  candidates: CandidateScoreVariance[];
+  overall_mean_stdev: number;
+  high_variance_count: number;
+  total_multi_analyzed: number;
+}
+
 interface ManagerStats {
   user_id: number;
   email: string;
@@ -47,6 +65,7 @@ export default function AnalyticsPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [managerData, setManagerData] = useState<{ managers: ManagerStats[]; decision_trend: DayCount[] } | null>(null);
+  const [varianceData, setVarianceData] = useState<VarianceSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isAuditorOrAbove = ["auditor", "tech-admin", "superadmin", "admin"].includes(user?.role ?? "");
@@ -54,12 +73,14 @@ export default function AnalyticsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, managerRes] = await Promise.allSettled([
+      const [statsRes, managerRes, varianceRes] = await Promise.allSettled([
         api.get<DashboardStats>("/stats"),
         isAuditorOrAbove ? api.get("/auditor/manager-performance") : Promise.reject(null),
+        isAuditorOrAbove ? api.get<VarianceSummary>("/auditor/analysis-variance") : Promise.reject(null),
       ]);
       if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
       if (managerRes.status === "fulfilled") setManagerData(managerRes.value.data);
+      if (varianceRes.status === "fulfilled") setVarianceData(varianceRes.value.data);
     } finally {
       setLoading(false);
     }
@@ -181,6 +202,75 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Analysis Variance / Bias Detection — auditor+ only */}
+      {isAuditorOrAbove && varianceData && varianceData.total_multi_analyzed > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity size={16} /> AI Scoring Consistency (Repeated Analyses)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Summary stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-muted/50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-foreground">{varianceData.total_multi_analyzed}</p>
+                <p className="text-xs text-muted-foreground">Candidates with 2+ analyses</p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold text-foreground">{varianceData.overall_mean_stdev.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Mean Std Dev</p>
+              </div>
+              <div className={`rounded-lg p-3 text-center ${varianceData.high_variance_count > 0 ? "bg-red-50 dark:bg-red-950/30" : "bg-green-50 dark:bg-green-950/30"}`}>
+                <p className={`text-2xl font-bold ${varianceData.high_variance_count > 0 ? "text-red-600" : "text-green-600"}`}>{varianceData.high_variance_count}</p>
+                <p className="text-xs text-muted-foreground">High Variance (σ {">"} 5)</p>
+              </div>
+            </div>
+
+            {/* Variance table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs uppercase text-muted-foreground">
+                    <th className="text-left py-2 px-3">Candidate</th>
+                    <th className="text-right py-2 px-3"># Analyses</th>
+                    <th className="text-right py-2 px-3">Mean</th>
+                    <th className="text-right py-2 px-3">Std Dev</th>
+                    <th className="text-right py-2 px-3">Min</th>
+                    <th className="text-right py-2 px-3">Max</th>
+                    <th className="text-right py-2 px-3">Range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {varianceData.candidates.slice(0, 20).map((cv) => (
+                    <tr key={cv.candidate_id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                      <td className="py-2 px-3">
+                        <a href={`/candidates/${cv.candidate_id}`} className="text-blue-600 hover:underline dark:text-blue-400 font-medium">
+                          {cv.full_name}
+                        </a>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono">{cv.analysis_count}</td>
+                      <td className="py-2 px-3 text-right font-mono">{cv.mean_score.toFixed(1)}</td>
+                      <td className="py-2 px-3 text-right">
+                        <span className={`font-mono font-semibold ${cv.std_dev > 5 ? "text-red-600" : cv.std_dev > 2 ? "text-amber-600" : "text-green-600"}`}>
+                          {cv.std_dev.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono">{cv.min_score.toFixed(1)}</td>
+                      <td className="py-2 px-3 text-right font-mono">{cv.max_score.toFixed(1)}</td>
+                      <td className="py-2 px-3 text-right font-mono">{cv.score_range.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {varianceData.candidates.length > 20 && (
+              <p className="text-xs text-muted-foreground text-center">Showing top 20 by highest variance. {varianceData.candidates.length - 20} more candidates with repeated analyses.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Manager performance table — auditor+ only */}
       {isAuditorOrAbove && managerData && (
