@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +11,38 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// assignTaskRoundRobin assigns a single candidate to the least-busy manager.
+// Runs asynchronously (call with go assignTaskRoundRobin(...)).
+func assignTaskRoundRobin(pool *pgxpool.Pool, candidateID int) {
+	ctx := context.Background()
+
+	// Find the manager with the fewest active (non-completed) tasks
+	var managerID int
+	err := pool.QueryRow(ctx,
+		`SELECT u.id
+		 FROM users u
+		 WHERE u.role IN ('manager', 'admin', 'superadmin')
+		 ORDER BY (
+			SELECT COUNT(*) FROM review_tasks rt
+			WHERE rt.assigned_to = u.id AND rt.status != 'completed'
+		 ) ASC, u.id ASC
+		 LIMIT 1`,
+	).Scan(&managerID)
+	if err != nil {
+		log.Printf("assignTaskRoundRobin: no managers found for candidate %d: %v", candidateID, err)
+		return
+	}
+
+	_, err = pool.Exec(ctx,
+		`INSERT INTO review_tasks (candidate_id, assigned_to, status)
+		 VALUES ($1, $2, 'pending')
+		 ON CONFLICT (candidate_id) DO NOTHING`,
+		candidateID, managerID)
+	if err != nil {
+		log.Printf("assignTaskRoundRobin: failed to insert task for candidate %d: %v", candidateID, err)
+	}
+}
 
 type ReviewTask struct {
 	ID           int        `json:"id"`

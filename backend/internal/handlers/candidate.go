@@ -156,6 +156,7 @@ func CreateCandidate(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.Hand
 
 		go fetchAndStoreTranscript(pool, candidate.ID, req.YouTubeURL, sttAPIKey, sttProvider)
 		go recalcAllComplexity(pool)
+		go assignTaskRoundRobin(pool, candidate.ID)
 
 		c.JSON(201, candidate)
 	}
@@ -222,6 +223,9 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 
 		// Recalculate complexity for ALL candidates (new max may have changed)
 		go recalcAllComplexity(pool)
+
+		// Auto-assign this candidate to the least-busy manager (round-robin)
+		go assignTaskRoundRobin(pool, id)
 
 		// Send confirmation email (fire-and-forget)
 		if len(emailSvc) > 0 && emailSvc[0] != nil && emailSvc[0].Enabled() {
