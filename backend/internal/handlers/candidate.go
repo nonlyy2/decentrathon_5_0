@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/assylkhan/invisionu-backend/internal/youtube"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -389,7 +391,12 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 			&candidate.UNTScore, &candidate.NISGrade, &candidate.PartnerSchool)
 
 		if err != nil {
-			c.JSON(404, gin.H{"error": "candidate not found"})
+			if errors.Is(err, pgx.ErrNoRows) {
+				c.JSON(404, gin.H{"error": "candidate not found"})
+			} else {
+				log.Printf("GetCandidate id=%d query error: %v", id, err)
+				c.JSON(500, gin.H{"error": "failed to load candidate: " + err.Error()})
+			}
 			return
 		}
 

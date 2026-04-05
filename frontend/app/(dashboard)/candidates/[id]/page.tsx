@@ -40,7 +40,7 @@ export default function CandidateDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { t } = useI18n();
-  const { data: detail, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
+  const { data: detail, loading: detailLoading, error: detailError, refetch } = useFetch<CandidateDetail>(`/candidates/${params.id}`);
   const { provider, setProvider } = useAIProvider();
   const { user } = useAuth();
   const isTechAdmin = user?.role === "tech-admin";
@@ -355,6 +355,26 @@ export default function CandidateDetailPage() {
   };
 
   if (!detail) {
+    if (!detailLoading && detailError) {
+      return (
+        <div className="space-y-4">
+          <Button variant="ghost" size="sm" onClick={() => router.push("/candidates")}>
+            <ArrowLeft size={16} className="mr-1" /> Back
+          </Button>
+          <Card>
+            <CardContent className="p-8 flex flex-col items-center gap-4 text-center">
+              <AlertTriangle size={40} className="text-red-500" />
+              <div>
+                <p className="font-semibold text-lg">Failed to load candidate</p>
+                <p className="text-sm text-muted-foreground mt-1">{detailError}</p>
+                <p className="text-xs text-muted-foreground mt-1">ID: {params.id}</p>
+              </div>
+              <Button onClick={refetch} variant="outline" size="sm">Retry</Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     return (
       <div className="space-y-4">
         <div className="h-8 bg-slate-200 rounded animate-pulse w-48" />
