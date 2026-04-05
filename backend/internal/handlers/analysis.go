@@ -93,14 +93,21 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 			`SELECT id FROM analysis_history WHERE candidate_id = $1 ORDER BY analyzed_at DESC LIMIT 1`,
 			candidateID).Scan(&prevID)
 		if err == nil {
-			// Promote the most recent history entry back to the analyses table
+			// Promote the most recent history entry back to the analyses table.
+			// Include ALL columns (including explanation_* and recommended_major) so that
+			// GetCandidate can scan the promoted row without NULL scan errors.
 			pool.Exec(ctx,
 				`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
 				 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
-				 summary, key_strengths, red_flags, model_used, analyzed_at, duration_ms)
+				 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
+				 summary, key_strengths, red_flags, model_used, analyzed_at, duration_ms,
+				 recommended_major, major_reason_note)
 				 SELECT candidate_id, score_leadership, score_motivation, score_growth, score_vision,
-				 score_communication, final_score, category, COALESCE(ai_generated_risk,'low'), COALESCE(ai_generated_score,0), false,
-				 summary, key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms,0)
+				 score_communication, final_score, category, COALESCE(ai_generated_risk,'low'), COALESCE(ai_generated_score,0),
+				 COALESCE(incomplete_flag,false),
+				 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
+				 summary, key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms,0),
+				 recommended_major, major_reason_note
 				 FROM analysis_history WHERE id = $1`, prevID)
 			// Remove that entry from history so it doesn't appear twice
 			pool.Exec(ctx, `DELETE FROM analysis_history WHERE id = $1`, prevID)
@@ -144,14 +151,21 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	}
 	defer tx.Rollback(ctx)
 
-	// Move existing analysis to history (keep all previous analyses)
+	// Move existing analysis to history (keep all previous analyses).
+	// Include ALL columns so that if the history entry is later promoted back,
+	// GetCandidate can scan it without NULL scan errors.
 	tx.Exec(ctx,
 		`INSERT INTO analysis_history (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
-		 score_communication, final_score, category, ai_generated_risk, ai_generated_score, summary,
-		 key_strengths, red_flags, model_used, analyzed_at, duration_ms)
+		 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
+		 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
+		 summary, key_strengths, red_flags, model_used, analyzed_at, duration_ms,
+		 recommended_major, major_reason_note)
 		 SELECT candidate_id, score_leadership, score_motivation, score_growth, score_vision,
-		 score_communication, final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0), summary,
-		 key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms, 0)
+		 score_communication, final_score, category, ai_generated_risk, COALESCE(ai_generated_score, 0),
+		 COALESCE(incomplete_flag, false),
+		 explanation_leadership, explanation_motivation, explanation_growth, explanation_vision, explanation_communication,
+		 summary, key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms, 0),
+		 recommended_major, major_reason_note
 		 FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
 	// Replace current analysis with the new one
@@ -229,16 +243,8 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			return
 		}
 
-		// Check existing analysis — re-analyze always allowed (appends to history)
-		force := c.Query("force") == "true"
-		var existingID int
-		err = pool.QueryRow(c.Request.Context(),
-			`SELECT id FROM analyses WHERE candidate_id = $1`, candidateID).Scan(&existingID)
-		if err == nil && !force {
-			c.JSON(409, gin.H{"error": "candidate already analyzed, use ?force=true to re-analyze"})
-			return
-		}
-		// Don't delete here — SaveAnalysis moves old to history automatically
+		// SaveAnalysis always moves any existing analysis to history before inserting the new one,
+		// so we do not block re-analysis here regardless of whether force=true was passed.
 
 		if analyzeFunc == nil {
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
