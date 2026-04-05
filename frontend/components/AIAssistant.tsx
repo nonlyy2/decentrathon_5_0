@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageCircle, X, Send, Bot, User, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Bot, User, Loader2, Mic, MicOff } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line,
@@ -106,7 +106,11 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const isManager = user && ["manager", "committee", "tech-admin", "superadmin", "admin", "auditor"].includes(user.role);
 
@@ -125,6 +129,14 @@ export default function AIAssistant() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Stop recording and clean up when chat is closed
+  useEffect(() => {
+    if (!open && isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+    }
+  }, [open, isRecording]);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -152,6 +164,67 @@ export default function AIAssistant() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks to release the microphone
+        stream.getTracks().forEach((t) => t.stop());
+
+        const blob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || "audio/webm" });
+        audioChunksRef.current = [];
+
+        if (blob.size < 1000) return; // ignore empty/very short recordings
+
+        setIsTranscribing(true);
+        try {
+          const formData = new FormData();
+          formData.append("audio", blob, "recording.webm");
+          const res = await api.post("/ai/transcribe", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          const transcribed: string = res.data.text?.trim() ?? "";
+          if (transcribed) {
+            setInput((prev) => (prev ? prev + " " + transcribed : transcribed));
+          }
+        } catch {
+          // silently fail — user can just type instead
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch {
+      // Microphone permission denied or unavailable
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  };
+
+  const handleVoiceToggle = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
@@ -219,18 +292,52 @@ export default function AIAssistant() {
 
           {/* Input */}
           <div className="p-3 border-t border-border flex gap-2 items-end">
+            {/* Voice button */}
+            <Button
+              size="sm"
+              type="button"
+              onClick={handleVoiceToggle}
+              disabled={isTranscribing || loading}
+              className="h-10 w-10 p-0 shrink-0 relative"
+              variant="outline"
+              style={isRecording ? { borderColor: "#ef4444", color: "#ef4444" } : {}}
+              aria-label={isRecording ? "Stop recording" : "Start voice input"}
+            >
+              {isTranscribing ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : isRecording ? (
+                <>
+                  {/* Pulsing red ring */}
+                  <span className="absolute inset-0 rounded-md animate-ping opacity-30" style={{ backgroundColor: "#ef4444" }} />
+                  <MicOff size={16} />
+                </>
+              ) : (
+                <Mic size={16} />
+              )}
+            </Button>
+
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isManager ? "Ask about candidates, trends, scores..." : "Ask about the application process..."}
+              placeholder={
+                isRecording
+                  ? "Recording... click mic to stop"
+                  : isTranscribing
+                  ? "Transcribing..."
+                  : isManager
+                  ? "Ask about candidates, trends, scores..."
+                  : "Ask about the application process..."
+              }
               rows={2}
               className="resize-none text-sm"
+              disabled={isRecording || isTranscribing}
             />
+
             <Button
               size="sm"
               onClick={handleSend}
-              disabled={loading || !input.trim()}
+              disabled={loading || !input.trim() || isRecording || isTranscribing}
               className="h-10 w-10 p-0 shrink-0"
               style={{ backgroundColor: "#c1f11d", color: "#111" }}
             >

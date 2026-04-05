@@ -198,6 +198,8 @@ func main() {
 
 		// AI Assistant (manager gets full data context; regular users get FAQ mode)
 		protected.POST("/ai/assistant", handlers.AssistantChat(pool, textGens, defaultProvider))
+		// Voice-to-text transcription via Alem Plus STT API
+		protected.POST("/ai/transcribe", handlers.TranscribeAudio(cfg.WhisperAPIKey))
 
 		// Committee War Room
 		protected.GET("/war-room/feed", handlers.GetActivityFeed(pool))
