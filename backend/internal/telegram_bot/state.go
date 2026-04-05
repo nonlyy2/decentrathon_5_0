@@ -7,7 +7,7 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 )
 
-// InterviewState represents the current phase of the interview.
+// текущая фаза интервью
 type InterviewState string
 
 const (
@@ -23,7 +23,7 @@ const (
 	StateCompleted      InterviewState = "completed"
 )
 
-// topicOrder defines the sequence of interview topics.
+// порядок тем интервью
 var topicOrder = []InterviewState{
 	StateWarmUp,
 	StateLeadership,
@@ -33,7 +33,7 @@ var topicOrder = []InterviewState{
 	StateVerify,
 }
 
-// maxQuestionsPerTopic is the target number of questions per STAR topic.
+// лимит вопросов на тему
 var maxQuestionsPerTopic = map[InterviewState]int{
 	StateWarmUp:     2,
 	StateLeadership: 3,
@@ -43,7 +43,7 @@ var maxQuestionsPerTopic = map[InterviewState]int{
 	StateVerify:     2,
 }
 
-// activeSession holds in-memory state for a running interview.
+// in-memory сост��яние активного интервью
 type activeSession struct {
 	mu              sync.Mutex
 	InterviewID     int
@@ -55,14 +55,14 @@ type activeSession struct {
 	QuestionsAsked  int
 	TopicQuestions  map[string]int
 	EssaySummary    string
-	EssayHighlights []string // specific facts from essay for verification
+	EssayHighlights []string // факты из эссе для верификации
 	HasDisability   bool
 	DisabilityInfo  string
 	Conversation    []models.ConversationMessage
 	LastBotMsgTime  time.Time
 }
 
-// nextTopic returns the topic that follows current, or StateClosing if done.
+// следующая тема или StateClosing
 func nextTopic(current InterviewState) InterviewState {
 	for i, t := range topicOrder {
 		if t == current && i+1 < len(topicOrder) {
@@ -72,7 +72,7 @@ func nextTopic(current InterviewState) InterviewState {
 	return StateClosing
 }
 
-// topicToString maps state to the DB current_topic value.
+// состояние → строка current_topic в БД
 func topicToString(s InterviewState) string {
 	return string(s)
 }

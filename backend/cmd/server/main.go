@@ -22,7 +22,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// Database
+	// БД
 	if cfg.DatabaseURL == "" {
 		log.Fatal("DATABASE_URL environment variable is not set. Set it to the Railway Postgres connection string.")
 	}
@@ -36,16 +36,16 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	// Seed default admin
+	// seed дефолтного админа
 	if err := seed.SeedAdminUser(pool); err != nil {
 		log.Printf("Warning: failed to seed admin user: %v", err)
 	}
-	// Upgrade legacy admin role to superadmin
+	// апгрейд legacy admin → superadmin
 	if err := seed.EnsureSuperAdminRole(pool); err != nil {
 		log.Printf("Warning: failed to upgrade admin role: %v", err)
 	}
 
-	// Seed candidates if --seed / --force-seed / --seed-only / --force-seed-only flag
+	// seed кандидатов по флагу
 	seedOnly := false
 	for _, arg := range os.Args[1:] {
 		switch arg {
@@ -74,7 +74,7 @@ func main() {
 		return
 	}
 
-	// AI clients
+	// AI клиенты
 	aiProviders := make(handlers.AIProviders)
 	batchProviders := make(handlers.AIBatchProviders)
 	textGens := make(handlers.AITextGenerators)
@@ -106,7 +106,7 @@ func main() {
 	}
 	log.Printf("Default AI provider: %s", defaultProvider)
 
-	// Email service
+	// Email сервис
 	emailSvc := handlers.NewEmailService(cfg, pool)
 	if emailSvc.Enabled() {
 		log.Printf("Email service initialized (SMTP: %s:%d)", cfg.SMTPHost, cfg.SMTPPort)
@@ -114,39 +114,39 @@ func main() {
 		log.Printf("Email service disabled (SMTP not configured)")
 	}
 
-	// Ensure upload directory
+	// директория загрузок
 	if err := os.MkdirAll(cfg.UploadDir, 0755); err != nil {
 		log.Printf("Warning: could not create upload dir %s: %v", cfg.UploadDir, err)
 	}
 
-	// Router
+	// роутер
 	router := gin.Default()
 	router.Use(middleware.CORSMiddleware(cfg.AllowOrigins))
 	router.Use(middleware.NoCacheMiddleware())
 
-	// Serve uploaded files
+	// раздача загруженных файлов
 	router.Static("/uploads", cfg.UploadDir)
 
 	api := router.Group("/api")
 
-	// Public routes
+	// публичные маршруты
 	api.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 	api.POST("/apply", handlers.SubmitApplication(pool, cfg.WhisperAPIKey, cfg.WhisperProvider, emailSvc))
 	api.POST("/auth/register", handlers.Register(pool))
 	api.POST("/auth/login", handlers.Login(pool, cfg.JWTSecret))
 	api.GET("/majors", handlers.GetMajors())
-	// Photo upload is public so the apply page (no JWT) can attach a photo right after submission
+	// фото публично (apply page без JWT)
 	api.POST("/candidates/:id/photo", handlers.UploadCandidatePhoto(pool, cfg.UploadDir, cfg.GeminiAPIKey))
-	// Document uploads (english cert, certificate, additional docs) — public for apply page
+	// документы публично (apply page)
 	api.POST("/candidates/:id/document/:docType", handlers.UploadCandidateDocument(pool, cfg.UploadDir))
 
-	// Public Telegram Mini App status endpoint (validated by initData)
+	// TMA статус (валидация через initData)
 	api.GET("/tma/status", handlers.GetTMAStatusByChatID(pool, cfg.TelegramBotToken))
 
-	// Protected routes
+	// защищённые маршруты
 	protected := api.Group("/", middleware.AuthRequired(cfg.JWTSecret))
 	{
-		// Candidates — manager+
+		// кандидаты — manager+
 		protected.GET("/candidates", handlers.ListCandidates(pool))
 		protected.POST("/candidates", handlers.CreateCandidate(pool, cfg.WhisperAPIKey, cfg.WhisperProvider))
 		protected.GET("/candidates/:id", handlers.GetCandidate(pool))
@@ -155,23 +155,23 @@ func main() {
 		protected.PATCH("/candidates/:id/status", handlers.UpdateCandidateStatus(pool))
 		protected.POST("/candidates/:id/fetch-transcript", handlers.FetchTranscriptManually(pool, cfg.WhisperAPIKey, cfg.WhisperProvider))
 
-		// Analysis
+		// анализ
 		protected.GET("/candidates/:id/analysis", handlers.GetAnalysis(pool))
 		protected.GET("/candidates/:id/analysis-status", handlers.GetCandidateAnalysisStatus())
 		protected.DELETE("/candidates/:id/analysis", handlers.DeleteAnalysis(pool))
 		protected.POST("/candidates/:id/analyze", middleware.TechAdminRestricted(), handlers.AnalyzeSingleCandidate(pool, aiProviders, defaultProvider))
 		protected.DELETE("/analyses", handlers.DeleteAllAnalyses(pool))
 
-		// Decisions (tech-admin cannot vote)
+		// решения (tech-admin не голосует)
 		protected.POST("/candidates/:id/decision", middleware.TechAdminRestricted(), handlers.MakeDecision(pool))
 		protected.GET("/candidates/:id/decisions", handlers.GetDecisions(pool))
 
-		// Comments (tech-admin cannot comment)
+		// комментарии (tech-admin не пишет)
 		protected.GET("/candidates/:id/comments", handlers.GetComments(pool))
 		protected.POST("/candidates/:id/comments", middleware.TechAdminRestricted(), handlers.AddComment(pool))
 		protected.DELETE("/comments/:commentId", handlers.DeleteComment(pool))
 
-		// Stats / Export / Bulk
+		// статистика / экспорт / bulk
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
 		protected.POST("/analyze-all", middleware.TechAdminRestricted(), handlers.AnalyzeAllPending(pool, aiProviders, batchProviders, defaultProvider))
 		protected.POST("/reanalyze-all", middleware.TechAdminRestricted(), handlers.AnalyzeAllCandidates(pool, aiProviders, batchProviders, defaultProvider))
@@ -185,23 +185,23 @@ func main() {
 		protected.POST("/candidates/auto-accept", handlers.AutoAcceptTopN(pool))
 		protected.GET("/candidates/:id/similar", handlers.GetSimilarCandidates(pool))
 
-		// Partner schools (auditor+ can view)
+		// партнёрские школы (auditor+)
 		protected.GET("/partner-schools", middleware.AuditorOrAbove(), handlers.GetPartnerSchools(pool))
 
-		// Analytics distribution endpoints
+		// аналитика распределений
 		protected.GET("/analytics/city-distribution", handlers.GetCityDistribution(pool))
 		protected.GET("/analytics/major-distribution", handlers.GetMajorDistribution(pool))
 
-		// Auditor analytics — manager performance (auditor+)
+		// аудитор аналитика
 		protected.GET("/auditor/manager-performance", middleware.AuditorOrAbove(), handlers.GetManagerPerformance(pool))
 		protected.GET("/auditor/analysis-variance", handlers.GetAnalysisVariance(pool))
 
-		// AI Assistant (manager gets full data context; regular users get FAQ mode)
+		// AI ассистент (manager = полный контекст, остальные = FAQ)
 		protected.POST("/ai/assistant", handlers.AssistantChat(pool, textGens, defaultProvider))
-		// Voice-to-text transcription via Alem Plus STT API
+		// голос → текст через Alem STT
 		protected.POST("/ai/transcribe", handlers.TranscribeAudio(cfg.WhisperAPIKey))
 
-		// Committee War Room
+		// War Room комитета
 		protected.GET("/war-room/feed", handlers.GetActivityFeed(pool))
 		protected.POST("/war-room/feed", middleware.TechAdminRestricted(), handlers.PostActivityFeed(pool))
 		protected.GET("/war-room/discussion", handlers.GetDiscussionCandidates(pool))
@@ -209,34 +209,34 @@ func main() {
 		protected.GET("/notifications", handlers.GetNotifications(pool))
 		protected.POST("/notifications/read", handlers.MarkNotificationsRead(pool))
 
-		// User management — auditor can read, tech-admin+ can modify
+		// управление пользователями
 		protected.GET("/users", middleware.AuditorOrAbove(), handlers.ListUsers(pool))
 		protected.GET("/users/:id", middleware.AuditorOrAbove(), handlers.GetUser(pool))
 		protected.PATCH("/users/:id", middleware.TechAdminOrAbove(), handlers.UpdateUser(pool))
 		protected.DELETE("/users/:id", middleware.SuperAdminOnly(), handlers.DeleteUser(pool))
 		protected.POST("/users/:id/reset-password", middleware.SuperAdminOnly(), handlers.ResetUserPassword(pool, emailSvc))
 
-		// Private Notes
+		// личные заметки
 		protected.GET("/candidates/:id/notes", handlers.GetPrivateNote(pool))
 		protected.PUT("/candidates/:id/notes", handlers.SavePrivateNote(pool))
 		protected.DELETE("/candidates/:id/notes", handlers.DeletePrivateNote(pool))
 
-		// Review Tasks
+		// задачи ревью
 		protected.GET("/tasks", handlers.GetTasks(pool))
 		protected.POST("/tasks/assign", handlers.AssignNewTasks(pool))
 		protected.PATCH("/tasks/:taskId", handlers.UpdateTaskStatus(pool))
 
-		// Analysis History
+		// история анализов
 		protected.GET("/candidates/:id/analysis-history", handlers.GetAnalysisHistory(pool))
 
-		// Recalculate review complexity for all candidates
+		// пересчёт сложности ревью
 		protected.POST("/candidates/recalc-complexity", handlers.RecalcComplexity(pool))
 
-		// Profile
+		// профиль
 		protected.GET("/profile", handlers.GetProfile(pool))
 		protected.PATCH("/profile", handlers.UpdateProfile(pool))
 
-		// Email (manual trigger) — manager+
+		// email вручную (manager+)
 		protected.POST("/candidates/:id/email/shortlist", func(c *gin.Context) {
 			id := c.Param("id")
 			var row struct {
@@ -260,7 +260,7 @@ func main() {
 		})
 	}
 
-	// Telegram bot (Stage 2 Interview)
+	// Telegram бот (этап 2)
 	botUsername := ""
 	if cfg.TelegramBotToken != "" {
 		var botTextGen telegram_bot.TextGenerator
@@ -285,12 +285,12 @@ func main() {
 		}
 	}
 
-	// Interview routes
+	// маршруты интервью
 	protected.POST("/candidates/:id/telegram-invite", handlers.CreateTelegramInvite(pool, botUsername))
 	protected.GET("/candidates/:id/interview", handlers.GetInterviewStatus(pool, botUsername))
 	protected.GET("/candidates/:id/interview/messages", handlers.GetInterviewTranscript(pool))
 
-	// Force evaluate / re-evaluate interview
+	// принудительная оценка интервью
 	var evaluateFn func(interviewID, candidateID int) error
 	if cfg.TelegramBotToken != "" {
 		var evalTextGen telegram_bot.TextGenerator

@@ -9,12 +9,12 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 )
 
-// InterviewEngine generates dynamic STAR-method questions via LLM.
+// генерирует вопросы STAR-метода через LLM
 type InterviewEngine struct {
 	generateText func(ctx context.Context, systemPrompt, userMessage string) (string, error)
 }
 
-// NewInterviewEngine creates an engine that uses the given LLM text generator.
+// создаёт движок с переданным LLM
 func NewInterviewEngine(genFn func(ctx context.Context, systemPrompt, userMessage string) (string, error)) *InterviewEngine {
 	return &InterviewEngine{generateText: genFn}
 }
@@ -44,7 +44,7 @@ Your role:
 Return ONLY a valid JSON object:
 {"question": "your question here", "question_type": "star_situation|star_task|star_action|star_result|followup|probe|transition|verify", "move_to_next_topic": false}`
 
-// GenerateNextQuestion produces the next interview question based on conversation history.
+// следующий вопрос по истории диалога
 func (e *InterviewEngine) GenerateNextQuestion(ctx context.Context, session *activeSession) (*questionResponse, error) {
 	session.mu.Lock()
 	topic := session.State
@@ -100,7 +100,7 @@ func (e *InterviewEngine) GenerateNextQuestion(ctx context.Context, session *act
 		return nil, fmt.Errorf("LLM question generation failed: %w", err)
 	}
 
-	// Parse response
+	// парсим ответ
 	result = strings.TrimSpace(result)
 	if idx := strings.Index(result, "{"); idx > 0 {
 		result = result[idx:]
@@ -117,7 +117,7 @@ func (e *InterviewEngine) GenerateNextQuestion(ctx context.Context, session *act
 	return &qr, nil
 }
 
-// GenerateWelcomeMessage creates the initial interview message (English only).
+// приветственное сообщение (только English)
 func GenerateWelcomeMessage(candidateName string) string {
 	return fmt.Sprintf(`Hi %s! Welcome to the inVision U interview.
 
@@ -133,7 +133,7 @@ A few things to know:
 Let's start with something easy!`, candidateName)
 }
 
-// GenerateWelcomeMessageWithDisability creates a welcome message accommodating disabilities.
+// приветствие с учётом инвалидности
 func GenerateWelcomeMessageWithDisability(candidateName, disability string) string {
 	return fmt.Sprintf(`Hi %s! Welcome to the inVision U interview.
 
@@ -150,7 +150,7 @@ A few things to know:
 Let's start with something easy!`, candidateName, disability)
 }
 
-// GenerateClosingMessage creates the farewell message (English only).
+// прощальное сообщение
 func GenerateClosingMessage() string {
 	return `Thank you so much for your time! That was a great conversation.
 
@@ -159,7 +159,7 @@ Your interview is now being evaluated. The results will appear on your candidate
 Good luck with your application! We appreciate your openness and honesty.`
 }
 
-// extractEssayHighlights pulls specific verifiable facts from the essay summary.
+// извлекаем верифицируемые факты из резюме эссе
 func extractEssayHighlights(essaySummary string) []string {
 	var highlights []string
 	sentences := strings.Split(essaySummary, ". ")

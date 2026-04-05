@@ -14,13 +14,13 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// AlemSTTClient handles audio transcription via Alem Plus speech-to-text API.
+// клиент STT Alem Plus
 type AlemSTTClient struct {
 	apiKey     string
 	httpClient *http.Client
 }
 
-// NewAlemSTTClient creates an Alem Plus speech-to-text transcription client.
+// создаёт STT клиент Alem Plus
 func NewAlemSTTClient(apiKey string) *AlemSTTClient {
 	return &AlemSTTClient{
 		apiKey:     apiKey,
@@ -32,8 +32,7 @@ type alemSTTResponse struct {
 	Text string `json:"text"`
 }
 
-// convertOGGToWAV converts OGG/Opus audio (from Telegram voice messages) to WAV using ffmpeg.
-// Returns an error if ffmpeg is not installed since Alem STT requires WAV format.
+// конвертирует OGG/Opus (Telegram) → WAV через ffmpeg; Alem STT требует WAV
 func convertOGGToWAV(oggData []byte) ([]byte, string, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return nil, "", fmt.Errorf("ffmpeg is required for voice message transcription but is not installed")
@@ -52,9 +51,9 @@ func convertOGGToWAV(oggData []byte) ([]byte, string, error) {
 	return stdout.Bytes(), "voice.wav", nil
 }
 
-// Transcribe sends audio data to Alem Plus speech-to-text API and returns the transcribed text.
+// транскрибирует аудио через Alem STT
 func (w *AlemSTTClient) Transcribe(ctx context.Context, audioData []byte, language string) (string, error) {
-	// Alem STT does not yet support OGG — convert to WAV first
+	// Alem STT не поддерживает OGG — конвертируем в WAV
 	audioData, filename, err := convertOGGToWAV(audioData)
 	if err != nil {
 		return "", fmt.Errorf("audio conversion: %w", err)
@@ -110,7 +109,7 @@ func (w *AlemSTTClient) Transcribe(ctx context.Context, audioData []byte, langua
 	return result.Text, nil
 }
 
-// downloadVoiceFile downloads a voice message from Telegram servers.
+// скачивает голосовое сообщение с серверов Telegram
 func downloadVoiceFile(bot *tgbotapi.BotAPI, fileID string) ([]byte, error) {
 	file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
 	if err != nil {

@@ -14,7 +14,7 @@ type DashboardStats struct {
 	ScoreMedian            float64                    `json:"score_median"`
 	DimensionMeans         map[string]float64         `json:"dimension_means"`
 	DimensionDistributions map[string][]ScoreBucket   `json:"dimension_distributions"`
-	// Exam score distributions
+	// распределения баллов экзаменов
 	IELTSDistribution  []ScoreBucket `json:"ielts_distribution"`
 	TOEFLDistribution  []ScoreBucket `json:"toefl_distribution"`
 	UNTDistribution    []ScoreBucket `json:"unt_distribution"`
@@ -23,8 +23,8 @@ type DashboardStats struct {
 	TOEFLCount         int           `json:"toefl_count"`
 	UNTCount           int           `json:"unt_count"`
 	NISCount           int           `json:"nis_count"`
-	// Analysis bias detection
-	AnalysisCountStats map[int]int   `json:"analysis_count_stats"` // candidate_id -> analysis count
+	// детекция bias анализа
+	AnalysisCountStats map[int]int   `json:"analysis_count_stats"` // candidate_id → кол-во анализов
 }
 
 type ScoreBucket struct {

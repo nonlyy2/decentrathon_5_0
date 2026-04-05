@@ -76,7 +76,7 @@ func (c *Client) GenerateLarge(ctx context.Context, systemPrompt, userMessage st
 	return c.generate(ctx, systemPrompt, userMessage, 24576)
 }
 
-// GenerateText generates free-form text (not forced JSON).
+// свободный текст (не JSON)
 func (c *Client) GenerateText(ctx context.Context, systemPrompt, userMessage string) (string, error) {
 	return c.generatePlain(ctx, systemPrompt, userMessage, 8192)
 }

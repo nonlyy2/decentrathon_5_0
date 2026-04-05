@@ -16,10 +16,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TextGenerator is a function that sends a prompt to an LLM and returns the response.
+// функция генерации текста через LLM
 type TextGenerator func(ctx context.Context, systemPrompt, userMessage string) (string, error)
 
-// Bot is the Telegram interview bot.
+// Telegram interview бот
 type Bot struct {
 	api       *tgbotapi.BotAPI
 	pool      *pgxpool.Pool
@@ -32,7 +32,7 @@ type Bot struct {
 	modelName string
 }
 
-// New creates and configures the Telegram bot.
+// создаёт и конфигурирует бота
 func New(cfg *config.Config, pool *pgxpool.Pool, textGen TextGenerator, modelName string) (*Bot, error) {
 	botAPI, err := tgbotapi.NewBotAPI(cfg.TelegramBotToken)
 	if err != nil {
@@ -56,23 +56,22 @@ func New(cfg *config.Config, pool *pgxpool.Pool, textGen TextGenerator, modelNam
 	return bot, nil
 }
 
-// Username returns the bot's Telegram username.
+// username бота
 func (b *Bot) Username() string {
 	return b.api.Self.UserName
 }
 
-// Start begins the long-polling loop. Blocks until ctx is cancelled.
-// Uses manual polling instead of GetUpdatesChan to gracefully handle 409 conflicts.
+// запуск long-polling (блокирует до отмены ctx; ручной polling из-за 409 конфликтов)
 func (b *Bot) Start(ctx context.Context) {
 	log.Printf("[TG-BOT] Starting @%s (long polling)", b.api.Self.UserName)
 
-	// Restore active sessions from DB on startup
+	// восстанавливаем сессии из БД
 	b.restoreSessions(ctx)
 
-	// Re-evaluate any interviews stuck in 'evaluating' state (e.g. server crashed mid-evaluation)
+	// повторяем зависшие оценки (краш сервера в середине)
 	b.retryStuckEvaluations(ctx)
 
-	// Clear any stale getUpdates to release previous polling session
+	// сбрасываем очередь апдейтов
 	clearURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=-1&timeout=0", b.api.Token)
 	resp, err := http.Get(clearURL)
 	if err != nil {
@@ -82,7 +81,7 @@ func (b *Bot) Start(ctx context.Context) {
 	}
 	time.Sleep(2 * time.Second)
 
-	// Interview timeout checker
+	// таймаут интервью
 	go b.timeoutChecker(ctx)
 
 	offset := 0
@@ -127,7 +126,7 @@ func (b *Bot) Start(ctx context.Context) {
 	}
 }
 
-// restoreSessions loads active interviews from DB into memory.
+// загружаем активные интервью из БД в память
 func (b *Bot) restoreSessions(ctx context.Context) {
 	rows, err := b.pool.Query(ctx, `
 		SELECT i.id, i.candidate_id, i.telegram_chat_id, i.status, i.language,
@@ -168,7 +167,7 @@ func (b *Bot) restoreSessions(ctx context.Context) {
 			conversation = []models.ConversationMessage{}
 		}
 
-		// Count questions per topic
+		// количество вопросов по темам
 		topicQ := make(map[string]int)
 		for _, msg := range conversation {
 			if msg.Role == "bot" && msg.Topic != "" {
@@ -200,9 +199,7 @@ func (b *Bot) restoreSessions(ctx context.Context) {
 	}
 }
 
-// retryStuckEvaluations finds interviews that were in the middle of evaluation
-// when the server stopped (current_topic='evaluating' but status='active') and
-// re-runs the evaluation for them.
+// повтор оценок, застрявших при краше сервера (topic='evaluating', status='active')
 func (b *Bot) retryStuckEvaluations(ctx context.Context) {
 	rows, err := b.pool.Query(ctx, `
 		SELECT i.id, i.candidate_id, i.language, i.essay_summary, i.conversation_context,
@@ -275,7 +272,7 @@ func (b *Bot) retryStuckEvaluations(ctx context.Context) {
 	}
 }
 
-// timeoutChecker periodically marks stale interviews as timed out.
+// периодически закрывает зависшие интервью по таймауту
 func (b *Bot) timeoutChecker(ctx context.Context) {
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
@@ -306,14 +303,14 @@ func (b *Bot) timeoutChecker(ctx context.Context) {
 	}
 }
 
-// handleTimeout marks an interview as timed out and triggers evaluation.
+// завершение интервью по таймауту
 func (b *Bot) handleTimeout(ctx context.Context, chatID int64, session *activeSession) {
 	session.mu.Lock()
 	session.State = StateEvaluating
 	interviewID := session.InterviewID
 	session.mu.Unlock()
 
-	// Notify candidate
+	// уведомляем кандидата
 	timeoutMsg := map[string]string{
 		"en": "The interview has timed out due to inactivity. Your responses so far will still be evaluated. Thank you!",
 		"ru": "Интервью завершено из-за неактивности. Твои ответы всё равно будут оценены. Спасибо!",
@@ -326,11 +323,10 @@ func (b *Bot) handleTimeout(ctx context.Context, chatID int64, session *activeSe
 	}
 	b.sendMessage(chatID, msg)
 
-	// Update DB
 	b.pool.Exec(ctx, `UPDATE interviews SET status = 'timeout', completed_at = NOW() WHERE id = $1`, interviewID)
 	b.pool.Exec(ctx, `UPDATE candidates SET interview_status = 'completed' WHERE id = $1`, session.CandidateID)
 
-	// Evaluate if we have enough data
+	// оцениваем если есть достаточно данных
 	if session.QuestionsAsked >= 3 {
 		go func() {
 			if err := b.evaluator.EvaluateInterview(context.Background(), session); err != nil {
@@ -344,7 +340,7 @@ func (b *Bot) handleTimeout(ctx context.Context, chatID int64, session *activeSe
 	b.sessions.Delete(chatID)
 }
 
-// sendMessage sends a text message to a Telegram chat.
+// отправка текстового сообщения
 func (b *Bot) sendMessage(chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = ""
@@ -353,7 +349,7 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 	}
 }
 
-// sendMarkdown sends a markdown-formatted message.
+// сообщение с markdown
 func (b *Bot) sendMarkdown(chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "Markdown"
@@ -362,7 +358,7 @@ func (b *Bot) sendMarkdown(chatID int64, text string) {
 	}
 }
 
-// sendMessageWithKeyboard sends a message with an inline keyboard.
+// сообщение с inline клавиатурой
 func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard tgbotapi.InlineKeyboardMarkup) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = keyboard
@@ -371,7 +367,7 @@ func (b *Bot) sendMessageWithKeyboard(chatID int64, text string, keyboard tgbota
 	}
 }
 
-// persistConversation saves the current conversation context to DB.
+// сохраняем контекст диалога в БД
 func (b *Bot) persistConversation(ctx context.Context, session *activeSession) {
 	session.mu.Lock()
 	data, _ := json.Marshal(session.Conversation)
@@ -389,7 +385,7 @@ func (b *Bot) persistConversation(ctx context.Context, session *activeSession) {
 	}
 }
 
-// saveMessage inserts a message row for audit.
+// сохраняем сообщение для аудита
 func (b *Bot) saveMessage(ctx context.Context, interviewID int, role, content, msgType string, voiceDur, responseTime *int) {
 	_, err := b.pool.Exec(ctx, `
 		INSERT INTO interview_messages (interview_id, role, content, message_type, voice_duration_sec, response_time_sec)

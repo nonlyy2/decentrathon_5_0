@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-// ValidRoles lists all accepted role values
+// допустимые роли
 var ValidRoles = []string{"superadmin", "tech-admin", "auditor", "manager", "admin", "committee"}
 
 type User struct {

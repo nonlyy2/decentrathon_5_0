@@ -34,7 +34,7 @@ type GeminiAnalysisResponse struct {
 }
 
 func ParseBatchAnalysisResponse(jsonStr string, expected int) ([]*GeminiAnalysisResponse, error) {
-	// Strip any markdown code fences the model might add
+	// убираем markdown-фенсы
 	jsonStr = strings.TrimSpace(jsonStr)
 	if idx := strings.Index(jsonStr, "["); idx > 0 {
 		jsonStr = jsonStr[idx:]
@@ -76,7 +76,7 @@ func ParseBatchAnalysisResponse(jsonStr string, expected int) ([]*GeminiAnalysis
 }
 
 func ParseAnalysisResponse(jsonStr string) (*GeminiAnalysisResponse, error) {
-	// Strip markdown code fences and find JSON object
+	// убираем markdown-фенсы, ищем JSON объект
 	jsonStr = strings.TrimSpace(jsonStr)
 	jsonStr = strings.TrimPrefix(jsonStr, "```json")
 	jsonStr = strings.TrimPrefix(jsonStr, "```")
@@ -94,28 +94,27 @@ func ParseAnalysisResponse(jsonStr string) (*GeminiAnalysisResponse, error) {
 		return nil, fmt.Errorf("failed to parse Gemini response: %w (raw: %.300s)", err, jsonStr)
 	}
 
-	// Clamp scores
+	// ограничиваем диапазон
 	resp.ScoreLeadership = clamp(resp.ScoreLeadership, 0, 100)
 	resp.ScoreMotivation = clamp(resp.ScoreMotivation, 0, 100)
 	resp.ScoreGrowth = clamp(resp.ScoreGrowth, 0, 100)
 	resp.ScoreVision = clamp(resp.ScoreVision, 0, 100)
 	resp.ScoreCommunication = clamp(resp.ScoreCommunication, 0, 100)
 
-	// Recalculate final score (don't trust LLM math)
+	// пересчитываем итог (LLM-математике не доверяем)
 	resp.FinalScore = math.Round((float64(resp.ScoreLeadership)*0.25+
 		float64(resp.ScoreMotivation)*0.25+
 		float64(resp.ScoreGrowth)*0.20+
 		float64(resp.ScoreVision)*0.15+
 		float64(resp.ScoreCommunication)*0.15)*100) / 100
 
-	// Recalculate category
 	resp.Category = scoreToCategory(resp.FinalScore)
 
-	// Clamp and derive AI detection
+	// clamp AI детекция
 	resp.AIGeneratedScore = clamp(resp.AIGeneratedScore, 0, 100)
 	resp.AIGeneratedRisk = aiScoreToRisk(resp.AIGeneratedScore)
 
-	// Ensure slices are not nil
+	// nil → пустой слайс
 	if resp.KeyStrengths == nil {
 		resp.KeyStrengths = []string{}
 	}

@@ -133,7 +133,7 @@ const BatchResponseSchema = `[
   }
 ]`
 
-// BatchSystemPrompt replaces the single-object instruction with an array instruction.
+// BatchSystemPrompt: одиночный объект → массив
 var BatchSystemPrompt = strings.Replace(
 	SystemPrompt,
 	"You MUST respond with ONLY a valid JSON object matching the exact schema below. No additional text.",
@@ -164,8 +164,7 @@ const ResponseSchema = `{
   "major_reason_note": "<1 sentence explaining why if it differs from candidate's chosen major, else empty string>"
 }`
 
-// buildCandidateData formats candidate data only, without any response instruction.
-// PII (name, email, phone, age, city, telegram) is excluded to prevent bias.
+// форматирование данных кандидата без PII (имя, email, телефон, возраст, город)
 func buildCandidateData(c *models.Candidate) string {
 	var sb strings.Builder
 	sb.WriteString("=== CANDIDATE APPLICATION ===\n\n")

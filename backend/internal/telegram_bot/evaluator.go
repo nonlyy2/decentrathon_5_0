@@ -13,14 +13,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Evaluator performs the final LLM-based assessment of a completed interview.
+// финальная LLM-оценка завершённого интервью
 type Evaluator struct {
 	pool         *pgxpool.Pool
 	generateText func(ctx context.Context, systemPrompt, userMessage string) (string, error)
 	modelName    string
 }
 
-// NewEvaluator creates an interview evaluator.
+// создаёт evaluator
 func NewEvaluator(pool *pgxpool.Pool, genFn func(ctx context.Context, systemPrompt, userMessage string) (string, error), modelName string) *Evaluator {
 	return &Evaluator{pool: pool, generateText: genFn, modelName: modelName}
 }
@@ -72,7 +72,7 @@ Also evaluate:
 
 Return ONLY a valid JSON object with all fields filled.`
 
-// EvaluateInterview performs the final async evaluation after interview completion.
+// финальная оценка после завершения интервью
 func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSession) error {
 	session.mu.Lock()
 	interviewID := session.InterviewID
@@ -82,10 +82,10 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 	copy(conversation, session.Conversation)
 	session.mu.Unlock()
 
-	// Collect anti-cheat signals
+	// собираем античит-сигналы
 	report := collectAntiCheatSignals(conversation)
 
-	// Build evaluation prompt
+	// строим промпт
 	var sb strings.Builder
 	sb.WriteString("=== ESSAY SUMMARY (Stage 1) ===\n")
 	sb.WriteString(essaySummary)
@@ -116,7 +116,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		return fmt.Errorf("LLM evaluation failed: %w", err)
 	}
 
-	// Parse response
+	// парсим ответ
 	result = strings.TrimSpace(result)
 	if idx := strings.Index(result, "{"); idx > 0 {
 		result = result[idx:]
@@ -130,7 +130,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		return fmt.Errorf("failed to parse evaluation: %w (raw: %.300s)", err, result)
 	}
 
-	// Clamp scores
+	// ограничиваем диапазон
 	eval.ScoreLeadership = clamp(eval.ScoreLeadership)
 	eval.ScoreGrit = clamp(eval.ScoreGrit)
 	eval.ScoreAuthenticity = clamp(eval.ScoreAuthenticity)
@@ -149,7 +149,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		eval.Concerns = []string{}
 	}
 
-	// Calculate final score (weighted)
+	// итоговый балл (взвешенный)
 	finalScore := math.Round((float64(eval.ScoreLeadership)*0.25+
 		float64(eval.ScoreGrit)*0.20+
 		float64(eval.ScoreAuthenticity)*0.20+
@@ -157,7 +157,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		float64(eval.ScoreVision)*0.15)*100) / 100
 	category := gemini.ScoreToCategory(finalScore)
 
-	// Save to DB
+	// сохраняем в БД
 	flagsJSON, _ := json.Marshal(eval.SuspicionFlags)
 
 	_, err = e.pool.Exec(ctx, `
@@ -188,7 +188,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		return fmt.Errorf("save interview analysis: %w", err)
 	}
 
-	// Calculate combined score: Stage 1 (60%) + Stage 2 (40%)
+	// комбинированный балл: этап1 (60%) + этап2 (40%)
 	var stage1Score *float64
 	e.pool.QueryRow(ctx, `SELECT final_score FROM analyses WHERE candidate_id = $1`, candidateID).Scan(&stage1Score)
 
@@ -199,7 +199,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		combinedScore = finalScore
 	}
 
-	// Update candidate
+	// обновляем кандидата
 	now := time.Now()
 	_, err = e.pool.Exec(ctx, `
 		UPDATE candidates SET interview_status = 'completed', combined_score = $1 WHERE id = $2`,
@@ -208,7 +208,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		return fmt.Errorf("update candidate combined score: %w", err)
 	}
 
-	// Update interview status
+	// завершаем интервью
 	_, err = e.pool.Exec(ctx, `
 		UPDATE interviews SET status = 'completed', completed_at = $1 WHERE id = $2`,
 		now, interviewID)
@@ -216,7 +216,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 		return fmt.Errorf("update interview status: %w", err)
 	}
 
-	// Update invite status
+	// закрываем приглашение
 	_, err = e.pool.Exec(ctx, `
 		UPDATE telegram_invites SET status = 'completed' WHERE candidate_id = $1`,
 		candidateID)
@@ -227,8 +227,7 @@ func (e *Evaluator) EvaluateInterview(ctx context.Context, session *activeSessio
 	return nil
 }
 
-// EvaluateFromDB loads interview data from the database and runs evaluation.
-// Used for force-evaluate and re-evaluate API endpoints.
+// загружает интервью из БД и запускает оценку (force/re-evaluate)
 func (e *Evaluator) EvaluateFromDB(ctx context.Context, interviewID, candidateID int) error {
 	var lang, essaySummary, candidateName string
 	var contextJSON []byte

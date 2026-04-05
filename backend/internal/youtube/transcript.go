@@ -20,7 +20,7 @@ import (
 
 var videoIDRegex = regexp.MustCompile(`(?:youtube\.com/watch\?(?:.*&)?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})`)
 
-// httpClient shared, with browser-like headers
+// общий HTTP клиент с browser-заголовками
 var httpClient = &http.Client{Timeout: 15 * time.Second}
 
 func browserGet(rawURL string) (*http.Response, error) {
@@ -33,7 +33,7 @@ func browserGet(rawURL string) (*http.Response, error) {
 	return httpClient.Do(req)
 }
 
-// ExtractVideoID extracts the 11-char video ID from any YouTube URL format.
+// извлекает 11-символьный ID из любого формата YouTube URL
 func ExtractVideoID(rawURL string) (string, error) {
 	matches := videoIDRegex.FindStringSubmatch(rawURL)
 	if len(matches) < 2 {
@@ -42,9 +42,7 @@ func ExtractVideoID(rawURL string) (string, error) {
 	return matches[1], nil
 }
 
-// CheckAccessibility returns true if the video is publicly viewable.
-// Only HTTP 404 from oEmbed counts as "definitely invalid".
-// Network/timeout/other errors → assume valid to avoid false negatives.
+// true если видео доступно; 404 из oEmbed = невалидное; сетевые ошибки → assume valid
 func CheckAccessibility(videoID string) bool {
 	videoURL := url.QueryEscape("https://www.youtube.com/watch?v=" + videoID)
 	oembedURL := "https://www.youtube.com/oembed?url=" + videoURL + "&format=json"

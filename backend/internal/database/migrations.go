@@ -12,7 +12,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 
 	queries := []string{
-		// ─── Core tables ──────────────────────────────────────────────────────────
+		// ─── Основные таблицы ─────────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
 			email VARCHAR(255) UNIQUE NOT NULL,
@@ -80,7 +80,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			created_at TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// ─── Stage 2: Telegram interview ──────────────────────────────────────────
+		// ─── Этап 2: Telegram интервью ────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS telegram_invites (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -138,7 +138,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			model_used VARCHAR(50)
 		)`,
 
-		// ─── Candidate info-change requests ────────────────────────────────────────
+		// ─── Запросы на изменение данных кандидата ─────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS candidate_change_requests (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -152,7 +152,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			review_note TEXT
 		)`,
 
-		// ─── Email log ────────────────────────────────────────────────────────────
+		// ─── Лог email ────────────────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS email_logs (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
@@ -163,7 +163,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			sent_at TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// ─── Indexes ──────────────────────────────────────────────────────────────
+		// ─── Индексы ──────────────────────────────────────────────────────────────
 		`CREATE INDEX IF NOT EXISTS idx_comments_candidate ON comments(candidate_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_analyses_candidate ON analyses(candidate_id)`,
@@ -173,29 +173,29 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_change_requests_status ON candidate_change_requests(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_email_logs_candidate ON email_logs(candidate_id)`,
 
-		// ─── ALTER TABLE additions (idempotent) ───────────────────────────────────
+		// ─── ALTER TABLE добавления (идемпотентно) ────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS telegram VARCHAR(100)`,
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS ai_generated_score INTEGER DEFAULT 0`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS disability TEXT`,
 
-		// Photo + AI detection
+		// фото + AI детекция
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_url VARCHAR(512)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_ai_flag BOOLEAN DEFAULT false`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS photo_ai_note TEXT`,
 
-		// Major selection
+		// выбор специальности
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS major VARCHAR(100)`,
 
-		// Keywords (extracted by AI from essay + achievements for fast search)
+		// ключевые слова (AI из эссе + достижений)
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS keywords TEXT[]`,
 
-		// Stage 2 interview fields
+		// поля этапа 2
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS interview_status VARCHAR(20) DEFAULT 'not_invited' CHECK (interview_status IN ('not_invited','invited','in_progress','completed'))`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS combined_score NUMERIC(5,2)`,
 
-		// users: role constraint updated (drop old check, add new)
+		// обновление CHECK роли пользователей
 		`DO $$ BEGIN
 			ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 			ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('superadmin','tech-admin','auditor','manager','admin','committee'));
@@ -204,42 +204,42 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512)`,
 
-		// Review system: unique constraint so a user can only vote once per candidate
+		// один голос на кандидата от пользователя
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_user_candidate ON committee_decisions(candidate_id, decided_by)`,
 
-		// Telegram invite indexes
+		// индексы telegram invite
 		`CREATE INDEX IF NOT EXISTS idx_telegram_invites_token ON telegram_invites(token)`,
 		`CREATE INDEX IF NOT EXISTS idx_telegram_invites_chat ON telegram_invites(telegram_chat_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interviews_chat ON interviews(telegram_chat_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interviews_candidate ON interviews(candidate_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_interview_messages_interview ON interview_messages(interview_id)`,
 
-		// GIN index for keyword search
+		// GIN индекс для поиска по ключевым словам
 		`CREATE INDEX IF NOT EXISTS idx_candidates_keywords ON candidates USING GIN(keywords)`,
 
-		// GIN index for full-text search on essay+achievements
+		// GIN индекс полнотекстового поиска эссе+достижений
 		`CREATE INDEX IF NOT EXISTS idx_candidates_fts ON candidates USING GIN(to_tsvector('english', coalesce(essay,'') || ' ' || coalesce(achievements,'')))`,
 
-		// Analysis duration tracking
+		// длительность анализа
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0`,
 
-		// Interview analysis explanations
+		// объяснения оценки интервью
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_leadership TEXT`,
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_grit TEXT`,
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_authenticity TEXT`,
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_motivation TEXT`,
 		`ALTER TABLE interview_analyses ADD COLUMN IF NOT EXISTS explanation_vision TEXT`,
 
-		// YouTube video presentation
+		// YouTube видео-презентация
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_url TEXT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_transcript TEXT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS youtube_url_valid BOOLEAN`,
 
-		// AI-recommended major (may differ from candidate's chosen major)
+		// специальность по рекомендации AI (может отличаться от выбранной)
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS recommended_major VARCHAR(100)`,
 		`ALTER TABLE analyses ADD COLUMN IF NOT EXISTS major_reason_note TEXT`,
 
-		// Upvote/downvote system: extend decision CHECK constraint
+		// расширение CHECK для upvote/downvote
 		`DO $$ BEGIN
 			ALTER TABLE committee_decisions DROP CONSTRAINT IF EXISTS committee_decisions_decision_check;
 			ALTER TABLE committee_decisions ADD CONSTRAINT committee_decisions_decision_check
@@ -247,7 +247,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		EXCEPTION WHEN OTHERS THEN NULL;
 		END $$`,
 
-		// War Room: activity feed
+		// War Room: лента активности
 		`CREATE TABLE IF NOT EXISTS activity_feed (
 			id SERIAL PRIMARY KEY,
 			user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -260,7 +260,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_activity_feed_candidate ON activity_feed(candidate_id)`,
 
-		// War Room: notifications/mentions
+		// War Room: уведомления/упоминания
 		`CREATE TABLE IF NOT EXISTS notifications (
 			id SERIAL PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -273,13 +273,13 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read)`,
 
-		// War Room: "Needs Discussion" flag on candidates
+		// War Room: флаг "требует обсуждения"
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS needs_discussion BOOLEAN DEFAULT false`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_note TEXT`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_by INTEGER REFERENCES users(id)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS discussion_at TIMESTAMP`,
 
-		// ─── New fields: personal info expansion ──────────────────────────────────
+		// ─── Расширение персональных данных ───────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS patronymic VARCHAR(255)`,
@@ -292,26 +292,26 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(50)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS home_country VARCHAR(100)`,
 
-		// ─── English proficiency ──────────────────────────────────────────────────
+		// ─── Знание английского ───────────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS exam_type VARCHAR(10)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS ielts_score NUMERIC(3,1)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS toefl_score INTEGER`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS english_cert_url VARCHAR(512)`,
 
-		// ─── Certificate ──────────────────────────────────────────────────────────
+		// ─── Сертификат ───────────────────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS certificate_type VARCHAR(50)`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS certificate_url VARCHAR(512)`,
 
-		// ─── Additional documents ─────────────────────────────────────────────────
+		// ─── Дополнительные документы ─────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS additional_docs_url VARCHAR(512)`,
 
-		// ─── Personality test ─────────────────────────────────────────────────────
+		// ─── Тест личности ────────────────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS personality_answers JSONB DEFAULT '[]'`,
 
-		// ─── Review complexity scoring ────────────────────────────────────────────
+		// ─── Сложность ревью ──────────────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS review_complexity NUMERIC(5,2)`,
 
-		// ─── Private notes (per-user per-candidate) ──────────────────────────────
+		// ─── Личные заметки (user × candidate) ────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS private_notes (
 			id SERIAL PRIMARY KEY,
 			user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -322,7 +322,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_private_notes_user_candidate ON private_notes(user_id, candidate_id)`,
 
-		// ─── Tasks (round-robin assignment) ───────────────────────────────────────
+		// ─── Задачи (round-robin) ─────────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS review_tasks (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER UNIQUE NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -333,7 +333,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_review_tasks_assigned ON review_tasks(assigned_to, status)`,
 
-		// ─── Analysis history (keep old analyses instead of overwriting) ──────────
+		// ─── История анализов (без перезаписи) ────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS analysis_history (
 			id SERIAL PRIMARY KEY,
 			candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
@@ -355,7 +355,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_history_candidate ON analysis_history(candidate_id, analyzed_at DESC)`,
 
-		// ─── Update status constraint for new stages ──────────────────────────────
+		// ─── Обновление CHECK статуса для новых этапов ────────────────────────────
 		`DO $$ BEGIN
 			ALTER TABLE candidates DROP CONSTRAINT IF EXISTS candidates_status_check;
 			ALTER TABLE candidates ADD CONSTRAINT candidates_status_check
@@ -363,14 +363,14 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		EXCEPTION WHEN OTHERS THEN NULL;
 		END $$`,
 
-		// ─── UNT / NIS score fields ──────────────────────────────────────────────
+		// ─── Поля ЕНТ / НИШ ──────────────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS unt_score INTEGER`,
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS nis_grade VARCHAR(5)`,
 
-		// ─── Partner school tag ──────────────────────────────────────────────────
+		// ─── Тег партнёрской школы ────────────────────────────────────────────────
 		`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS partner_school VARCHAR(255)`,
 
-		// ─── Partner schools table ───────────────────────────────────────────────
+		// ─── Таблица партнёрских школ ─────────────────────────────────────────────
 		`CREATE TABLE IF NOT EXISTS partner_schools (
 			id SERIAL PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
@@ -381,7 +381,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 			created_at TIMESTAMP DEFAULT NOW()
 		)`,
 
-		// ─── Analysis history: add explanation columns ────────────────────────────
+		// ─── История анализов: столбцы объяснений ────────────────────────────────
 		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_leadership TEXT`,
 		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_motivation TEXT`,
 		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS explanation_growth TEXT`,
@@ -391,7 +391,7 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS recommended_major VARCHAR(100)`,
 		`ALTER TABLE analysis_history ADD COLUMN IF NOT EXISTS major_reason_note TEXT`,
 
-		// ─── Notes: add created_at ────────────────────────────────────────────────
+		// ─── Заметки: добавление created_at ──────────────────────────────────────
 		`ALTER TABLE private_notes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
 	}
 
@@ -401,6 +401,6 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		}
 	}
 
-	log.Println("Database migrations completed successfully")
+	log.Println("Миграции БД выполнены")
 	return nil
 }

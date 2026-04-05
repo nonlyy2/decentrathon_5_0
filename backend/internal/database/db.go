@@ -11,10 +11,10 @@ import (
 )
 
 func Connect(databaseURL string) (*pgxpool.Pool, error) {
-	// pgx only accepts "postgres://" scheme, not "postgresql://"
+	// pgx принимает только "postgres://", не "postgresql://"
 	url := strings.Replace(databaseURL, "postgresql://", "postgres://", 1)
 
-	// Railway Postgres requires SSL. If the URL has no sslmode param, add require.
+	// Railway требует SSL
 	if !strings.Contains(url, "sslmode=") {
 		if strings.Contains(url, "?") {
 			url += "&sslmode=require"
@@ -29,8 +29,7 @@ func Connect(databaseURL string) (*pgxpool.Pool, error) {
 	}
 	config.MaxConns = 10
 
-	// Retry up to 10 times with 3s delay — Railway starts Postgres and backend
-	// nearly simultaneously, so the first few attempts often fail.
+	// Railway стартует Postgres и бэкенд почти одновременно, первые попытки могут упасть
 	const maxAttempts = 10
 	const retryDelay = 3 * time.Second
 

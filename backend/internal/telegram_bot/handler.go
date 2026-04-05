@@ -11,7 +11,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// handleUpdate routes an incoming Telegram update to the right handler.
+// роутинг входящего апдейта
 func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	if update.Message == nil {
 		return
@@ -20,19 +20,19 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 	msg := update.Message
 	chatID := msg.Chat.ID
 
-	// Handle /start command
+	// /start
 	if msg.IsCommand() && msg.Command() == "start" {
 		b.handleStart(ctx, chatID, msg.CommandArguments(), msg.From)
 		return
 	}
 
-	// Handle /status command — let candidate check their application status
+	// /status
 	if msg.IsCommand() && msg.Command() == "status" {
 		b.handleStatusCommand(ctx, chatID)
 		return
 	}
 
-	// Check if there's an active session
+	// проверяем активную сессию
 	val, ok := b.sessions.Load(chatID)
 	if !ok {
 		b.sendMessage(chatID, "No active interview session. If you received an invite link, please use it to start.")
@@ -41,27 +41,27 @@ func (b *Bot) handleUpdate(ctx context.Context, update tgbotapi.Update) {
 
 	session := val.(*activeSession)
 
-	// Handle voice message
+	// голосовое сообщение
 	if msg.Voice != nil {
 		b.handleVoiceMessage(ctx, chatID, session, msg)
 		return
 	}
 
-	// Handle text message
+	// текстовое сообщение
 	if msg.Text != "" {
 		b.handleTextMessage(ctx, chatID, session, msg.Text)
 		return
 	}
 }
 
-// normalizeTelegram strips leading @ and lowercases for comparison.
+// убирает @ и приводит к lowercase
 func normalizeTelegram(tg string) string {
 	tg = strings.TrimSpace(tg)
 	tg = strings.TrimPrefix(tg, "@")
 	return strings.ToLower(tg)
 }
 
-// handleStart processes the /start command with a deep-link token.
+// обработка /start с deep-link токеном
 func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from *tgbotapi.User) {
 	token = strings.TrimSpace(token)
 
@@ -70,13 +70,13 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		return
 	}
 
-	// Check if this chat already has an active session
+	// уже есть активная сессия
 	if _, ok := b.sessions.Load(chatID); ok {
 		b.sendMessage(chatID, "You already have an active interview session. Please continue answering questions.")
 		return
 	}
 
-	// Look up the invite token
+	// ищем токен приглашения
 	var invite struct {
 		ID          int
 		CandidateID int
@@ -105,7 +105,7 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		return
 	}
 
-	// Check candidate exists and fetch info including disability and telegram handle
+	// загружаем кандидата с полями disability и telegram
 	var candidate struct {
 		FullName   string
 		Summary    string
@@ -123,7 +123,7 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		return
 	}
 
-	// Verify the Telegram username matches the candidate's application
+	// проверяем совпадение username
 	if candidate.Telegram != nil && *candidate.Telegram != "" && from != nil {
 		expectedTG := normalizeTelegram(*candidate.Telegram)
 		actualTG := normalizeTelegram(from.UserName)
@@ -134,7 +134,7 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		}
 	}
 
-	// Link the invite
+	// привязываем приглашение
 	now := time.Now()
 	_, err = b.pool.Exec(ctx, `
 		UPDATE telegram_invites SET telegram_chat_id = $1, status = 'linked', linked_at = $2
@@ -145,7 +145,7 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		return
 	}
 
-	// Update candidate record
+	// обновляем кандидата
 	_, err = b.pool.Exec(ctx, `
 		UPDATE candidates SET telegram_chat_id = $1, interview_status = 'in_progress'
 		WHERE id = $2`, chatID, invite.CandidateID)
@@ -153,14 +153,14 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		log.Printf("[TG-BOT] Failed to update candidate %d: %v", invite.CandidateID, err)
 	}
 
-	// Determine disability accommodation
+	// учитываем инвалидность
 	hasDisability := candidate.Disability != nil && strings.TrimSpace(*candidate.Disability) != ""
 	disabilityInfo := ""
 	if hasDisability {
 		disabilityInfo = *candidate.Disability
 	}
 
-	// Create interview record in DB (English only)
+	// создаём запись интервью (только English)
 	var interviewID int
 	contextJSON, _ := json.Marshal([]models.ConversationMessage{})
 	err = b.pool.QueryRow(ctx, `
@@ -178,10 +178,9 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 		return
 	}
 
-	// Update invite status
 	b.pool.Exec(ctx, `UPDATE telegram_invites SET status = 'interview_active' WHERE candidate_id = $1`, invite.CandidateID)
 
-	// Build session
+	// строим сессию
 	session := &activeSession{
 		InterviewID:    interviewID,
 		CandidateID:    invite.CandidateID,
@@ -196,7 +195,7 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 	}
 	b.sessions.Store(chatID, session)
 
-	// Send welcome message (with disability accommodation if needed)
+	// отправляем приветствие
 	var welcome string
 	if hasDisability {
 		welcome = GenerateWelcomeMessageWithDisability(candidate.FullName, disabilityInfo)
@@ -205,7 +204,7 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 	}
 	b.sendMessage(chatID, welcome)
 
-	// Add welcome to conversation context
+	// добавляем в контекст диалога
 	session.mu.Lock()
 	session.Conversation = append(session.Conversation, models.ConversationMessage{
 		Role:      "bot",
@@ -218,11 +217,11 @@ func (b *Bot) handleStart(ctx context.Context, chatID int64, token string, from 
 
 	b.saveMessage(ctx, interviewID, "bot", welcome, "text", nil, nil)
 
-	// Generate and send the first warm-up question
+	// первый warm-up вопрос
 	b.generateAndSendQuestion(ctx, chatID, session)
 }
 
-// handleTextMessage processes a text message from a candidate.
+// обработка текстового сообщения
 func (b *Bot) handleTextMessage(ctx context.Context, chatID int64, session *activeSession, text string) {
 	session.mu.Lock()
 	state := session.State
@@ -231,11 +230,10 @@ func (b *Bot) handleTextMessage(ctx context.Context, chatID int64, session *acti
 		return
 	}
 
-	// Calculate response time
+	// время ответа
 	responseTime := int(time.Since(session.LastBotMsgTime).Seconds())
 	interviewID := session.InterviewID
 
-	// Add candidate message to conversation
 	session.Conversation = append(session.Conversation, models.ConversationMessage{
 		Role:            "candidate",
 		Content:         text,
@@ -245,15 +243,14 @@ func (b *Bot) handleTextMessage(ctx context.Context, chatID int64, session *acti
 	})
 	session.mu.Unlock()
 
-	// Save message
 	b.saveMessage(ctx, interviewID, "candidate", text, "text", nil, &responseTime)
 
-	// Persist and generate next question
+	// сохраняем и генерируем следующий вопрос
 	b.persistConversation(ctx, session)
 	b.processAndAdvance(ctx, chatID, session)
 }
 
-// handleVoiceMessage processes a voice message from a candidate.
+// обработка голосового сообщения
 func (b *Bot) handleVoiceMessage(ctx context.Context, chatID int64, session *activeSession, msg *tgbotapi.Message) {
 	session.mu.Lock()
 	state := session.State
@@ -266,13 +263,13 @@ func (b *Bot) handleVoiceMessage(ctx context.Context, chatID int64, session *act
 	responseTime := int(time.Since(session.LastBotMsgTime).Seconds())
 	session.mu.Unlock()
 
-	// Check if Alem STT is available
+	// Alem STT недоступен
 	if b.whisper == nil {
 		b.sendMessage(chatID, "Voice messages are not supported at the moment. Please send a text message.")
 		return
 	}
 
-	// Download voice file
+	// скачиваем аудио
 	audioData, err := downloadVoiceFile(b.api, msg.Voice.FileID)
 	if err != nil {
 		log.Printf("[TG-BOT] Failed to download voice: %v", err)
@@ -280,7 +277,7 @@ func (b *Bot) handleVoiceMessage(ctx context.Context, chatID int64, session *act
 		return
 	}
 
-	// Transcribe
+	// транскрибируем
 	transcription, err := b.whisper.Transcribe(ctx, audioData, lang)
 	if err != nil {
 		log.Printf("[TG-BOT] Transcription failed: %v", err)
@@ -311,14 +308,14 @@ func (b *Bot) handleVoiceMessage(ctx context.Context, chatID int64, session *act
 	b.processAndAdvance(ctx, chatID, session)
 }
 
-// processAndAdvance checks whether to advance topics and generates the next question.
+// переход к следующей теме и генерация вопроса
 func (b *Bot) processAndAdvance(ctx context.Context, chatID int64, session *activeSession) {
 	session.mu.Lock()
 	totalQ := session.QuestionsAsked
 	maxQ := b.cfg.InterviewMaxQuestions
 	session.mu.Unlock()
 
-	// Check if we've hit the max questions
+	// достигнут лимит вопросов
 	if totalQ >= maxQ {
 		b.finishInterview(ctx, chatID, session)
 		return
@@ -327,7 +324,7 @@ func (b *Bot) processAndAdvance(ctx context.Context, chatID int64, session *acti
 	b.generateAndSendQuestion(ctx, chatID, session)
 }
 
-// generateAndSendQuestion uses the LLM to generate the next question and sends it.
+// генерируем и отправляем вопрос через LLM
 func (b *Bot) generateAndSendQuestion(ctx context.Context, chatID int64, session *activeSession) {
 	qr, err := b.engine.GenerateNextQuestion(ctx, session)
 	if err != nil {
@@ -341,7 +338,7 @@ func (b *Bot) generateAndSendQuestion(ctx context.Context, chatID int64, session
 	session.mu.Lock()
 	currentTopic := session.State
 
-	// Check if we should move to the next topic
+	// переход к следующей теме
 	if qr.MoveToNextTopic {
 		next := nextTopic(currentTopic)
 		session.State = next
@@ -349,7 +346,7 @@ func (b *Bot) generateAndSendQuestion(ctx context.Context, chatID int64, session
 		currentTopic = next
 	}
 
-	// Check if we've completed all topics
+	// все темы пройдены
 	if currentTopic == StateClosing {
 		session.mu.Unlock()
 		b.finishInterview(ctx, chatID, session)
@@ -374,7 +371,7 @@ func (b *Bot) generateAndSendQuestion(ctx context.Context, chatID int64, session
 	b.persistConversation(ctx, session)
 }
 
-// finishInterview sends the closing message and triggers async evaluation.
+// завершение интервью и асинхронная оценка
 func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *activeSession) {
 	session.mu.Lock()
 	if session.State == StateEvaluating || session.State == StateCompleted {
@@ -385,15 +382,14 @@ func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *active
 	interviewID := session.InterviewID
 	session.mu.Unlock()
 
-	// Send closing message
+	// прощальное сообщение
 	closing := GenerateClosingMessage()
 	b.sendMessage(chatID, closing)
 	b.saveMessage(ctx, interviewID, "bot", closing, "text", nil, nil)
 
-	// Update DB status
 	b.pool.Exec(ctx, `UPDATE interviews SET current_topic = 'evaluating' WHERE id = $1`, interviewID)
 
-	// Trigger async evaluation with retry
+	// асинхронная оценка с ретраями
 	go func() {
 		maxRetries := 3
 		for attempt := 1; attempt <= maxRetries; attempt++ {
@@ -410,7 +406,7 @@ func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *active
 				session.mu.Lock()
 				session.State = StateCompleted
 				session.mu.Unlock()
-				// Notify candidate
+				// уведомляем кандидата
 				doneMsg := map[string]string{
 					"en": "Your interview has been evaluated! Thank you for participating.",
 					"ru": "Ваше интервью оценено! Спасибо за участие.",
@@ -428,8 +424,7 @@ func (b *Bot) finishInterview(ctx context.Context, chatID int64, session *active
 	}()
 }
 
-// handleStatusCommand lets a candidate check their own application status via /status.
-// It looks up the candidate by telegram_chat_id and returns status without vote counts.
+// /status — кандидат проверяет статус заявки по telegram_chat_id
 func (b *Bot) handleStatusCommand(ctx context.Context, chatID int64) {
 	var candidateName, status string
 	err := b.pool.QueryRow(ctx,
@@ -439,7 +434,7 @@ func (b *Bot) handleStatusCommand(ctx context.Context, chatID int64) {
 		 ORDER BY c.created_at DESC LIMIT 1`, chatID).Scan(&candidateName, &status)
 
 	if err != nil {
-		// Try looking up by telegram_invites chat_id link
+		// поиск через telegram_invites
 		err2 := b.pool.QueryRow(ctx,
 			`SELECT c.full_name, c.status
 			 FROM candidates c

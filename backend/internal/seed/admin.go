@@ -37,7 +37,7 @@ func SeedAdminUser(pool *pgxpool.Pool) error {
 	return nil
 }
 
-// EnsureSuperAdminRole upgrades the legacy admin@invisionu.kz to superadmin if needed
+// апгрейд legacy admin → superadmin если нужно
 func EnsureSuperAdminRole(pool *pgxpool.Pool) error {
 	ctx := context.Background()
 	_, err := pool.Exec(ctx,

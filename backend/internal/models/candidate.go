@@ -114,7 +114,7 @@ type CreateCandidateRequest struct {
 	NISGrade            string   `json:"nis_grade"`
 }
 
-// Majors maps tag → display name (multilingual)
+// специальн��сти: tag → название (мультиязычно)
 var Majors = []MajorOption{
 	{
 		Tag:  "Engineering",

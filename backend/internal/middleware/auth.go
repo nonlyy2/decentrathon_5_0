@@ -7,13 +7,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Role hierarchy (higher index = more permissions)
+// иерархия ролей (выше = больше прав)
 var roleLevel = map[string]int{
-	"committee":  1, // legacy alias for manager
+	"committee":  1, // legacy = manager
 	"manager":    1,
 	"auditor":    2,
 	"tech-admin": 3,
-	"admin":      4, // legacy alias for superadmin
+	"admin":      4, // legacy = superadmin
 	"superadmin": 4,
 }
 
@@ -50,12 +50,12 @@ func AuthRequired(jwtSecret string) gin.HandlerFunc {
 	}
 }
 
-// AdminOnly — superadmin OR admin (legacy)
+// superadmin или legacy admin
 func AdminOnly() gin.HandlerFunc {
 	return RoleAtLeast("admin")
 }
 
-// SuperAdminOnly — only superadmin (or legacy admin)
+// только superadmin (или legacy admin)
 func SuperAdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := c.GetString("user_role")
@@ -67,22 +67,22 @@ func SuperAdminOnly() gin.HandlerFunc {
 	}
 }
 
-// TechAdminOrAbove — tech-admin, superadmin, admin
+// tech-admin и выше
 func TechAdminOrAbove() gin.HandlerFunc {
 	return RoleAtLeast("tech-admin")
 }
 
-// AuditorOrAbove — auditor and above can read everything
+// auditor и выше
 func AuditorOrAbove() gin.HandlerFunc {
 	return RoleAtLeast("auditor")
 }
 
-// ManagerOrAbove — basic dashboard access
+// manager и выше
 func ManagerOrAbove() gin.HandlerFunc {
 	return RoleAtLeast("manager")
 }
 
-// ReadOnly — auditors can only use GET
+// auditor — только GET
 func AuditorReadOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := c.GetString("user_role")
@@ -95,7 +95,7 @@ func AuditorReadOnly() gin.HandlerFunc {
 	}
 }
 
-// RoleAtLeast checks that the user's role level is >= the required role's level
+// проверка минимального уровня роли
 func RoleAtLeast(required string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := c.GetString("user_role")
@@ -107,7 +107,7 @@ func RoleAtLeast(required string) gin.HandlerFunc {
 	}
 }
 
-// IsRole returns true if the user has exactly one of the given roles
+// true если роль пользователя совпадает с одной из переданных
 func IsRole(c *gin.Context, roles ...string) bool {
 	role := c.GetString("user_role")
 	for _, r := range roles {
@@ -118,13 +118,13 @@ func IsRole(c *gin.Context, roles ...string) bool {
 	return false
 }
 
-// HasLevel returns true if the user's role level >= given level
+// true если уровень роли >= required
 func HasLevel(c *gin.Context, required string) bool {
 	role := c.GetString("user_role")
 	return roleLevel[role] >= roleLevel[required]
 }
 
-// GetUserID extracts the user ID from the context
+// ID пользователя из контекста
 func GetUserID(c *gin.Context) int {
 	id, _ := c.Get("user_id")
 	if v, ok := id.(int); ok {
@@ -133,7 +133,7 @@ func GetUserID(c *gin.Context) int {
 	return 0
 }
 
-// TechAdminRestricted blocks tech-admin from certain actions
+// запрет tech-admin на определённые действия
 func TechAdminRestricted() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if IsRole(c, "tech-admin") {

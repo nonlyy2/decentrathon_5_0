@@ -7,12 +7,12 @@ import (
 	"github.com/assylkhan/invisionu-backend/internal/models"
 )
 
-// AntiCheatReport aggregates behavioral signals collected during the interview.
+// поведенческие сигналы интервью
 type AntiCheatReport struct {
 	AvgResponseTimeSec  float64  `json:"avg_response_time_sec"`
 	MinResponseTimeSec  int      `json:"min_response_time_sec"`
 	MaxResponseTimeSec  int      `json:"max_response_time_sec"`
-	FastResponseCount   int      `json:"fast_response_count"`   // < 5 sec
+	FastResponseCount   int      `json:"fast_response_count"`   // < 5 сек
 	SlowResponseCount   int      `json:"slow_response_count"`
 	TotalMessages       int      `json:"total_messages"`
 	VoiceMessageCount   int      `json:"voice_message_count"`
@@ -21,7 +21,7 @@ type AntiCheatReport struct {
 	Flags               []string `json:"flags"`
 }
 
-// collectAntiCheatSignals analyzes the conversation for suspicious patterns.
+// анализ диалога на подозрительные паттерны
 func collectAntiCheatSignals(conversation []models.ConversationMessage) *AntiCheatReport {
 	report := &AntiCheatReport{
 		MinResponseTimeSec: 9999,
@@ -54,12 +54,12 @@ func collectAntiCheatSignals(conversation []models.ConversationMessage) *AntiChe
 				report.MaxResponseTimeSec = msg.ResponseTimeSec
 			}
 
-			// Flag suspiciously fast responses (< 5 sec for meaningful answers)
+			// подозрительно быстрый ответ
 			if msg.ResponseTimeSec < 5 && len(msg.Content) > 50 {
 				report.FastResponseCount++
 			}
 
-			// We do NOT flag slow responses — candidates may read and think before answering
+			// медленные ответы не флагуем — кандидат может думать
 		}
 	}
 
@@ -74,12 +74,12 @@ func collectAntiCheatSignals(conversation []models.ConversationMessage) *AntiChe
 		report.VoiceToTextRatio = float64(report.VoiceMessageCount) / float64(report.TotalMessages)
 	}
 
-	// Generate flags
+	// формируем флаги
 	if report.FastResponseCount >= 3 {
 		report.Flags = append(report.Flags, "multiple_fast_responses")
 	}
 
-	// Check for style shifts — look for sudden formality changes
+	// резкая смена стиля
 	if detectStyleShift(conversation) {
 		report.Flags = append(report.Flags, "style_shift_detected")
 	}
@@ -91,7 +91,7 @@ func collectAntiCheatSignals(conversation []models.ConversationMessage) *AntiChe
 	return report
 }
 
-// detectStyleShift checks if the candidate's writing style changes dramatically mid-conversation.
+// резкое изменение стиля письма в ходе диалога
 func detectStyleShift(conversation []models.ConversationMessage) bool {
 	var candidateMsgs []string
 	for _, msg := range conversation {
@@ -104,7 +104,7 @@ func detectStyleShift(conversation []models.ConversationMessage) bool {
 		return false
 	}
 
-	// Compare average word length and sentence complexity between first half and second half
+	// средняя длина слова: первая vs вторая половина
 	mid := len(candidateMsgs) / 2
 	firstHalf := strings.Join(candidateMsgs[:mid], " ")
 	secondHalf := strings.Join(candidateMsgs[mid:], " ")
@@ -112,7 +112,7 @@ func detectStyleShift(conversation []models.ConversationMessage) bool {
 	firstAvg := avgWordLength(firstHalf)
 	secondAvg := avgWordLength(secondHalf)
 
-	// A significant shift in average word length suggests style change
+	// значительный сдвиг средней длины = смена стиля
 	diff := firstAvg - secondAvg
 	if diff < 0 {
 		diff = -diff
@@ -121,7 +121,7 @@ func detectStyleShift(conversation []models.ConversationMessage) bool {
 	return diff > 2.0
 }
 
-// avgWordLength returns the average word length in a text.
+// средняя длина слова в тексте
 func avgWordLength(text string) float64 {
 	words := strings.Fields(text)
 	if len(words) == 0 {
@@ -134,7 +134,7 @@ func avgWordLength(text string) float64 {
 	return float64(totalLen) / float64(len(words))
 }
 
-// buildAntiCheatSection creates the anti-cheat section of the evaluation prompt.
+// секция античит-сигналов для промпта оценки
 func buildAntiCheatSection(report *AntiCheatReport) string {
 	var sb strings.Builder
 	sb.WriteString("=== BEHAVIORAL SIGNALS ===\n")
