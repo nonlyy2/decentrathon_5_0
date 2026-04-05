@@ -369,7 +369,7 @@ func GetCandidate(pool *pgxpool.Pool) gin.HandlerFunc {
 				achievements, extracurriculars, essay, motivation_statement, disability, major,
 				photo_url, photo_ai_flag, photo_ai_note, COALESCE(keywords, '{}'), created_at, status,
 				youtube_url, youtube_transcript, youtube_url_valid,
-				first_name, last_name, patronymic, date_of_birth, gender, nationality, iin,
+				first_name, last_name, patronymic, date_of_birth::text, gender, nationality, iin,
 				identity_doc_type, instagram, whatsapp, home_country,
 				exam_type, ielts_score, toefl_score, english_cert_url,
 				certificate_type, certificate_url, additional_docs_url,
