@@ -187,6 +187,10 @@ func main() {
 		// Partner schools (auditor+ can view)
 		protected.GET("/partner-schools", middleware.AuditorOrAbove(), handlers.GetPartnerSchools(pool))
 
+		// Analytics distribution endpoints
+		protected.GET("/analytics/city-distribution", handlers.GetCityDistribution(pool))
+		protected.GET("/analytics/major-distribution", handlers.GetMajorDistribution(pool))
+
 		// Auditor analytics — manager performance (auditor+)
 		protected.GET("/auditor/manager-performance", middleware.AuditorOrAbove(), handlers.GetManagerPerformance(pool))
 		protected.GET("/auditor/analysis-variance", handlers.GetAnalysisVariance(pool))

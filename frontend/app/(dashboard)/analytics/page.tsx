@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { DashboardStats } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, TrendingUp, Users, Target, Award, Activity } from "lucide-react";
+import { BarChart3, TrendingUp, Users, Target, Award, Activity, MapPin, GraduationCap } from "lucide-react";
 
 interface CandidateScoreVariance {
   candidate_id: number;
@@ -67,20 +67,26 @@ export default function AnalyticsPage() {
   const [managerData, setManagerData] = useState<{ managers: ManagerStats[]; decision_trend: DayCount[] } | null>(null);
   const [varianceData, setVarianceData] = useState<VarianceSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cityDist, setCityDist] = useState<{ name: string; count: number }[]>([]);
+  const [majorDist, setMajorDist] = useState<{ name: string; count: number }[]>([]);
 
   const isAuditorOrAbove = ["auditor", "tech-admin", "superadmin", "admin"].includes(user?.role ?? "");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, managerRes, varianceRes] = await Promise.allSettled([
+      const [statsRes, managerRes, varianceRes, cityRes, majorRes] = await Promise.allSettled([
         api.get<DashboardStats>("/stats"),
         isAuditorOrAbove ? api.get("/auditor/manager-performance") : Promise.reject(null),
         isAuditorOrAbove ? api.get<VarianceSummary>("/auditor/analysis-variance") : Promise.reject(null),
+        api.get("/analytics/city-distribution"),
+        api.get("/analytics/major-distribution"),
       ]);
       if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
       if (managerRes.status === "fulfilled") setManagerData(managerRes.value.data);
       if (varianceRes.status === "fulfilled") setVarianceData(varianceRes.value.data);
+      if (cityRes.status === "fulfilled") setCityDist(cityRes.value.data.distribution || []);
+      if (majorRes.status === "fulfilled") setMajorDist(majorRes.value.data.distribution || []);
     } finally {
       setLoading(false);
     }
@@ -202,6 +208,61 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* City & Major distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {cityDist.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><MapPin size={16} /> City Distribution</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {cityDist.slice(0, 15).map((d) => (
+                <BarRow key={d.name} label={d.name || "Unknown"} value={d.count} max={cityDist[0]?.count || 1} color="bg-cyan-500" />
+              ))}
+              {cityDist.length > 15 && <p className="text-xs text-muted-foreground text-center">{cityDist.length - 15} more cities</p>}
+            </CardContent>
+          </Card>
+        )}
+        {majorDist.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><GraduationCap size={16} /> Major Distribution</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {majorDist.map((d) => (
+                <BarRow key={d.name} label={d.name || "Unspecified"} value={d.count} max={majorDist[0]?.count || 1} color="bg-lime-500" />
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Exam Score Summaries */}
+      {stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">IELTS Candidates</p>
+              <p className="text-2xl font-bold text-foreground">{stats.ielts_count}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">TOEFL Candidates</p>
+              <p className="text-2xl font-bold text-foreground">{stats.toefl_count}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">UNT Certificates</p>
+              <p className="text-2xl font-bold text-foreground">{stats.unt_count}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground">NIS Certificates</p>
+              <p className="text-2xl font-bold text-foreground">{stats.nis_count}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Analysis Variance / Bias Detection — auditor+ only */}
       {isAuditorOrAbove && varianceData && varianceData.total_multi_analyzed > 0 && (

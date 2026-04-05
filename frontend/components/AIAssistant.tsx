@@ -1,11 +1,99 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageCircle, X, Send, Bot, User, Loader2 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
+} from "recharts";
+
+const CHART_COLORS = ["#c1f11d", "#3b82f6", "#22c55e", "#eab308", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316", "#14b8a6"];
+
+interface ChartData {
+  type: "bar" | "pie" | "line";
+  title?: string;
+  data: { label: string; value: number }[];
+}
+
+function ChatChart({ chart }: { chart: ChartData }) {
+  const data = chart.data.map((d) => ({ name: d.label, value: d.value }));
+  return (
+    <div className="my-2">
+      {chart.title && <p className="text-xs font-semibold mb-1">{chart.title}</p>}
+      <ResponsiveContainer width="100%" height={180}>
+        {chart.type === "pie" ? (
+          <PieChart>
+            <Pie data={data} cx="50%" cy="50%" innerRadius={30} outerRadius={60} dataKey="value" label={false}>
+              {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+            </Pie>
+            <Tooltip />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+          </PieChart>
+        ) : chart.type === "line" ? (
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" fontSize={9} angle={-45} textAnchor="end" height={50} />
+            <YAxis fontSize={10} />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#c1f11d" strokeWidth={2} />
+          </LineChart>
+        ) : (
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" fontSize={9} angle={-45} textAnchor="end" height={50} />
+            <YAxis fontSize={10} />
+            <Tooltip />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+            </Bar>
+          </BarChart>
+        )}
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function parseMessageContent(content: string): (string | ChartData)[] {
+  const parts: (string | ChartData)[] = [];
+  const regex = /~~~chart\s*([\s\S]*?)\s*~~~/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+    try {
+      const chart = JSON.parse(match[1]) as ChartData;
+      parts.push(chart);
+    } catch {
+      parts.push(match[0]);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+  return parts;
+}
+
+function MessageContent({ content }: { content: string }) {
+  const parts = useMemo(() => parseMessageContent(content), [content]);
+  return (
+    <>
+      {parts.map((part, i) =>
+        typeof part === "string" ? (
+          <span key={i}>{part}</span>
+        ) : (
+          <ChatChart key={i} chart={part} />
+        )
+      )}
+    </>
+  );
+}
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -112,7 +200,7 @@ export default function AIAssistant() {
                     : "text-white rounded-tr-sm"
                 }`}
                   style={msg.role === "user" ? { backgroundColor: "#c1f11d", color: "#111" } : {}}>
-                  {msg.content}
+                  {msg.role === "assistant" ? <MessageContent content={msg.content} /> : msg.content}
                 </div>
               </div>
             ))}

@@ -256,7 +256,8 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			"final_score": "a.final_score",
 			"analyzed_at": "a.analyzed_at",
 			"age":         "c.age",
-			"net_score":   "COALESCE((SELECT COUNT(*) FILTER (WHERE cd2.decision='upvote') - COUNT(*) FILTER (WHERE cd2.decision='downvote') FROM committee_decisions cd2 WHERE cd2.candidate_id=c.id), 0)",
+			"net_score":         "COALESCE((SELECT COUNT(*) FILTER (WHERE cd2.decision='upvote') - COUNT(*) FILTER (WHERE cd2.decision='downvote') FROM committee_decisions cd2 WHERE cd2.candidate_id=c.id), 0)",
+			"review_complexity": "c.review_complexity",
 		}
 		sortCol, ok := allowedSorts[sortBy]
 		if !ok {
@@ -316,7 +317,8 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 		query := fmt.Sprintf(
 			`SELECT c.id, c.full_name, c.email, c.city, c.school, c.major, c.status, c.created_at,
 				a.final_score, a.category, a.analyzed_at, a.model_used, c.photo_url, c.photo_ai_flag, c.age,
-				COALESCE((SELECT COUNT(*) FILTER (WHERE cd.decision='upvote') - COUNT(*) FILTER (WHERE cd.decision='downvote') FROM committee_decisions cd WHERE cd.candidate_id=c.id), 0) AS net_score
+				COALESCE((SELECT COUNT(*) FILTER (WHERE cd.decision='upvote') - COUNT(*) FILTER (WHERE cd.decision='downvote') FROM committee_decisions cd WHERE cd.candidate_id=c.id), 0) AS net_score,
+				c.review_complexity
 			 FROM candidates c
 			 LEFT JOIN analyses a ON c.id = a.candidate_id
 			 %s ORDER BY %s %s NULLS LAST LIMIT $%d OFFSET $%d`,
@@ -336,7 +338,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			var item models.CandidateListItem
 			if err := rows.Scan(&item.ID, &item.FullName, &item.Email, &item.City, &item.School,
 				&item.Major, &item.Status, &item.CreatedAt, &item.FinalScore, &item.Category, &item.AnalyzedAt,
-				&item.ModelUsed, &item.PhotoURL, &item.PhotoAIFlag, &item.Age, &item.NetScore); err != nil {
+				&item.ModelUsed, &item.PhotoURL, &item.PhotoAIFlag, &item.Age, &item.NetScore, &item.ReviewComplexity); err != nil {
 				continue
 			}
 			candidates = append(candidates, item)

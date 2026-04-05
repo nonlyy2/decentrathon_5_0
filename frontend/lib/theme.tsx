@@ -14,16 +14,16 @@ const ThemeContext = createContext<ThemeContextType>({
   toggleTheme: () => {},
 });
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+export function ThemeProvider({ children, defaultTheme }: { children: ReactNode; defaultTheme?: Theme }) {
+  const [theme, setTheme] = useState<Theme>(defaultTheme || "light");
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") as Theme;
     const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const resolved = saved || preferred;
+    const resolved = saved || defaultTheme || preferred;
     setTheme(resolved);
     applyTheme(resolved);
-  }, []);
+  }, [defaultTheme]);
 
   const applyTheme = (t: Theme) => {
     const root = document.documentElement;

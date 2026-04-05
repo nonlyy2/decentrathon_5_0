@@ -104,6 +104,7 @@ export default function CandidateDetailPage() {
 
   // Delete analysis custom modal
   const [showDeleteAnalysis, setShowDeleteAnalysis] = useState(false);
+  const [showPersonalityTest, setShowPersonalityTest] = useState(false);
   const [deleteAnalysisText, setDeleteAnalysisText] = useState("");
 
   // Delete candidate modal
@@ -262,11 +263,13 @@ export default function CandidateDetailPage() {
     setDeletingAnalysis(true);
     try {
       await api.delete(`/candidates/${params.id}/analysis`);
-      toast.success("Analysis deleted");
+      toast.success("Latest analysis deleted");
       setAnalysisFailed(false);
       setShowDeleteAnalysis(false);
       setDeleteAnalysisText("");
       refetch();
+      // Refresh analysis history
+      api.get(`/candidates/${params.id}/analysis-history`).then((res) => setAnalysisHistory(res.data.history || [])).catch(() => {});
     } catch {
       toast.error("Failed to delete analysis");
     } finally {
@@ -598,6 +601,21 @@ export default function CandidateDetailPage() {
             </Card>
           )}
 
+          {/* Personality Test — separate dialog */}
+          {detail.personality_answers && (
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setShowPersonalityTest(true)}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Brain size={16} className="text-indigo-500" />
+                  <span className="text-sm font-medium">Internal Personality Test</span>
+                </div>
+                <Badge variant="outline" className="text-xs">
+                  40 questions answered — Click to view
+                </Badge>
+              </CardContent>
+            </Card>
+          )}
+
           {/* YouTube Presentation Video */}
           {detail.youtube_url && (
             <Card>
@@ -691,58 +709,8 @@ export default function CandidateDetailPage() {
         <div className="space-y-4 min-w-0">
           {a ? (
             <>
-              {/* Score overview */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Sparkles size={16} className="text-purple-500" /> Stage 1: {t("detail.ai_analysis")}
-                    </CardTitle>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge className={riskColors[a.ai_generated_risk]}>
-                        {t("detail.ai_risk")}: {a.ai_generated_score}%
-                      </Badge>
-                      {hasRussianContent() && (
-                        <Badge className="bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700">
-                          ⚠ Answers not in English
-                        </Badge>
-                      )}
-                      {detail.youtube_url_valid === false && (
-                        <Badge className="bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700">
-                          <AlertTriangle size={10} className="mr-1" /> Video link inaccessible
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className="text-4xl font-bold text-purple-600">{a.final_score.toFixed(1)}</div>
-                    <Badge className={`${categoryColors[a.category]} text-sm`}>{a.category}</Badge>
-                  </div>
-                  <ScoreRadar scores={{
-                    leadership: a.score_leadership,
-                    motivation: a.score_motivation,
-                    growth: a.score_growth,
-                    vision: a.score_vision,
-                    communication: a.score_communication,
-                  }} />
-                </CardContent>
-              </Card>
-
-              {/* Summary */}
-              <Card>
-                <CardHeader><CardTitle className="text-base">{t("detail.summary")}</CardTitle></CardHeader>
-                <CardContent>
-                  <p className="text-sm leading-relaxed text-foreground">{a.summary}</p>
-                  <p className="text-xs text-muted-foreground mt-3">
-                    {t("detail.analyzed_by")} {a.model_used} {"\u2014"} {new Date(a.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Analysis history card stack */}
-              {analysisHistory.length > 0 && (
+              {/* Score overview — clickable card-deck when multiple analyses exist */}
+              {analysisHistory.length > 0 ? (
                 <AnalysisCardStack
                   current={{
                     final_score: a.final_score,
@@ -752,7 +720,90 @@ export default function CandidateDetailPage() {
                     summary: a.summary,
                   }}
                   history={analysisHistory}
+                  renderHeader={
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Sparkles size={16} className="text-purple-500" /> Stage 1: {t("detail.ai_analysis")}
+                        <Badge className="text-[10px] ml-1" variant="outline">{analysisHistory.length + 1} analyses</Badge>
+                      </CardTitle>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge className={riskColors[a.ai_generated_risk]}>
+                          {t("detail.ai_risk")}: {a.ai_generated_score}%
+                        </Badge>
+                      </div>
+                    </div>
+                  }
+                  renderContent={
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <div className="text-4xl font-bold text-purple-600">{a.final_score.toFixed(1)}</div>
+                        <Badge className={`${categoryColors[a.category]} text-sm`}>{a.category}</Badge>
+                      </div>
+                      <ScoreRadar scores={{
+                        leadership: a.score_leadership,
+                        motivation: a.score_motivation,
+                        growth: a.score_growth,
+                        vision: a.score_vision,
+                        communication: a.score_communication,
+                      }} />
+                      <p className="text-sm leading-relaxed text-foreground">{a.summary}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("detail.analyzed_by")} {a.model_used} {"\u2014"} {new Date(a.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </p>
+                    </div>
+                  }
                 />
+              ) : (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Sparkles size={16} className="text-purple-500" /> Stage 1: {t("detail.ai_analysis")}
+                        </CardTitle>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge className={riskColors[a.ai_generated_risk]}>
+                            {t("detail.ai_risk")}: {a.ai_generated_score}%
+                          </Badge>
+                          {hasRussianContent() && (
+                            <Badge className="bg-orange-100 text-orange-700 border border-orange-300 dark:bg-orange-900/40 dark:text-orange-300 dark:border-orange-700">
+                              ⚠ Answers not in English
+                            </Badge>
+                          )}
+                          {detail.youtube_url_valid === false && (
+                            <Badge className="bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/40 dark:text-red-300 dark:border-red-700">
+                              <AlertTriangle size={10} className="mr-1" /> Video link inaccessible
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center gap-4">
+                        <div className="text-4xl font-bold text-purple-600">{a.final_score.toFixed(1)}</div>
+                        <Badge className={`${categoryColors[a.category]} text-sm`}>{a.category}</Badge>
+                      </div>
+                      <ScoreRadar scores={{
+                        leadership: a.score_leadership,
+                        motivation: a.score_motivation,
+                        growth: a.score_growth,
+                        vision: a.score_vision,
+                        communication: a.score_communication,
+                      }} />
+                    </CardContent>
+                  </Card>
+
+                  {/* Summary */}
+                  <Card>
+                    <CardHeader><CardTitle className="text-base">{t("detail.summary")}</CardTitle></CardHeader>
+                    <CardContent>
+                      <p className="text-sm leading-relaxed text-foreground">{a.summary}</p>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        {t("detail.analyzed_by")} {a.model_used} {"\u2014"} {new Date(a.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
               )}
 
               <KeyStrengthsRedFlags strengths={a.key_strengths} redFlags={a.red_flags} />
@@ -1363,7 +1414,7 @@ export default function CandidateDetailPage() {
           <DialogHeader>
             <DialogTitle>Delete AI Analysis</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-slate-600">This will permanently delete the AI analysis for this candidate. Type <span className="font-bold">delete</span> to confirm.</p>
+          <p className="text-sm text-slate-600">This will delete the <span className="font-bold">latest (current)</span> AI analysis. If previous analyses exist, the most recent one will become the current analysis. Type <span className="font-bold">delete</span> to confirm.</p>
           <Input
             value={deleteAnalysisText}
             onChange={(e) => setDeleteAnalysisText(e.target.value)}
@@ -1474,6 +1525,37 @@ export default function CandidateDetailPage() {
               Save Changes
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Personality Test Dialog */}
+      <Dialog open={showPersonalityTest} onOpenChange={setShowPersonalityTest}>
+        <DialogContent className="max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain size={18} className="text-indigo-500" /> Internal Personality Test Answers
+            </DialogTitle>
+          </DialogHeader>
+          {detail?.personality_answers ? (() => {
+            try {
+              const answers = JSON.parse(detail.personality_answers) as Record<string, number>;
+              return (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">{Object.keys(answers).length} questions answered</p>
+                  {Object.entries(answers).map(([qIdx, optIdx]) => (
+                    <div key={qIdx} className="text-sm border rounded-lg p-3">
+                      <p className="font-medium text-foreground">Question {Number(qIdx) + 1}</p>
+                      <p className="text-muted-foreground mt-1">Selected option: <span className="font-medium text-foreground">{String.fromCharCode(65 + Number(optIdx))}</span> (option {Number(optIdx) + 1})</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            } catch {
+              return <p className="text-sm text-muted-foreground">Unable to parse personality answers.</p>;
+            }
+          })() : (
+            <p className="text-sm text-muted-foreground">No personality test data available.</p>
+          )}
         </DialogContent>
       </Dialog>
     </div>

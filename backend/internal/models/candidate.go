@@ -67,8 +67,9 @@ type CandidateListItem struct {
 	ModelUsed  *string    `json:"model_used"`
 	PhotoURL   *string    `json:"photo_url"`
 	PhotoAIFlag bool      `json:"photo_ai_flag"`
-	Age        *int       `json:"age"`
-	NetScore   *int       `json:"net_score"`
+	Age              *int       `json:"age"`
+	NetScore         *int       `json:"net_score"`
+	ReviewComplexity *float64   `json:"review_complexity"`
 }
 
 type CandidateDetail struct {

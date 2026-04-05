@@ -560,8 +560,15 @@ I dont have achievements to list but I think potential matters more than past ac
 			homeCountry = &h
 		}
 
-		// Generate exam type and scores
+		// Generate instagram, whatsapp, youtube_url
 		r2 := rand.New(rand.NewSource(int64(inserted + 99)))
+		nameParts2 := strings.SplitN(strings.ToLower(c.FullName), " ", 2)
+		igHandle := fmt.Sprintf("@%s_%s_%d", nameParts2[0], nameParts2[len(nameParts2)-1][:3], inserted)
+		instagram := &igHandle
+		waPhone := c.Phone
+		youtubeURL := "https://www.youtube.com/watch?v=dQw4w9WgXcQ" // placeholder
+
+		// Generate exam type and scores
 		examType := "IELTS"
 		if r2.Intn(3) == 0 {
 			examType = "TOEFL"
@@ -614,11 +621,12 @@ I dont have achievements to list but I think potential matters more than past ac
 		}
 
 		_, err := pool.Exec(ctx,
-			`INSERT INTO candidates (full_name, first_name, last_name, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, achievements, extracurriculars, essay, motivation_statement, major, exam_type, ielts_score, toefl_score, certificate_type, unt_score, nis_grade, personality_answers, partner_school, status)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,'in_progress')`,
+			`INSERT INTO candidates (full_name, first_name, last_name, email, phone, telegram, age, date_of_birth, gender, city, home_country, school, graduation_year, nationality, iin, achievements, extracurriculars, essay, motivation_statement, major, exam_type, ielts_score, toefl_score, certificate_type, unt_score, nis_grade, personality_answers, partner_school, instagram, whatsapp, youtube_url, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,'in_progress')`,
 			c.FullName, firstName, lastName, c.Email, c.Phone, c.Telegram, c.Age, dob, gender, c.City, homeCountry, c.School, c.GraduationYear,
 			nationality, iin, c.Achievements, c.Extracurriculars, c.Essay, c.MotivationStatement, major,
 			examType, ieltsScore, toeflScore, certType, untScore, nisGrade, answers, partnerSchool,
+			instagram, waPhone, youtubeURL,
 		)
 		if err != nil {
 			log.Printf("SEED ERROR [%s / %s]: %v", c.FullName, c.Email, err)

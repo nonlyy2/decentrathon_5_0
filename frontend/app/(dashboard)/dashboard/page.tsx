@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useFetch } from "@/lib/hooks";
+import api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { DashboardStats } from "@/lib/types";
 import { Users, CheckCircle, Star, Clock, TrendingUp, XCircle } from "lucide-react";
@@ -52,7 +53,33 @@ export default function DashboardPage() {
   const { data: stats, loading } = useFetch<DashboardStats>("/stats");
   const { t } = useI18n();
   const [selectedDim, setSelectedDim] = useState("leadership");
-  const [dimTopN, setDimTopN] = useState<string>("all");
+  const [dimTopNInput, setDimTopNInput] = useState<string>("");
+  const [dimTopN, setDimTopN] = useState<number>(0); // 0 = all
+  const [dimData, setDimData] = useState<{ distributions: Record<string, { range: string; count: number }[]>; means: Record<string, number> } | null>(null);
+
+  const fetchDimData = useCallback(async (topN: number) => {
+    try {
+      const url = topN > 0 ? `/stats?top_n=${topN}` : "/stats";
+      const res = await api.get(url);
+      setDimData({
+        distributions: res.data.dimension_distributions,
+        means: res.data.dimension_means,
+      });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchDimData(dimTopN);
+  }, [dimTopN, fetchDimData]);
+
+  const handleTopNApply = () => {
+    const n = parseInt(dimTopNInput);
+    if (dimTopNInput === "" || dimTopNInput === "0") {
+      setDimTopN(0);
+    } else if (!isNaN(n) && n > 0) {
+      setDimTopN(n);
+    }
+  };
 
   if (loading || !stats) {
     return (
@@ -100,8 +127,10 @@ export default function DashboardPage() {
     { label: t("dash.rejected"), value: stats.rejected, icon: <XCircle size={18} />, color: "text-red-600 bg-red-50 dark:bg-red-900/30" },
   ];
 
-  const dimDist = stats.dimension_distributions?.[selectedDim] || [];
-  const dimMean = stats.dimension_means?.[selectedDim] || 0;
+  const activeDimDistributions = dimData?.distributions || stats.dimension_distributions;
+  const activeDimMeans = dimData?.means || stats.dimension_means;
+  const dimDist = activeDimDistributions?.[selectedDim] || [];
+  const dimMean = activeDimMeans?.[selectedDim] || 0;
 
   return (
     <div className="space-y-6">
@@ -317,17 +346,18 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base">Dimension Distribution</CardTitle>
                 <div className="flex items-center gap-1 text-xs">
-                  <select
-                    value={dimTopN}
-                    onChange={(e) => setDimTopN(e.target.value)}
-                    className="bg-muted border border-border rounded px-2 py-0.5 text-xs"
-                  >
-                    <option value="all">All Candidates ({stats.total_candidates})</option>
-                    <option value="10">Top-10</option>
-                    <option value="25">Top-25</option>
-                    <option value="50">Top-50</option>
-                    <option value="100">Top-100</option>
-                  </select>
+                  <span className="text-muted-foreground">Top</span>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder={String(stats.total_candidates)}
+                    value={dimTopNInput}
+                    onChange={(e) => setDimTopNInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleTopNApply(); }}
+                    onBlur={handleTopNApply}
+                    className="bg-muted border border-border rounded px-2 py-0.5 text-xs w-16 text-center"
+                  />
+                  <span className="text-muted-foreground">of {stats.total_candidates}</span>
                 </div>
               </div>
               <div className="flex gap-1 bg-muted rounded-lg p-0.5">

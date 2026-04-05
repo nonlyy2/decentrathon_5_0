@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/assylkhan/invisionu-backend/internal/models"
 	"github.com/gin-gonic/gin"
@@ -105,6 +106,20 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 
 		// Per-dimension score distributions (buckets of 10)
+		// Support optional top_n query param to filter by top N candidates by final_score
+		topNParam := c.Query("top_n")
+		topN := 0
+		if topNParam != "" {
+			if n, err := strconv.Atoi(topNParam); err == nil && n > 0 {
+				topN = n
+			}
+		}
+
+		dimTable := "analyses"
+		if topN > 0 {
+			dimTable = fmt.Sprintf("(SELECT * FROM analyses ORDER BY final_score DESC LIMIT %d)", topN)
+		}
+
 		dimensions := []string{"score_leadership", "score_motivation", "score_growth", "score_vision", "score_communication"}
 		dimDistributions := map[string][]models.ScoreBucket{}
 		for _, dim := range dimensions {
@@ -115,7 +130,7 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 					hi = 100
 				}
 				var cnt int
-				pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM analyses WHERE %s >= $1 AND %s <= $2`, dim, dim), lo, hi).Scan(&cnt)
+				pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s AS a WHERE a.%s >= $1 AND a.%s <= $2`, dimTable, dim, dim), lo, hi).Scan(&cnt)
 				buckets = append(buckets, models.ScoreBucket{
 					Range: fmt.Sprintf("%d-%d", lo, hi),
 					Count: cnt,
@@ -126,6 +141,20 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 			dimDistributions[key] = buckets
 		}
 		stats.DimensionDistributions = dimDistributions
+
+		// Also recompute dimension means for top-N if specified
+		if topN > 0 {
+			pool.QueryRow(ctx, fmt.Sprintf(`SELECT COALESCE(AVG(score_leadership),0), COALESCE(AVG(score_motivation),0),
+				COALESCE(AVG(score_growth),0), COALESCE(AVG(score_vision),0), COALESCE(AVG(score_communication),0) FROM %s AS a`, dimTable)).Scan(
+				&meanL, &meanM, &meanG, &meanV, &meanC)
+			stats.DimensionMeans = map[string]float64{
+				"leadership":    meanL,
+				"motivation":    meanM,
+				"growth":        meanG,
+				"vision":        meanV,
+				"communication": meanC,
+			}
+		}
 
 		// IELTS distribution (buckets: 5.0-5.5, 6.0-6.5, 7.0-7.5, 8.0-8.5, 9.0)
 		ieltsRanges := []struct{ label string; lo, hi float64 }{
@@ -170,5 +199,55 @@ func GetDashboardStats(pool *pgxpool.Pool) gin.HandlerFunc {
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE certificate_type='NIS 12 Grade Certificate' AND nis_grade IS NOT NULL`).Scan(&stats.NISCount)
 
 		c.JSON(http.StatusOK, stats)
+	}
+}
+
+func GetCityDistribution(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rows, err := pool.Query(c.Request.Context(),
+			`SELECT city, COUNT(*) as count FROM candidates WHERE city IS NOT NULL AND city != '' GROUP BY city ORDER BY count DESC`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type item struct {
+			City  string `json:"city"`
+			Count int    `json:"count"`
+		}
+		var result []item
+		for rows.Next() {
+			var r item
+			if err := rows.Scan(&r.City, &r.Count); err == nil {
+				result = append(result, r)
+			}
+		}
+		c.JSON(http.StatusOK, result)
+	}
+}
+
+func GetMajorDistribution(pool *pgxpool.Pool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rows, err := pool.Query(c.Request.Context(),
+			`SELECT major, COUNT(*) as count FROM candidates WHERE major IS NOT NULL AND major != '' GROUP BY major ORDER BY count DESC`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		type item struct {
+			Major string `json:"major"`
+			Count int    `json:"count"`
+		}
+		var result []item
+		for rows.Next() {
+			var r item
+			if err := rows.Scan(&r.Major, &r.Count); err == nil {
+				result = append(result, r)
+			}
+		}
+		c.JSON(http.StatusOK, result)
 	}
 }

@@ -22,9 +22,11 @@ interface Props {
     summary: string;
   };
   history: AnalysisHistoryEntry[];
+  renderHeader?: React.ReactNode;
+  renderContent?: React.ReactNode;
 }
 
-export default function AnalysisCardStack({ current, history }: Props) {
+export default function AnalysisCardStack({ current, history, renderHeader, renderContent }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const allCards = [
@@ -88,23 +90,35 @@ export default function AnalysisCardStack({ current, history }: Props) {
             />
           ))}
           {/* Top card (current) */}
-          <div className="relative z-20 rounded-lg border bg-card p-4 shadow-md hover:shadow-lg transition-shadow">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="text-2xl font-bold text-purple-600">{current.final_score.toFixed(1)}</div>
-                <Badge className={categoryColors[current.category] || ""}>{current.category}</Badge>
+          <div className="relative z-20 rounded-lg border bg-card shadow-md hover:shadow-lg transition-shadow">
+            {renderHeader || renderContent ? (
+              <div>
+                {renderHeader && <div className="p-4 pb-0">{renderHeader}</div>}
+                {renderContent && <div className="p-4">{renderContent}</div>}
+                <p className="text-xs text-muted-foreground px-4 pb-3 italic flex items-center gap-1">
+                  <Layers size={10} /> Click to view all {totalCount} analyses
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] gap-1">
-                  <Layers size={10} />
-                  {totalCount} analyses
-                </Badge>
+            ) : (
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="text-2xl font-bold text-purple-600">{current.final_score.toFixed(1)}</div>
+                    <Badge className={categoryColors[current.category] || ""}>{current.category}</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] gap-1">
+                      <Layers size={10} />
+                      {totalCount} analyses
+                    </Badge>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {current.model_used} — {new Date(current.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 italic">Click to view all analyses</p>
               </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              {current.model_used} — {new Date(current.analyzed_at).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1 italic">Click to view all analyses</p>
+            )}
           </div>
           {/* Extra padding for the stack */}
           <div style={{ height: Math.min(history.length, 3) * 6 + 4 }} />

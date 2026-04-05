@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ArrowLeft, HelpCircle, BookOpen } from "lucide-react";
+import { ChevronDown, ArrowLeft, HelpCircle, BookOpen, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/lib/theme";
 
 type Lang = "en" | "ru" | "kk";
 
@@ -264,6 +265,7 @@ const UI_LABELS: Record<Lang, Record<string, string>> = {
 export default function FAQPage() {
   const [lang, setLang] = useState<Lang>("ru");
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const { theme, toggleTheme } = useTheme();
 
   const t = (key: string) => UI_LABELS[lang]?.[key] ?? key;
   const faqs = FAQ_DATA[lang];
@@ -294,14 +296,23 @@ export default function FAQPage() {
             </button>
           ))}
         </div>
-        <Link href="/apply">
+        <div className="flex items-center gap-2">
           <button
-            className="text-sm px-4 py-2 rounded-lg font-semibold transition-colors"
-            style={{ backgroundColor: "#c1f11d", color: "#111" }}
+            onClick={toggleTheme}
+            className="p-2 rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Toggle theme"
           >
-            {t("faq.apply")}
+            {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
           </button>
-        </Link>
+          <Link href="/apply">
+            <button
+              className="text-sm px-4 py-2 rounded-lg font-semibold transition-colors"
+              style={{ backgroundColor: "#c1f11d", color: "#111" }}
+            >
+              {t("faq.apply")}
+            </button>
+          </Link>
+        </div>
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-10 space-y-12">

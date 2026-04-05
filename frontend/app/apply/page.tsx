@@ -8,7 +8,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle, ArrowLeft, Upload, AlertTriangle, X, ChevronDown, User, Phone, GraduationCap, ClipboardList } from "lucide-react";
+import { CheckCircle, ArrowLeft, Upload, AlertTriangle, X, ChevronDown, User, Phone, GraduationCap, ClipboardList, Sun, Moon, Eye } from "lucide-react";
+import { useTheme } from "@/lib/theme";
+import { getAccessibilityMode, applyAccessibilityMode } from "@/lib/accessibility";
 
 const publicApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api",
@@ -436,6 +438,10 @@ const PERSONALITY_QUESTIONS = [
 ];
 
 export default function ApplyPage() {
+  const { theme, toggleTheme } = useTheme();
+  const [a11y, setA11y] = useState(false);
+  useEffect(() => { setA11y(getAccessibilityMode()); }, []);
+  const toggleA11y = () => { const next = !a11y; setA11y(next); applyAccessibilityMode(next); };
   const [majors, setMajors] = useState<MajorOption[]>([]);
   const [activeSection, setActiveSection] = useState<SectionId>("personal");
   const [form, setForm] = useState({
@@ -629,23 +635,38 @@ export default function ApplyPage() {
   const answeredCount = Object.keys(personalityAnswers).length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-gray-400 hover:text-gray-600">
+            <Link href="/" className="text-black/60 hover:text-black">
               <ArrowLeft size={20} />
             </Link>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">inVision U</h1>
-              <p className="text-xs text-gray-500">Application Form</p>
+              <h1 className="text-xl font-bold text-black">inVision U</h1>
+              <p className="text-xs text-black/60">Application Form</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleA11y}
+              className={`p-2 rounded-lg border transition-colors ${a11y ? "bg-blue-100 border-blue-300 text-blue-700" : "border-gray-300 text-black/50 hover:text-black/70"}`}
+              aria-label="Accessibility mode"
+              title="Accessibility mode"
+            >
+              <Eye size={16} />
+            </button>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg border border-gray-300 text-black/50 hover:text-black/70 transition-colors"
+              aria-label="Toggle theme"
+            >
+              {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
             <a
               href="mailto:info@invisionu.education?subject=Support&body=I have a question about the application process"
-              className="text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 transition-colors"
+              className="text-xs text-black/70 hover:text-black border border-gray-300 rounded-lg px-3 py-1.5 transition-colors"
             >
               Support
             </a>
@@ -655,7 +676,7 @@ export default function ApplyPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-6">
         {/* Section tabs */}
-        <div className="flex gap-1 mb-6 bg-white rounded-xl p-1 border overflow-x-auto">
+        <div className="flex gap-1 mb-6 bg-white rounded-xl p-1 border border-gray-200 overflow-x-auto">
           {SECTIONS.map((s) => {
             const Icon = s.icon;
             const isActive = activeSection === s.id;
@@ -665,8 +686,8 @@ export default function ApplyPage() {
                 onClick={() => setActiveSection(s.id)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-1 justify-center ${
                   isActive
-                    ? "text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "text-black shadow-sm"
+                    : "text-black/50 hover:text-black/70"
                 }`}
                 style={isActive ? { backgroundColor: "#c1f11d" } : undefined}
               >
@@ -683,10 +704,10 @@ export default function ApplyPage() {
               {/* ═══ SECTION 1: Personal Information ═══ */}
               {activeSection === "personal" && (
                 <div className="space-y-6">
-                  <h2 className="text-lg font-bold text-gray-900">Personal Information</h2>
+                  <h2 className="text-lg font-bold text-black">Personal Information</h2>
 
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Applicant details</h3>
+                    <h3 className="text-sm font-semibold text-black/80 mb-3">Applicant details</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label="Last Name *" htmlFor="last_name">
                         <Input id="last_name" value={form.last_name} onChange={(e) => update("last_name", e.target.value)} required />
@@ -703,12 +724,12 @@ export default function ApplyPage() {
                       <Field label="Gender *" htmlFor="gender">
                         <div className="relative">
                           <select value={form.gender} onChange={(e) => update("gender", e.target.value)} required
-                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                             <option value="">Select gender...</option>
                             <option value="Male">Male</option>
                             <option value="Female">Female</option>
                           </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                         </div>
                       </Field>
                       <Field label="Email *" htmlFor="email">
@@ -718,30 +739,30 @@ export default function ApplyPage() {
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Nationality and passport details</h3>
+                    <h3 className="text-sm font-semibold text-black/80 mb-3">Nationality and passport details</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label="Citizenship *" htmlFor="nationality">
                         <div className="relative">
                           <select value={form.nationality} onChange={(e) => update("nationality", e.target.value)} required
-                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                             {COUNTRIES.map((c) => (
                               <option key={c.code} value={c.name}>{c.flag} {c.name}</option>
                             ))}
                           </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                         </div>
                       </Field>
                       <Field label="Individual Identification Number (IIN) *" htmlFor="iin">
                         <Input id="iin" value={form.iin} onChange={(e) => update("iin", e.target.value.replace(/\D/g, "").slice(0, 12))}
                           placeholder="123456789012" maxLength={12} required />
-                        <p className="text-xs text-gray-400 mt-1">{form.iin.length}/12 digits</p>
+                        <p className="text-xs text-black/50 mt-1">{form.iin.length}/12 digits</p>
                       </Field>
                     </div>
                   </div>
 
                   {/* Photo upload */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Profile Photo</h3>
+                    <h3 className="text-sm font-semibold text-black/80 mb-2">Profile Photo</h3>
                     <div className="flex items-start gap-4">
                       {photoPreview ? (
                         <div className="relative">
@@ -753,12 +774,12 @@ export default function ApplyPage() {
                         </div>
                       ) : (
                         <button type="button" onClick={() => fileRef.current?.click()}
-                          className="w-24 h-24 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors">
+                          className="w-24 h-24 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 text-black/50 hover:border-gray-400 hover:text-black/70 transition-colors">
                           <Upload size={20} />
                           <span className="text-[10px]">Upload</span>
                         </button>
                       )}
-                      <p className="text-xs text-gray-500">Max 5 MB, JPEG or PNG</p>
+                      <p className="text-xs text-black/60">Max 5 MB, JPEG or PNG</p>
                     </div>
                     <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                   </div>
@@ -767,19 +788,19 @@ export default function ApplyPage() {
                   <Field label="Preferred Major *" htmlFor="major">
                     <div className="relative">
                       <select value={form.major} onChange={(e) => update("major", e.target.value)} required
-                        className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                        className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                         <option value="">Select a major...</option>
                         {majors.map((m) => (
                           <option key={m.tag} value={m.tag}>{m.tag} — {m.en}</option>
                         ))}
                       </select>
-                      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                     </div>
                   </Field>
 
                   {/* Disability */}
                   <Field label="Disability / Accessibility Needs" htmlFor="disability">
-                    <p className="text-xs text-gray-500 mb-2">Optional. Not used in scoring.</p>
+                    <p className="text-xs text-black/60 mb-2">Optional. Not used in scoring.</p>
                     <Textarea id="disability" rows={2} value={form.disability} onChange={(e) => update("disability", e.target.value)} />
                   </Field>
                 </div>
@@ -788,20 +809,20 @@ export default function ApplyPage() {
               {/* ═══ SECTION 2: Contact Information ═══ */}
               {activeSection === "contact" && (
                 <div className="space-y-6">
-                  <h2 className="text-lg font-bold text-gray-900">Contact Information</h2>
+                  <h2 className="text-lg font-bold text-black">Contact Information</h2>
 
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Home Address</h3>
+                    <h3 className="text-sm font-semibold text-black/80 mb-3">Home Address</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label="Country *" htmlFor="home_country">
                         <div className="relative">
                           <select value={form.home_country} onChange={(e) => update("home_country", e.target.value)} required
-                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                             {COUNTRIES.map((c) => (
                               <option key={c.code} value={c.name}>{c.flag} {c.name}</option>
                             ))}
                           </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                         </div>
                       </Field>
                       <Field label="City *" htmlFor="city">
@@ -811,7 +832,7 @@ export default function ApplyPage() {
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact details</h3>
+                    <h3 className="text-sm font-semibold text-black/80 mb-3">Contact details</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label="Mobile phone number *" htmlFor="phone">
                         <Input id="phone" type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="+7 777 123 4567" required />
@@ -833,12 +854,12 @@ export default function ApplyPage() {
               {/* ═══ SECTION 3: Education ═══ */}
               {activeSection === "education" && (
                 <div className="space-y-6">
-                  <h2 className="text-lg font-bold text-gray-900">Education</h2>
+                  <h2 className="text-lg font-bold text-black">Education</h2>
 
                   {/* YouTube */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">Personal Presentation</h3>
-                    <p className="text-xs text-gray-500 mb-3">Please submit the link to your video presentation.</p>
+                    <h3 className="text-sm font-semibold text-black/80 mb-1">Personal Presentation</h3>
+                    <p className="text-xs text-black/60 mb-3">Please submit the link to your video presentation.</p>
                     <Field label="YouTube link to your presentation *" htmlFor="youtube_url">
                       <Input id="youtube_url" type="url" value={form.youtube_url} onChange={(e) => update("youtube_url", e.target.value)}
                         placeholder="https://www.youtube.com/watch?v=..." required />
@@ -847,32 +868,32 @@ export default function ApplyPage() {
 
                   {/* English proficiency */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">English proficiency results</h3>
-                    <p className="text-xs text-gray-500 mb-3">Please submit the results of your English proficiency test.</p>
+                    <h3 className="text-sm font-semibold text-black/80 mb-1">English proficiency results</h3>
+                    <p className="text-xs text-black/60 mb-3">Please submit the results of your English proficiency test.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label="Exam *" htmlFor="exam_type">
                         <div className="relative">
                           <select value={form.exam_type} onChange={(e) => update("exam_type", e.target.value)} required
-                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                             <option value="">Select exam...</option>
                             <option value="IELTS">IELTS</option>
                             <option value="TOEFL">TOEFL</option>
                           </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                         </div>
                       </Field>
                       {form.exam_type === "IELTS" && (
                         <Field label="IELTS Score *" htmlFor="ielts_score">
                           <Input id="ielts_score" type="number" step="0.5" min="0" max="9" value={form.ielts_score}
                             onChange={(e) => update("ielts_score", e.target.value)} placeholder="e.g. 7.0" required />
-                          <p className="text-xs text-gray-400 mt-1">Minimum 6.0</p>
+                          <p className="text-xs text-black/50 mt-1">Minimum 6.0</p>
                         </Field>
                       )}
                       {form.exam_type === "TOEFL" && (
                         <Field label="TOEFL Score *" htmlFor="toefl_score">
                           <Input id="toefl_score" type="number" min="0" max="120" value={form.toefl_score}
                             onChange={(e) => update("toefl_score", e.target.value)} placeholder="e.g. 80" required />
-                          <p className="text-xs text-gray-400 mt-1">Minimum 60</p>
+                          <p className="text-xs text-black/50 mt-1">Minimum 60</p>
                         </Field>
                       )}
                     </div>
@@ -886,40 +907,40 @@ export default function ApplyPage() {
 
                   {/* Certificate */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">Certificate</h3>
+                    <h3 className="text-sm font-semibold text-black/80 mb-1">Certificate</h3>
                     <div className="grid grid-cols-1 gap-4">
                       <Field label="Certificate type *" htmlFor="certificate_type">
                         <div className="relative">
                           <select value={form.certificate_type} onChange={(e) => update("certificate_type", e.target.value)} required
-                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                            className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                             <option value="">Select type...</option>
                             <option value="UNT">UNT</option>
                             <option value="NIS 12 Grade Certificate">NIS 12 Grade Certificate</option>
                           </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                         </div>
                       </Field>
                       {form.certificate_type === "UNT" && (
                         <Field label="UNT Score *" htmlFor="unt_score">
                           <Input id="unt_score" type="number" min="0" max="140" value={form.unt_score || ""}
                             onChange={(e) => update("unt_score", e.target.value)} placeholder="e.g. 120" required />
-                          <p className="text-xs text-gray-400 mt-1">Maximum 140</p>
+                          <p className="text-xs text-black/50 mt-1">Maximum 140</p>
                         </Field>
                       )}
                       {form.certificate_type === "NIS 12 Grade Certificate" && (
                         <Field label="Minimum Grade *" htmlFor="nis_grade">
                           <div className="relative">
                             <select value={form.nis_grade || ""} onChange={(e) => update("nis_grade", e.target.value)} required
-                              className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                              className="w-full appearance-none bg-white border border-input rounded-lg px-3 py-2.5 pr-10 text-sm text-black focus:outline-none focus:ring-2 focus:ring-ring">
                               <option value="">Select grade...</option>
                               <option value="A">A</option>
                               <option value="B">B</option>
                               <option value="C">C</option>
                               <option value="D">D</option>
                             </select>
-                            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-black/50 pointer-events-none" />
                           </div>
-                          <p className="text-xs text-gray-400 mt-1">Minimum grade across subjects</p>
+                          <p className="text-xs text-black/50 mt-1">Minimum grade across subjects</p>
                         </Field>
                       )}
                       <FileUploadField label="Copy of your certificate *" file={certificateFile}
@@ -931,8 +952,8 @@ export default function ApplyPage() {
 
                   {/* Additional documents */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-1">Additional documents</h3>
-                    <p className="text-xs text-gray-500 mb-3">If you have any additional information about your educational background, you can upload it here.</p>
+                    <h3 className="text-sm font-semibold text-black/80 mb-1">Additional documents</h3>
+                    <p className="text-xs text-black/60 mb-3">If you have any additional information about your educational background, you can upload it here.</p>
                     <FileUploadField label="Documents" file={additionalDocsFile}
                       onClear={() => setAdditionalDocsFile(null)} onClickUpload={() => additionalDocsRef.current?.click()} />
                     <input ref={additionalDocsRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.heic" className="hidden"
@@ -950,10 +971,10 @@ export default function ApplyPage() {
                         placeholder="Clubs, volunteer work, sports, hobbies..." required />
                     </Field>
                     <Field label="Essay *" htmlFor="essay">
-                      <p className="text-xs text-gray-500 mb-2">Tell us about yourself, your experiences, and why you want to join inVision U.</p>
+                      <p className="text-xs text-black/60 mb-2">Tell us about yourself, your experiences, and why you want to join inVision U.</p>
                       <Textarea id="essay" rows={8} value={form.essay} onChange={(e) => update("essay", e.target.value)}
                         placeholder="Write your essay here..." required />
-                      <p className={`text-xs mt-1 ${form.essay.length < 50 && form.essay.length > 0 ? "text-red-500" : "text-gray-400"}`}>
+                      <p className={`text-xs mt-1 ${form.essay.length < 50 && form.essay.length > 0 ? "text-red-500" : "text-black/50"}`}>
                         {form.essay.length} characters (minimum 50)
                       </p>
                     </Field>
@@ -969,7 +990,7 @@ export default function ApplyPage() {
               {/* ═══ SECTION 4: Internal Test ═══ */}
               {activeSection === "test" && (
                 <div className="space-y-6">
-                  <h2 className="text-lg font-bold text-gray-900">Internal Test</h2>
+                  <h2 className="text-lg font-bold text-black">Internal Test</h2>
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <p className="text-sm text-blue-800 font-medium">This is a personality test.</p>
                     <p className="text-xs text-blue-700 mt-1">
@@ -978,12 +999,12 @@ export default function ApplyPage() {
                     </p>
                   </div>
 
-                  <p className="text-sm text-gray-500">Answered: {answeredCount}/40</p>
+                  <p className="text-sm text-black/60">Answered: {answeredCount}/40</p>
 
                   <div className="space-y-6">
                     {PERSONALITY_QUESTIONS.map((pq, qIdx) => (
                       <div key={qIdx} className="border rounded-lg p-4">
-                        <p className="text-sm font-medium text-gray-900 mb-3">{pq.q}</p>
+                        <p className="text-sm font-medium text-black mb-3">{pq.q}</p>
                         <div className="space-y-2">
                           {pq.options.map((opt, optIdx) => (
                             <label key={optIdx}
@@ -995,7 +1016,7 @@ export default function ApplyPage() {
                               <input type="radio" name={`q_${qIdx}`} checked={personalityAnswers[qIdx] === optIdx}
                                 onChange={() => setPersonalityAnswers({ ...personalityAnswers, [qIdx]: optIdx })}
                                 className="mt-0.5 accent-lime-500" />
-                              <span className="text-gray-700">{opt}</span>
+                              <span className="text-black/80">{opt}</span>
                             </label>
                           ))}
                         </div>
@@ -1013,7 +1034,7 @@ export default function ApplyPage() {
               <label className="flex items-start gap-3 cursor-pointer">
                 <input type="checkbox" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)}
                   className="mt-1 accent-lime-500" />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-black/80">
                   By submitting this form, you agree to the processing of your personal data in accordance with our Privacy Policy
                   <span className="text-red-500 ml-0.5">*</span>
                 </span>
@@ -1022,7 +1043,7 @@ export default function ApplyPage() {
               <label className="flex items-start gap-3 cursor-pointer">
                 <input type="checkbox" checked={agreeAge} onChange={(e) => setAgreeAge(e.target.checked)}
                   className="mt-1 accent-lime-500" />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-black/80">
                   If the participant is under the age of 18, this questionnaire must be completed by their parent or legal guardian.
                   By proceeding, you confirm that you are either (a) the participant aged 18 or older, or (b) the parent or legal
                   guardian completing this form on behalf of a minor.
@@ -1044,7 +1065,7 @@ export default function ApplyPage() {
           </Card>
         </form>
 
-        <p className="text-center text-gray-400 text-xs pb-6">
+        <p className="text-center text-black/50 text-xs pb-6">
           inVision U Admissions &mdash; Powered by AI screening technology
         </p>
       </div>
@@ -1057,7 +1078,7 @@ function Field({ label, htmlFor, children }: { label: string; htmlFor: string; c
   const labelText = hasAsterisk ? label.replace(" *", "").replace("*", "") : label;
   return (
     <div>
-      <Label htmlFor={htmlFor} className="text-sm font-medium text-gray-900 mb-1 block">
+      <Label htmlFor={htmlFor} className="text-sm font-medium text-black mb-1 block">
         {labelText}{hasAsterisk && <span className="text-red-500 ml-0.5">*</span>}
       </Label>
       {children}
@@ -1072,22 +1093,22 @@ function FileUploadField({ label, file, onClear, onClickUpload }: {
   const labelText = hasAsterisk ? label.replace(" *", "").replace("*", "") : label;
   return (
     <div>
-      <p className="text-sm font-medium text-gray-900 mb-1">
+      <p className="text-sm font-medium text-black mb-1">
         {labelText}{hasAsterisk && <span className="text-red-500 ml-0.5">*</span>}
       </p>
       {file ? (
-        <div className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50">
-          <span className="text-sm text-gray-700 flex-1 truncate">{file.name}</span>
+        <div className="flex items-center gap-3 p-3 border rounded-lg bg-white">
+          <span className="text-sm text-black/80 flex-1 truncate">{file.name}</span>
           <button type="button" onClick={onClear} className="text-red-500 hover:text-red-700">
             <X size={16} />
           </button>
         </div>
       ) : (
         <button type="button" onClick={onClickUpload}
-          className="w-full p-4 border-2 border-dashed rounded-lg flex flex-col items-center gap-1 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors">
+          className="w-full p-4 border-2 border-dashed rounded-lg flex flex-col items-center gap-1 text-black/50 hover:border-gray-400 hover:text-black/70 transition-colors">
           <Upload size={20} />
           <span className="text-xs">Click to upload or drag and drop</span>
-          <span className="text-[10px] text-gray-400">JPG, JPEG, PNG, HEIC, PDF. Max 10 MB</span>
+          <span className="text-[10px] text-black/50">JPG, JPEG, PNG, HEIC, PDF. Max 10 MB</span>
         </button>
       )}
     </div>

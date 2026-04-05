@@ -283,22 +283,82 @@ func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript 
 
 	transcript, err = FetchTranscript(videoID)
 	if err != nil {
-		// Fallback 1: try yt-dlp subtitle extraction (more reliable than page scraping)
-		transcript, err = FetchTranscriptViaYtDlpSubs(videoID)
+		// Fallback 1: try innertube API
+		transcript, err = FetchTranscriptViaInnertube(videoID)
 		if err != nil {
-			// Fallback 2: audio-based transcription if STT is configured
-			if sttAPIKey != "" {
-				transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
-				if err != nil {
-					return "", true, fmt.Errorf("captions unavailable, audio transcription failed: %w", err)
+			// Fallback 2: try yt-dlp subtitle extraction
+			transcript, err = FetchTranscriptViaYtDlpSubs(videoID)
+			if err != nil {
+				// Fallback 3: audio-based transcription if STT is configured
+				if sttAPIKey != "" {
+					transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
+					if err != nil {
+						return "", true, fmt.Errorf("captions unavailable, audio transcription failed: %w", err)
+					}
+					return transcript, true, nil
 				}
-				return transcript, true, nil
+				return "", true, fmt.Errorf("no captions available (configure WHISPER_API_KEY to enable audio transcription)")
 			}
-			return "", true, fmt.Errorf("no captions available (configure WHISPER_API_KEY to enable audio transcription)")
 		}
 	}
 
 	return transcript, true, nil
+}
+
+// FetchTranscriptViaInnertube uses YouTube's internal innertube API to fetch captions.
+// This bypasses page scraping and works even when the watch page structure changes.
+func FetchTranscriptViaInnertube(videoID string) (string, error) {
+	payload := fmt.Sprintf(`{
+		"context": {
+			"client": {
+				"clientName": "WEB",
+				"clientVersion": "2.20240101.00.00",
+				"hl": "en"
+			}
+		},
+		"videoId": "%s"
+	}`, videoID)
+
+	req, err := http.NewRequest("POST", "https://www.youtube.com/youtubei/v1/player?prettyPrint=false", strings.NewReader(payload))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("innertube request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		Captions struct {
+			PlayerCaptionsTracklistRenderer struct {
+				CaptionTracks []captionTrack `json:"captionTracks"`
+			} `json:"playerCaptionsTracklistRenderer"`
+		} `json:"captions"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse innertube response: %w", err)
+	}
+
+	tracks := result.Captions.PlayerCaptionsTracklistRenderer.CaptionTracks
+	if len(tracks) == 0 {
+		return "", fmt.Errorf("no captions found via innertube for video %s", videoID)
+	}
+
+	best := chooseBestTrack(tracks)
+	if best == nil {
+		return "", fmt.Errorf("no suitable caption track found")
+	}
+
+	return fetchTimedText(best.BaseURL)
 }
 
 // FetchTranscriptViaYtDlpSubs uses yt-dlp to download subtitles (more reliable than page scraping).

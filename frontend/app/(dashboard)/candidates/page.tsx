@@ -480,15 +480,17 @@ export default function CandidatesPage() {
             >
               Auto-accept Top N
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-              onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
-              disabled={batchRunning}
-            >
-              <Trash2 size={14} className="mr-1" /> {t("cand.reset")}
-            </Button>
+            {user?.role === "superadmin" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                onClick={() => { setDeleteConfirmText(""); setDeleteDialogOpen(true); }}
+                disabled={batchRunning}
+              >
+                <Trash2 size={14} className="mr-1" /> {t("cand.reset")}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -666,6 +668,7 @@ export default function CandidatesPage() {
               <SortableHead column="final_score" label={t("cand.score")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <SortableHead column="net_score" label="Votes" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>{t("cand.status")}</TableHead>
+              <SortableHead column="review_complexity" label="Complexity" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <SortableHead column="created_at" label={t("cand.created")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <SortableHead column="analyzed_at" label={t("cand.analyzed_col")} sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
               <TableHead>{t("cand.model")}</TableHead>
@@ -682,7 +685,7 @@ export default function CandidatesPage() {
               ))
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground">
                   {t("cand.no_found")}
                 </TableCell>
               </TableRow>
@@ -738,6 +741,17 @@ export default function CandidatesPage() {
                     )}
                   </TableCell>
                   <TableCell><StatusBadge status={c.status} /></TableCell>
+                  <TableCell className="text-sm text-muted-foreground text-center">
+                    {c.review_complexity != null ? (
+                      <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                        c.review_complexity >= 0.7 ? "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-900/30" :
+                        c.review_complexity >= 0.4 ? "text-yellow-700 bg-yellow-100 dark:text-yellow-300 dark:bg-yellow-900/30" :
+                        "text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-900/30"
+                      }`}>
+                        {(c.review_complexity * 100).toFixed(0)}%
+                      </span>
+                    ) : "—"}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     <div>{new Date(c.created_at).toLocaleDateString()}</div>
                     <div className="text-xs">{new Date(c.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
