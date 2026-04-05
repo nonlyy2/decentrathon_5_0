@@ -174,6 +174,7 @@ func main() {
 		// Stats / Export / Bulk
 		protected.GET("/stats", handlers.GetDashboardStats(pool))
 		protected.POST("/analyze-all", middleware.TechAdminRestricted(), handlers.AnalyzeAllPending(pool, aiProviders, batchProviders, defaultProvider))
+		protected.POST("/reanalyze-all", middleware.TechAdminRestricted(), handlers.AnalyzeAllCandidates(pool, aiProviders, batchProviders, defaultProvider))
 		protected.POST("/analyze-all/stop", handlers.StopBatch())
 		protected.GET("/analyze-all/status", handlers.GetBatchStatus())
 		protected.POST("/candidates/ai-recommend", handlers.RecommendCandidates(pool, textGens, defaultProvider))

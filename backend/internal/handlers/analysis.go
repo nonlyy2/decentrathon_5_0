@@ -536,6 +536,209 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 	}
 }
 
+func AnalyzeAllCandidates(pool *pgxpool.Pool, providers AIProviders, batchProviders AIBatchProviders, defaultProvider string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if middleware.IsRole(c, "auditor") {
+			c.JSON(403, gin.H{"error": "auditors cannot trigger AI analysis"})
+			return
+		}
+		analyzeFunc, ok := resolveProvider(c, providers, defaultProvider)
+		if !ok {
+			return
+		}
+		if analyzeFunc == nil {
+			c.JSON(503, gin.H{"error": "AI provider not configured"})
+			return
+		}
+		providerName := c.Query("provider")
+		if providerName == "" {
+			providerName = defaultProvider
+		}
+		batchFunc := batchProviders[providerName]
+
+		batchStatus.Lock()
+		if batchStatus.Running {
+			batchStatus.Unlock()
+			c.JSON(409, gin.H{"error": "batch analysis already running"})
+			return
+		}
+		batchStatus.Unlock()
+
+		rows, err := pool.Query(c.Request.Context(),
+			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, created_at, status
+			 FROM candidates`)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to query candidates"})
+			return
+		}
+
+		var candidates []models.Candidate
+		for rows.Next() {
+			var cand models.Candidate
+			if err := rows.Scan(&cand.ID, &cand.FullName, &cand.Email, &cand.Phone, &cand.Telegram, &cand.Age, &cand.City,
+				&cand.School, &cand.GraduationYear, &cand.Achievements, &cand.Extracurriculars,
+				&cand.Essay, &cand.MotivationStatement, &cand.Disability, &cand.CreatedAt, &cand.Status); err == nil {
+				candidates = append(candidates, cand)
+			}
+		}
+		rows.Close()
+
+		if len(candidates) == 0 {
+			c.JSON(200, gin.H{"message": "no candidates found", "count": 0})
+			return
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		batchCancel = cancel
+
+		batchStatus.Lock()
+		batchStatus.Running = true
+		batchStatus.Processed = 0
+		batchStatus.Total = len(candidates)
+		batchStatus.Errors = []string{}
+		batchStatus.Unlock()
+
+		const batchSize = 5
+		const maxConcurrent = 5
+
+		go func() {
+			defer func() {
+				cancel()
+				batchStatus.Lock()
+				batchStatus.Running = false
+				batchStatus.Unlock()
+			}()
+
+			isRateLimited := func(err error) bool {
+				msg := err.Error()
+				return strings.Contains(msg, "429") || strings.Contains(msg, "RESOURCE_EXHAUSTED") ||
+					strings.Contains(msg, "rate-limited") || strings.Contains(msg, "rate limit")
+			}
+
+			var batches [][]models.Candidate
+			for i := 0; i < len(candidates); i += batchSize {
+				end := i + batchSize
+				if end > len(candidates) {
+					end = len(candidates)
+				}
+				batches = append(batches, candidates[i:end])
+			}
+
+			type batchResult struct {
+				analyses []*models.Analysis
+				batch    []models.Candidate
+				err      error
+				batchIdx int
+			}
+
+			sem := make(chan struct{}, maxConcurrent)
+			results := make(chan batchResult, len(batches))
+			rateLimitHit := false
+
+			var wg sync.WaitGroup
+			for idx, b := range batches {
+				if rateLimitHit {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					batchStatus.Lock()
+					batchStatus.Errors = append(batchStatus.Errors, "batch stopped by user")
+					batchStatus.Unlock()
+					goto done
+				default:
+				}
+				wg.Add(1)
+				sem <- struct{}{}
+				go func(bIdx int, batch []models.Candidate) {
+					defer wg.Done()
+					defer func() { <-sem }()
+					if batchFunc != nil {
+						analyses, err := batchFunc(ctx, batch)
+						results <- batchResult{analyses: analyses, batch: batch, err: err, batchIdx: bIdx}
+					} else {
+						var analyses []*models.Analysis
+						for i := range batch {
+							select {
+							case <-ctx.Done():
+								return
+							default:
+							}
+							a, err := analyzeFunc(ctx, &batch[i])
+							if err != nil {
+								results <- batchResult{err: err, batch: batch[i : i+1], batchIdx: bIdx}
+								if isRateLimited(err) {
+									return
+								}
+								continue
+							}
+							analyses = append(analyses, a)
+						}
+						results <- batchResult{analyses: analyses, batch: batch, err: nil, batchIdx: bIdx}
+					}
+				}(idx, b)
+			}
+
+		done:
+			go func() {
+				wg.Wait()
+				close(results)
+			}()
+
+			processedCount := 0
+			for r := range results {
+				if r.err != nil {
+					if isRateLimited(r.err) {
+						rateLimitHit = true
+						batchStatus.Lock()
+						batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("rate limit hit at batch %d: %v", r.batchIdx, r.err))
+						batchStatus.Unlock()
+					} else {
+						for i := range r.batch {
+							select {
+							case <-ctx.Done():
+								processedCount++
+								continue
+							default:
+							}
+							a, err2 := analyzeFunc(ctx, &r.batch[i])
+							processedCount++
+							if err2 != nil {
+								batchStatus.Lock()
+								batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d: %v", r.batch[i].ID, err2))
+								batchStatus.Unlock()
+								continue
+							}
+							if err2 = SaveAnalysis(ctx, pool, a); err2 != nil {
+								batchStatus.Lock()
+								batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", r.batch[i].ID, err2))
+								batchStatus.Unlock()
+							}
+						}
+					}
+				} else {
+					for j, a := range r.analyses {
+						processedCount++
+						if a == nil || j >= len(r.batch) {
+							continue
+						}
+						if err2 := SaveAnalysis(ctx, pool, a); err2 != nil {
+							batchStatus.Lock()
+							batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("candidate %d save: %v", r.batch[j].ID, err2))
+							batchStatus.Unlock()
+						}
+					}
+				}
+				batchStatus.Lock()
+				batchStatus.Processed = processedCount
+				batchStatus.Unlock()
+			}
+		}()
+
+		c.JSON(202, gin.H{"message": "batch re-analysis started", "count": len(candidates)})
+	}
+}
+
 // AITextGenerators maps provider names to a raw text-generation function
 type AITextGenerators map[string]func(ctx context.Context, systemPrompt, userMsg string) (string, error)
 

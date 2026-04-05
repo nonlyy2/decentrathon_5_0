@@ -413,6 +413,21 @@ export default function CandidatesPage() {
     }
   };
 
+  const handleReanalyzeAll = async () => {
+    try {
+      const qs = provider ? `?provider=${provider}` : "";
+      const res = await api.post(`/reanalyze-all${qs}`);
+      if (!res.data.count) { toast.info("No candidates found to re-analyze"); return; }
+      toast.success(`Re-analysis started for ${res.data.count} candidates`);
+      setBatchRunning(true);
+      setBatchProgress({ done: 0, total: res.data.count });
+      startBatchPoll();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg ? `Error: ${msg}` : "Failed to start re-analysis");
+    }
+  };
+
   const handleSort = (column: string) => {
     if (sortBy === column) setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     else { setSortBy(column); setSortOrder("desc"); }
@@ -457,13 +472,22 @@ export default function CandidatesPage() {
                 </Button>
               </div>
             ) : (
-              <Button
-                size="sm"
-                onClick={handleAnalyzeAll}
-                style={{ backgroundColor: "#c1f11d", color: "#111" }}
-              >
-                <Play size={14} className="mr-1" /> {t("cand.analyze_all")}
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  onClick={handleAnalyzeAll}
+                  style={{ backgroundColor: "#c1f11d", color: "#111" }}
+                >
+                  <Play size={14} className="mr-1" /> {t("cand.analyze_all")}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleReanalyzeAll}
+                  variant="outline"
+                >
+                  <Play size={14} className="mr-1" /> {t("cand.reanalyze_all")}
+                </Button>
+              </>
             )}
 
             <Button size="sm" variant="outline" onClick={handleExportCSV}>

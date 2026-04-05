@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"/c/Users/User/Desktop/nicethings/decentrathon/decentrathon_5_0/frontend/app/\\(dashboard\\)/\")",
+      "Bash(ls -la \"/c/Users/User/Desktop/nicethings/decentrathon/decentrathon_5_0/frontend/app/\\(dashboard\\)/candidates/\")",
+      "Bash(cat \"/c/Users/User/Desktop/nicethings/decentrathon/decentrathon_5_0/frontend/app/\\(dashboard\\)/candidates/page.tsx\")",
+      "Bash(xargs grep:*)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+    ]
+  }
+}
