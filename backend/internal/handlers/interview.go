@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// CreateTelegramInvite generates a deep-link for a candidate's Telegram interview.
+// CreateTelegramInvite — генерирует deep-link для Telegram-интервью кандидата.
 // POST /candidates/:id/telegram-invite
 func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -20,7 +20,7 @@ func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFun
 			return
 		}
 
-		// Check candidate exists and has Stage 1 score >= 65 (Recommended+)
+		// Кандидат должен существовать и иметь Stage 1 score >= 65
 		var status string
 		var finalScore *float64
 		var interviewStatus string
@@ -45,7 +45,7 @@ func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFun
 			return
 		}
 
-		// Create or get existing invite
+		// Создание или сброс существующего инвайта
 		var token string
 		err = pool.QueryRow(c.Request.Context(), `
 			INSERT INTO telegram_invites (candidate_id)
@@ -64,7 +64,7 @@ func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFun
 			return
 		}
 
-		// Update candidate interview status
+		// Обновление статуса интервью кандидата
 		pool.Exec(c.Request.Context(), `
 			UPDATE candidates SET interview_status = 'invited' WHERE id = $1`, candidateID)
 
@@ -81,7 +81,7 @@ func CreateTelegramInvite(pool *pgxpool.Pool, botUsername string) gin.HandlerFun
 	}
 }
 
-// GetInterviewStatus returns the interview status and results for a candidate.
+// GetInterviewStatus — статус и результаты интервью кандидата.
 // GET /candidates/:id/interview
 func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -91,7 +91,7 @@ func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc 
 			return
 		}
 
-		// Get interview info
+		// Данные интервью
 		var interview struct {
 			ID             int     `json:"id"`
 			Status         string  `json:"status"`
@@ -109,7 +109,7 @@ func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc 
 			&interview.QuestionsAsked, &interview.StartedAt, &interview.CompletedAt,
 			&interview.CurrentTopic)
 		if err != nil {
-			// No interview yet — check for invite
+			// Интервью нет — проверяем инвайт
 			var inviteStatus *string
 			var token *string
 			pool.QueryRow(c.Request.Context(), `
@@ -136,7 +136,7 @@ func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc 
 			"interview": interview,
 		}
 
-		// Get analysis if completed (or if interview finished but status not yet updated)
+		// Анализ интервью (если есть)
 		{
 			var analysis struct {
 				ScoreLeadership        int      `json:"score_leadership"`
@@ -185,7 +185,7 @@ func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc 
 				&analysis.ExplanationAuthenticity, &analysis.ExplanationMotivation,
 				&analysis.ExplanationVision)
 			if err == nil {
-				// Parse suspicion flags from JSONB
+				// Парсинг suspicion_flags из JSONB
 				var flags []string
 				json.Unmarshal([]byte(analysis.SuspicionFlags), &flags)
 
@@ -213,7 +213,7 @@ func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc 
 				}
 			}
 
-			// Get combined score
+			// Комбинированный балл
 			var combinedScore *float64
 			pool.QueryRow(c.Request.Context(), `
 				SELECT combined_score FROM candidates WHERE id = $1`, candidateID).Scan(&combinedScore)
@@ -224,7 +224,7 @@ func GetInterviewStatus(pool *pgxpool.Pool, botUsername string) gin.HandlerFunc 
 	}
 }
 
-// ForceEvaluateInterview triggers evaluation for an interview that finished but wasn't evaluated.
+// ForceEvaluateInterview — запускает оценку завершённого интервью без анализа.
 // POST /candidates/:id/interview/evaluate
 func ForceEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, candidateID int) error) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -234,7 +234,7 @@ func ForceEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, can
 			return
 		}
 
-		// Check interview exists
+		// Проверка существования интервью
 		var interviewID int
 		var status string
 		err = pool.QueryRow(c.Request.Context(),
@@ -244,7 +244,7 @@ func ForceEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, can
 			return
 		}
 
-		// Check if already has analysis
+		// Уже есть анализ?
 		var hasAnalysis bool
 		pool.QueryRow(c.Request.Context(),
 			`SELECT EXISTS(SELECT 1 FROM interview_analyses WHERE candidate_id = $1)`, candidateID).Scan(&hasAnalysis)
@@ -254,7 +254,7 @@ func ForceEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, can
 			return
 		}
 
-		// Launch evaluation async
+		// Асинхронный запуск оценки
 		go func() {
 			log.Printf("Force evaluation starting for interview %d (candidate %d)", interviewID, candidateID)
 			if err := evaluateFn(interviewID, candidateID); err != nil {
@@ -268,7 +268,7 @@ func ForceEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, can
 	}
 }
 
-// ReEvaluateInterview re-runs evaluation for an interview (overwrites existing analysis).
+// ReEvaluateInterview — повторная оценка интервью (перезаписывает анализ).
 // POST /candidates/:id/interview/re-evaluate
 func ReEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, candidateID int) error) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -299,7 +299,7 @@ func ReEvaluateInterview(pool *pgxpool.Pool, evaluateFn func(interviewID, candid
 	}
 }
 
-// GetInterviewTranscript returns the full message history for an interview.
+// GetInterviewTranscript — полная история сообщений интервью.
 // GET /candidates/:id/interview/messages
 func GetInterviewTranscript(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -351,7 +351,7 @@ func GetInterviewTranscript(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// DeleteInterviewAnalysis deletes the AI analysis for a candidate's Telegram interview.
+// DeleteInterviewAnalysis — удаляет AI-анализ интервью кандидата.
 // DELETE /candidates/:id/interview/analysis
 func DeleteInterviewAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -366,15 +366,14 @@ func DeleteInterviewAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "interview analysis not found"})
 			return
 		}
-		// Reset combined score
+		// Сброс комбинированного балла
 		pool.Exec(c.Request.Context(),
 			`UPDATE candidates SET combined_score = NULL WHERE id = $1`, candidateID)
 		c.JSON(http.StatusOK, gin.H{"message": "interview analysis deleted"})
 	}
 }
 
-// EvaluateAllPendingInterviews triggers AI evaluation for all interviews that are completed
-// but have no interview_analyses record yet.
+// EvaluateAllPendingInterviews — запускает AI-оценку для всех завершённых интервью без анализа.
 // POST /interviews/evaluate-all-pending
 func EvaluateAllPendingInterviews(pool *pgxpool.Pool, evaluateFn func(interviewID, candidateID int) error) gin.HandlerFunc {
 	return func(c *gin.Context) {

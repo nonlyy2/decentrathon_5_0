@@ -15,8 +15,8 @@ type BulkDecisionRequest struct {
 	Notes        string `json:"notes"`
 }
 
-// decisionsWithRecord are decision types that get recorded in committee_decisions.
-// "pending" is a status reset only — no decision record is created.
+// decisionsWithRecord — типы решений, записываемых в committee_decisions.
+// "pending" — только сброс статуса, запись не создаётся.
 var decisionsWithRecord = map[string]bool{
 	"shortlist": true,
 	"reject":    true,
@@ -54,7 +54,7 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		success := 0
 		for _, id := range req.CandidateIDs {
-			// Only insert/update a committee_decisions record for decisions that require one.
+			// Запись в committee_decisions только для нужных типов решений.
 			if decisionsWithRecord[req.Decision] {
 				_, err := pool.Exec(ctx,
 					`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by)
@@ -66,7 +66,7 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 				}
 			}
 
-			// For vote-only decisions (upvote/downvote), skip the status update.
+			// upvote/downvote не меняют статус кандидата.
 			if newStatus == "" {
 				success++
 				continue
@@ -86,7 +86,7 @@ func BulkDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// AutoAcceptRequest defines the request body for auto-accepting top N candidates.
+// AutoAcceptRequest — тело запроса для авто-шортлиста топ-N кандидатов.
 type AutoAcceptRequest struct {
 	Count    int      `json:"count" binding:"required,min=1"`
 	Major    string   `json:"major"`
@@ -96,8 +96,7 @@ type AutoAcceptRequest struct {
 	MaxAge   *int     `json:"max_age"`
 }
 
-// AutoAcceptTopN automatically shortlists the top N analyzed candidates by score,
-// respecting any active filters passed from the frontend.
+// AutoAcceptTopN — шортлистит топ-N проанализированных кандидатов с учётом фильтров.
 func AutoAcceptTopN(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if middleware.IsRole(c, "auditor") {

@@ -19,12 +19,12 @@ import (
 
 const maxPhotoSize = 5 << 20 // 5 MB
 
-// UploadCandidatePhoto uploads a photo, runs AI detection, saves result
+// UploadCandidatePhoto загружает фото, запускает AI-детекцию, сохраняет результат
 func UploadCandidatePhoto(pool *pgxpool.Pool, uploadDir, geminiAPIKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID := c.Param("id")
 
-		// Parse multipart form
+		// Парсим multipart form
 		if err := c.Request.ParseMultipartForm(maxPhotoSize); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "file too large (max 5 MB)"})
 			return
@@ -37,21 +37,21 @@ func UploadCandidatePhoto(pool *pgxpool.Pool, uploadDir, geminiAPIKey string) gi
 		}
 		defer file.Close()
 
-		// Validate content type
+		// Проверяем тип контента
 		contentType := header.Header.Get("Content-Type")
 		if !strings.HasPrefix(contentType, "image/") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "only image files are accepted"})
 			return
 		}
 
-		// Read file bytes
+		// Читаем файл
 		fileBytes, err := io.ReadAll(io.LimitReader(file, maxPhotoSize))
 		if err != nil {
 			c.JSON(500, gin.H{"error": "failed to read file"})
 			return
 		}
 
-		// Save file to disk
+		// Сохраняем на диск
 		if err := os.MkdirAll(uploadDir, 0755); err != nil {
 			c.JSON(500, gin.H{"error": "failed to create upload directory"})
 			return
@@ -71,14 +71,14 @@ func UploadCandidatePhoto(pool *pgxpool.Pool, uploadDir, geminiAPIKey string) gi
 
 		photoURL := "/uploads/" + filename
 
-		// Run AI photo detection (async, non-blocking for score)
+		// AI-детекция фото
 		aiFlag := false
 		aiNote := ""
 		if geminiAPIKey != "" {
 			aiFlag, aiNote = detectAIGeneratedPhoto(c.Request.Context(), fileBytes, contentType, geminiAPIKey)
 		}
 
-		// Update candidate record
+		// Обновляем запись кандидата
 		_, err = pool.Exec(c.Request.Context(),
 			`UPDATE candidates SET photo_url = $1, photo_ai_flag = $2, photo_ai_note = $3 WHERE id = $4`,
 			photoURL, aiFlag, nilIfEmpty(aiNote), candidateID)
@@ -104,7 +104,7 @@ func nilIfEmpty(s string) *string {
 
 const maxDocSize = 10 << 20 // 10 MB
 
-// UploadCandidateDocument uploads a document (cert, english cert, additional docs)
+// UploadCandidateDocument загружает документ (сертификат, english cert, доп. документы)
 func UploadCandidateDocument(pool *pgxpool.Pool, uploadDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID := c.Param("id")
@@ -251,7 +251,7 @@ Do not include any other text.`
 	}
 
 	text := strings.TrimSpace(vr.Candidates[0].Content.Parts[0].Text)
-	// Remove possible markdown code fences
+	// Убираем markdown-обёртку если есть
 	text = strings.TrimPrefix(text, "```json")
 	text = strings.TrimPrefix(text, "```")
 	text = strings.TrimSuffix(text, "```")

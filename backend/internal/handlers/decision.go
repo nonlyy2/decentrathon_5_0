@@ -12,12 +12,12 @@ import (
 
 const reviewThreshold = 4
 
-// upvoteThreshold: net score (upvotes - downvotes) needed for auto-shortlist
+// upvoteThreshold — нетто-счёт (upvotes - downvotes) для авто-шортлиста
 const upvoteThreshold = 3
 
 func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Auditors cannot make decisions — they are read-only observers
+		// Аудиторы — только чтение
 		if middleware.IsRole(c, "auditor") {
 			c.JSON(403, gin.H{"error": "auditors cannot make decisions on candidates"})
 			return
@@ -37,7 +37,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		userID, _ := c.Get("user_id")
 
-		// Verify candidate exists
+		// Проверка существования кандидата
 		var exists bool
 		pool.QueryRow(c.Request.Context(),
 			`SELECT EXISTS(SELECT 1 FROM candidates WHERE id = $1)`, candidateID).Scan(&exists)
@@ -46,13 +46,13 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Check if this user already voted on this candidate
+		// Проверка: пользователь уже голосовал?
 		var existingVote int
 		err = pool.QueryRow(c.Request.Context(),
 			`SELECT id FROM committee_decisions WHERE candidate_id = $1 AND decided_by = $2`,
 			candidateID, userID).Scan(&existingVote)
 		if err == nil {
-			// User already voted — update their vote
+			// Обновляем существующий голос
 			_, err = pool.Exec(c.Request.Context(),
 				`UPDATE committee_decisions SET decision = $1, notes = $2, decided_at = NOW()
 				 WHERE candidate_id = $3 AND decided_by = $4`,
@@ -62,7 +62,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 				return
 			}
 		} else {
-			// Insert new decision
+			// Новое решение
 			_, err = pool.Exec(c.Request.Context(),
 				`INSERT INTO committee_decisions (candidate_id, decision, notes, decided_by)
 				 VALUES ($1, $2, $3, $4)`,
@@ -73,7 +73,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Count total unique reviewers and tally votes
+		// Подсчёт голосов
 		type voteCount struct {
 			Decision string
 			Count    int
@@ -97,7 +97,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Determine if consensus reached
+		// Проверка консенсуса
 		statusMap := map[string]string{
 			"shortlist": "shortlisted",
 			"reject":    "rejected",
@@ -108,7 +108,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 		consensusReached := false
 		var winningDecision string
 
-		// Check for upvote/downvote net score
+		// Нетто-счёт upvote/downvote
 		var upvotes, downvotes int
 		hasVoteSystem := false
 		for _, v := range votes {
@@ -135,7 +135,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 					`UPDATE candidates SET status = 'rejected' WHERE id = $1`, candidateID)
 			}
 		} else if totalVotes >= reviewThreshold {
-			// Legacy: find majority decision among shortlist/reject/waitlist/review
+			// Устаревший режим: большинство голосов среди shortlist/reject/waitlist/review
 			maxCount := 0
 			for _, v := range votes {
 				if v.Count > maxCount {
@@ -149,7 +149,7 @@ func MakeDecision(pool *pgxpool.Pool) gin.HandlerFunc {
 				`UPDATE candidates SET status = $1 WHERE id = $2`, newStatus, candidateID)
 		}
 
-		// Get updated decision list for response
+		// Актуальный список решений для ответа
 		decRows, _ := pool.Query(c.Request.Context(),
 			`SELECT cd.id, cd.candidate_id, cd.decision, cd.notes, cd.decided_by, u.email, cd.decided_at
 			 FROM committee_decisions cd
@@ -207,7 +207,7 @@ func GetDecisions(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Count votes summary
+		// Сводка голосов
 		var totalVotes int
 		type voteCount struct {
 			Decision string `json:"decision"`

@@ -84,7 +84,7 @@ func AddComment(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Get user email
+		// Email автора комментария
 		pool.QueryRow(c.Request.Context(), `SELECT email FROM users WHERE id = $1`, userID).Scan(&cm.UserEmail)
 
 		c.JSON(http.StatusCreated, cm)
@@ -102,7 +102,7 @@ func DeleteComment(pool *pgxpool.Pool) gin.HandlerFunc {
 		userID, _ := c.Get("user_id")
 		userRole, _ := c.Get("user_role")
 
-		// Only allow deleting own comments or admin
+		// Удалять можно только свои комментарии (или admin — любые)
 		query := `DELETE FROM comments WHERE id = $1 AND user_id = $2`
 		args := []interface{}{commentID, userID}
 		if userRole == "admin" {

@@ -23,7 +23,7 @@ func (e *EmailService) Enabled() bool {
 	return e.cfg.SMTPHost != "" && e.cfg.SMTPUser != ""
 }
 
-// SendApplicationReceived — confirmation email to candidate after apply
+// SendApplicationReceived — подтверждение получения заявки
 func (e *EmailService) SendApplicationReceived(toEmail, fullName string, candidateID int) error {
 	subject := "Your inVision U Application Has Been Received"
 	body := fmt.Sprintf(`Dear %s,
@@ -48,7 +48,7 @@ inVision U Admissions Team`, fullName, candidateID)
 	return e.sendEmail(toEmail, subject, body, "application_received", candidateID)
 }
 
-// SendShortlistNotification — notify candidate they've been shortlisted
+// SendShortlistNotification — уведомление о попадании в шортлист
 func (e *EmailService) SendShortlistNotification(toEmail, fullName string, candidateID int) error {
 	subject := "Congratulations! You Have Been Shortlisted — inVision U"
 	body := fmt.Sprintf(`Dear %s,
@@ -70,7 +70,7 @@ inVision U Admissions Team`, fullName)
 	return e.sendEmail(toEmail, subject, body, "shortlisted", candidateID)
 }
 
-// SendInterviewInvite — notify candidate about Telegram interview invite
+// SendInterviewInvite — приглашение на Telegram-интервью
 func (e *EmailService) SendInterviewInvite(toEmail, fullName, deepLink string, candidateID int) error {
 	subject := "Stage 2 Interview Invitation — inVision U"
 	body := fmt.Sprintf(`Dear %s,
@@ -97,7 +97,7 @@ inVision U Admissions Team`, fullName, deepLink)
 	return e.sendEmail(toEmail, subject, body, "interview_invite", candidateID)
 }
 
-// SendRejectionNotification — notify candidate of rejection
+// SendRejectionNotification — уведомление об отказе
 func (e *EmailService) SendRejectionNotification(toEmail, fullName string, candidateID int) error {
 	subject := "inVision U Application Update"
 	body := fmt.Sprintf(`Dear %s,
@@ -131,7 +131,7 @@ func (e *EmailService) sendEmail(to, subject, body string, template string, cand
 
 	err := smtp.SendMail(addr, auth, e.cfg.SMTPFrom, []string{to}, []byte(msg))
 
-	// Log email attempt (ignore DB error — email log is non-critical)
+	// Логируем отправку в БД (некритично, ошибки игнорируем)
 	if e.pool != nil {
 		logStatus := "sent"
 		if err != nil {

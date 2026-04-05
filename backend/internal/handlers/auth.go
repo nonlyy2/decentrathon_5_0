@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// validatePassword enforces: min 8 chars, Latin letters only, 1 upper, 1 lower, 1 digit, 1 special
+// validatePassword — мин. 8 символов, латиница, 1 верхний/нижний, 1 цифра, 1 спецсимвол
 func validatePassword(pw string) error {
 	if len(pw) < 8 {
 		return fmt.Errorf("password must be at least 8 characters")

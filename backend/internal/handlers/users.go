@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ListUsers — tech-admin+ can see all users
+// ListUsers — список всех пользователей (tech-admin+)
 func ListUsers(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rows, err := pool.Query(c.Request.Context(),
@@ -39,7 +39,7 @@ func ListUsers(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// GetUser — get single user
+// GetUser — получить одного пользователя
 func GetUser(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
@@ -55,14 +55,14 @@ func GetUser(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// UpdateUser — tech-admin+ can update roles/full_name (cannot edit superadmins)
+// UpdateUser — обновление роли/имени (tech-admin+); нельзя редактировать superadmin
 func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		callerRole := c.GetString("user_role")
 		callerID := c.GetInt("user_id")
 
-		// Fetch target user's current role
+		// Текущая роль целевого пользователя
 		var targetRole string
 		var targetID int
 		err := pool.QueryRow(c.Request.Context(), `SELECT id, role FROM users WHERE id = $1`, id).Scan(&targetID, &targetRole)
@@ -71,13 +71,13 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Only superadmin can edit another superadmin
+		// Редактировать superadmin/admin может только superadmin
 		if (targetRole == "superadmin" || targetRole == "admin") && !middleware.IsRole(c, "superadmin", "admin") {
 			c.JSON(403, gin.H{"error": "cannot modify superadmin accounts"})
 			return
 		}
 
-		// Cannot edit yourself via this endpoint (use /profile instead)
+		// Себя редактировать через этот эндпоинт нельзя — использовать /profile
 		if targetID == callerID {
 			c.JSON(400, gin.H{"error": "use /profile to edit your own account"})
 			return
@@ -89,7 +89,7 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// tech-admin cannot set superadmin/admin role
+		// tech-admin не может назначить роль superadmin/admin
 		if callerRole == "tech-admin" {
 			if req.Role != nil && (*req.Role == "superadmin" || *req.Role == "admin") {
 				c.JSON(403, gin.H{"error": "tech-admin cannot assign superadmin role"})
@@ -97,7 +97,7 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Only superadmin/admin can change another user's email
+		// Менять email другого пользователя — только superadmin/admin
 		if req.Email != nil && callerRole != "superadmin" && callerRole != "admin" {
 			c.JSON(403, gin.H{"error": "only superadmin can change user email"})
 			return
@@ -114,7 +114,7 @@ func UpdateUser(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// ResetUserPassword — superadmin generates a new random password and (if SMTP configured) emails it to the user
+// ResetUserPassword — генерирует новый пароль; отправляет на email если SMTP настроен
 func ResetUserPassword(pool *pgxpool.Pool, emailSvc *EmailService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
@@ -165,7 +165,7 @@ func ResetUserPassword(pool *pgxpool.Pool, emailSvc *EmailService) gin.HandlerFu
 
 		resp := gin.H{"message": "password reset successfully"}
 		if !emailSent {
-			// Return the password in response when email is unavailable (admin copies it manually)
+			// SMTP недоступен — возвращаем пароль в ответе (разовый показ)
 			resp["new_password"] = newPassword
 			resp["warning"] = "SMTP not configured — copy this password manually, it will not be shown again"
 		}
@@ -186,7 +186,7 @@ func generateRandomPassword(length int) (string, error) {
 	return string(result), nil
 }
 
-// DeleteUser — only superadmin can delete users (except themselves)
+// DeleteUser — только superadmin; нельзя удалить себя или другого superadmin
 func DeleteUser(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
@@ -218,7 +218,7 @@ func DeleteUser(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// GetProfile — returns the current user's profile
+// GetProfile — профиль текущего пользователя
 func GetProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetInt("user_id")
@@ -234,7 +234,7 @@ func GetProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// UpdateProfile — change own full_name, email (superadmin only), or password
+// UpdateProfile — изменить full_name, пароль; email — только superadmin
 func UpdateProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetInt("user_id")
@@ -246,7 +246,7 @@ func UpdateProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Email change — superadmin only
+		// Смена email — только superadmin
 		if req.Email != nil {
 			if userRole != "superadmin" && userRole != "admin" {
 				c.JSON(403, gin.H{"error": "only superadmin can change email"})
@@ -291,7 +291,7 @@ func UpdateProfile(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// GetMajors — return available majors
+// GetMajors — список доступных специальностей
 func GetMajors() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, models.Majors)

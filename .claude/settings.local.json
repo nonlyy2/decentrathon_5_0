@@ -5,7 +5,8 @@
       "Bash(ls -la \"/c/Users/User/Desktop/nicethings/decentrathon/decentrathon_5_0/frontend/app/\\(dashboard\\)/candidates/\")",
       "Bash(cat \"/c/Users/User/Desktop/nicethings/decentrathon/decentrathon_5_0/frontend/app/\\(dashboard\\)/candidates/page.tsx\")",
       "Bash(xargs grep:*)",
-      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(find c:UsersUserDesktopnicethingsdecentrathondecentrathon_5_0 -type f \\\\\\(-name *.ts -o -name *.tsx -o -name *.js -o -name *.jsx -o -name *.py -o -name *.java -o -name *.cpp -o -name *.c -o -name *.h -o -name *.cs -o -name *.rb -o -name *.go -o -name *.rs -o -name *.php -o -name *.swift -o -name *.kt -o -name *.scala -o -name *.sh -o -name *.bash -o -name *.sql \\\\\\) ! -path */node_modules/* ! -path */.git/* ! -path */dist/* ! -path */build/* ! -path */out/*)"
     ]
   }
 }

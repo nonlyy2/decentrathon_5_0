@@ -12,12 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// assignTaskRoundRobin assigns a single candidate to the least-busy manager.
-// Runs asynchronously (call with go assignTaskRoundRobin(...)).
+// assignTaskRoundRobin — назначает кандидата наименее загруженному менеджеру.
+// Вызывать асинхронно через go.
 func assignTaskRoundRobin(pool *pgxpool.Pool, candidateID int) {
 	ctx := context.Background()
 
-	// Find the manager with the fewest active (non-completed) tasks
+	// Менеджер с наименьшим числом активных задач
 	var managerID int
 	err := pool.QueryRow(ctx,
 		`SELECT u.id
@@ -58,10 +58,10 @@ type ReviewTask struct {
 	CompletedAt  *time.Time `json:"completed_at"`
 }
 
-// GetTasks returns all review tasks, optionally filtered by assignee
+// GetTasks — список задач на проверку (опционально фильтр по назначенному)
 func GetTasks(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		filter := c.DefaultQuery("filter", "all") // all, mine, unassigned
+		filter := c.DefaultQuery("filter", "all") // all | mine | unassigned
 		userID := middleware.GetUserID(c)
 
 		query := `SELECT rt.id, rt.candidate_id, c.full_name, c.email, rt.assigned_to,
@@ -102,12 +102,12 @@ func GetTasks(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// AssignNewTasks uses round-robin to assign unassigned candidates to the least-busy managers
+// AssignNewTasks — round-robin назначение незаписанных кандидатов менеджерам
 func AssignNewTasks(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
-		// Get all managers sorted by current active task count (ascending = least busy first)
+		// Менеджеры, отсортированные по числу активных задач (ASC)
 		managerRows, err := pool.Query(ctx,
 			`SELECT u.id, u.full_name,
 				COALESCE((SELECT COUNT(*) FROM review_tasks rt WHERE rt.assigned_to = u.id AND rt.status != 'completed'), 0) AS active_tasks
@@ -138,7 +138,7 @@ func AssignNewTasks(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Find candidates without review tasks
+		// Кандидаты без задач на проверку
 		unassignedRows, err := pool.Query(ctx,
 			`SELECT c.id FROM candidates c
 			 WHERE NOT EXISTS (SELECT 1 FROM review_tasks rt WHERE rt.candidate_id = c.id)
@@ -162,7 +162,7 @@ func AssignNewTasks(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Round-robin assignment
+		// Round-robin назначение
 		assigned := 0
 		for i, candID := range candidateIDs {
 			mgr := managers[i%len(managers)]
@@ -179,7 +179,7 @@ func AssignNewTasks(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// UpdateTaskStatus lets a manager mark a task as in_progress or completed
+// UpdateTaskStatus — смена статуса задачи (in_progress / completed)
 func UpdateTaskStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		taskID, err := strconv.Atoi(c.Param("taskId"))

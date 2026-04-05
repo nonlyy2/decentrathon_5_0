@@ -18,13 +18,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AIProviders maps provider names to their single-candidate analyze functions
+// AIProviders провайдеры для анализа одного кандидата
 type AIProviders map[string]func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error)
 
-// AIBatchProviders maps provider names to their batch analyze functions
+// AIBatchProviders провайдеры для пакетного анализа
 type AIBatchProviders map[string]func(ctx context.Context, candidates []models.Candidate) ([]*models.Analysis, error)
 
-// GetAIProviders returns the list of available AI providers
+// GetAIProviders возвращает список доступных AI-провайдеров
 func GetAIProviders(providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		available := make([]string, 0, len(providers))
@@ -80,22 +80,20 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		ctx := c.Request.Context()
 
-		// Delete only the current (latest) analysis from the analyses table
+		// Удаляем только текущий анализ
 		tag, err := pool.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, candidateID)
 		if err != nil || tag.RowsAffected() == 0 {
 			c.JSON(404, gin.H{"error": "analysis not found"})
 			return
 		}
 
-		// Check if there's a previous analysis in history — promote it to current
+		// Если есть история — восстанавливаем предыдущий анализ
 		var prevID int
 		err = pool.QueryRow(ctx,
 			`SELECT id FROM analysis_history WHERE candidate_id = $1 ORDER BY analyzed_at DESC LIMIT 1`,
 			candidateID).Scan(&prevID)
 		if err == nil {
-			// Promote the most recent history entry back to the analyses table.
-			// Include ALL columns (including explanation_* and recommended_major) so that
-			// GetCandidate can scan the promoted row without NULL scan errors.
+			// Промоутим последнюю запись истории обратно в analyses.
 			pool.Exec(ctx,
 				`INSERT INTO analyses (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
 				 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
@@ -109,10 +107,10 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 				 summary, key_strengths, red_flags, model_used, analyzed_at, COALESCE(duration_ms,0),
 				 recommended_major, major_reason_note
 				 FROM analysis_history WHERE id = $1`, prevID)
-			// Remove that entry from history so it doesn't appear twice
+			// Убираем из истории, чтобы не дублировалось
 			pool.Exec(ctx, `DELETE FROM analysis_history WHERE id = $1`, prevID)
 		} else {
-			// No history left — reset status to pending
+			// Истории нет — сбрасываем статус
 			pool.Exec(ctx, `UPDATE candidates SET status = 'pending' WHERE id = $1 AND status IN ('analyzed','initial_screening')`, candidateID)
 		}
 
@@ -124,7 +122,7 @@ func DeleteAnalysis(pool *pgxpool.Pool) gin.HandlerFunc {
 func DeleteAllAnalyses(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		// Delete analyses only for candidates without a committee decision (not shortlisted/rejected/waitlisted)
+		// Удаляем только у кандидатов без финального решения комитета
 		tag, err := pool.Exec(ctx,
 			`DELETE FROM analyses WHERE candidate_id IN (
 				SELECT id FROM candidates WHERE status NOT IN ('shortlisted', 'rejected', 'waitlisted')
@@ -133,9 +131,9 @@ func DeleteAllAnalyses(pool *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(500, gin.H{"error": "failed to delete analyses"})
 			return
 		}
-		// Reset those candidates back to in_progress
+		// Сбрасываем статус
 		pool.Exec(ctx, `UPDATE candidates SET status = 'in_progress' WHERE status IN ('analyzed','initial_screening')`)
-		// Clear in-memory status cache
+		// Очищаем кэш статусов
 		candidateAnalyses.Range(func(key, _ any) bool {
 			candidateAnalyses.Delete(key)
 			return true
@@ -151,9 +149,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	}
 	defer tx.Rollback(ctx)
 
-	// Move existing analysis to history (keep all previous analyses).
-	// Include ALL columns so that if the history entry is later promoted back,
-	// GetCandidate can scan it without NULL scan errors.
+	// Переносим текущий анализ в историю перед заменой.
 	tx.Exec(ctx,
 		`INSERT INTO analysis_history (candidate_id, score_leadership, score_motivation, score_growth, score_vision,
 		 score_communication, final_score, category, ai_generated_risk, ai_generated_score, incomplete_flag,
@@ -168,7 +164,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		 recommended_major, major_reason_note
 		 FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
-	// Replace current analysis with the new one
+	// Заменяем текущий анализ
 	tx.Exec(ctx, `DELETE FROM analyses WHERE candidate_id = $1`, analysis.CandidateID)
 
 	_, err = tx.Exec(ctx,
@@ -189,7 +185,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 		return err
 	}
 
-	// Set status to initial_screening (replaces old 'analyzed')
+	// Устанавливаем статус initial_screening
 	_, err = tx.Exec(ctx, `UPDATE candidates SET status = 'initial_screening' WHERE id = $1 AND status IN ('pending','in_progress','analyzed')`, analysis.CandidateID)
 	if err != nil {
 		return err
@@ -198,7 +194,7 @@ func SaveAnalysis(ctx context.Context, pool *pgxpool.Pool, analysis *models.Anal
 	return tx.Commit(ctx)
 }
 
-// resolveProvider picks the analyze function based on ?provider= query param or default
+// resolveProvider выбирает функцию анализа по параметру ?provider= или дефолту
 func resolveProvider(c *gin.Context, providers AIProviders, defaultProvider string) (func(ctx context.Context, candidate *models.Candidate) (*models.Analysis, error), bool) {
 	providerName := c.Query("provider")
 	if providerName == "" {
@@ -212,7 +208,7 @@ func resolveProvider(c *gin.Context, providers AIProviders, defaultProvider stri
 	return fn, true
 }
 
-// AnalyzeSingleCandidate creates a handler — providers map is injected from main
+// AnalyzeSingleCandidate хэндлер анализа одного кандидата
 func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if middleware.IsRole(c, "auditor") {
@@ -230,7 +226,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			return
 		}
 
-		// Get candidate
+		// Загружаем кандидата
 		var candidate models.Candidate
 		err = pool.QueryRow(c.Request.Context(),
 			`SELECT id, full_name, email, phone, telegram, age, city, school, graduation_year, achievements, extracurriculars, essay, motivation_statement, disability, major, youtube_transcript, created_at, status
@@ -243,15 +239,14 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			return
 		}
 
-		// SaveAnalysis always moves any existing analysis to history before inserting the new one,
-		// so we do not block re-analysis here regardless of whether force=true was passed.
+		// SaveAnalysis сам архивирует предыдущий анализ — повторный запуск всегда разрешён.
 
 		if analyzeFunc == nil {
 			c.JSON(503, gin.H{"error": "AI provider not configured"})
 			return
 		}
 
-		// Check if already running
+		// Проверяем, не запущен ли уже анализ
 		if raw, ok := candidateAnalyses.Load(candidateID); ok {
 			if raw.(candidateAnalysisState).Running {
 				c.JSON(409, gin.H{"error": "analysis already running"})
@@ -259,7 +254,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 			}
 		}
 
-		// Mark as running and return immediately — analysis runs in background
+		// Помечаем как запущенный, отвечаем 202 — анализ в фоне
 		startedAt := time.Now()
 		candidateAnalyses.Store(candidateID, candidateAnalysisState{Running: true, StartedAt: startedAt})
 		c.JSON(202, gin.H{"message": "analysis started", "started_at": startedAt.UnixMilli()})
@@ -285,7 +280,7 @@ func AnalyzeSingleCandidate(pool *pgxpool.Pool, providers AIProviders, defaultPr
 	}
 }
 
-// Per-candidate async analysis tracking
+// Отслеживание статуса асинхронного анализа по кандидату
 type candidateAnalysisState struct {
 	Running    bool
 	Failed     bool
@@ -324,7 +319,7 @@ func GetCandidateAnalysisStatus() gin.HandlerFunc {
 	}
 }
 
-// Bulk analysis
+// Пакетный анализ
 var batchCancel context.CancelFunc
 
 var batchStatus struct {
@@ -414,7 +409,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 					strings.Contains(msg, "rate-limited") || strings.Contains(msg, "rate limit")
 			}
 
-			// Split into batches
+			// Разбиваем на пачки
 			var batches [][]models.Candidate
 			for i := 0; i < len(candidates); i += batchSize {
 				end := i + batchSize
@@ -440,7 +435,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 				if rateLimitHit {
 					break
 				}
-				// Check for cancellation
+				// Проверяем отмену
 				select {
 				case <-ctx.Done():
 					batchStatus.Lock()
@@ -481,7 +476,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 			}
 
 		done:
-			// Close results after all goroutines finish
+			// Закрываем канал результатов после завершения всех горутин
 			go func() {
 				wg.Wait()
 				close(results)
@@ -496,7 +491,7 @@ func AnalyzeAllPending(pool *pgxpool.Pool, providers AIProviders, batchProviders
 						batchStatus.Errors = append(batchStatus.Errors, fmt.Sprintf("rate limit hit at batch %d: %v", r.batchIdx, r.err))
 						batchStatus.Unlock()
 					} else {
-						// Fall back: process individually
+						// Пакет упал по другой причине — обрабатываем поштучно
 						for i := range r.batch {
 							select {
 							case <-ctx.Done():
@@ -745,16 +740,16 @@ func AnalyzeAllCandidates(pool *pgxpool.Pool, providers AIProviders, batchProvid
 	}
 }
 
-// AITextGenerators maps provider names to a raw text-generation function
+// AITextGenerators провайдеры для генерации текста
 type AITextGenerators map[string]func(ctx context.Context, systemPrompt, userMsg string) (string, error)
 
-// AIRecommendRequest is the body for POST /candidates/ai-recommend
+// AIRecommendRequest тело запроса POST /candidates/ai-recommend
 type AIRecommendRequest struct {
 	CandidateIDs []int `json:"candidate_ids" binding:"required,min=2"`
 	SelectCount  int   `json:"select_count" binding:"required,min=1"`
 }
 
-// RecommendCandidates picks the best N candidates using AI
+// RecommendCandidates выбирает лучших N кандидатов с помощью AI
 func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req AIRecommendRequest
@@ -833,7 +828,7 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			return
 		}
 
-		// Strip markdown code fences if present
+		// Убираем markdown-обёртку если есть
 		cleaned := strings.TrimSpace(responseText)
 		if strings.HasPrefix(cleaned, "```") {
 			if idx := strings.Index(cleaned, "\n"); idx >= 0 {
@@ -844,7 +839,7 @@ func RecommendCandidates(pool *pgxpool.Pool, textGens AITextGenerators, defaultP
 			}
 			cleaned = strings.TrimSpace(cleaned)
 		}
-		// Extract JSON object
+		// Извлекаем JSON-объект
 		if idx := strings.Index(cleaned, "{"); idx > 0 {
 			cleaned = cleaned[idx:]
 		}

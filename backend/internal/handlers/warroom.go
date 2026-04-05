@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// mentionRegex matches @email patterns in post content
+// mentionRegex ищет @email или @username в тексте поста
 var mentionRegex = regexp.MustCompile(`@([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|[a-zA-Z0-9_\-]+)`)
 
 type ActivityEntry struct {
@@ -25,7 +25,7 @@ type ActivityEntry struct {
 	CreatedAt   string  `json:"created_at"`
 }
 
-// GetActivityFeed returns the global activity feed (paginated, newest first).
+// GetActivityFeed возвращает глобальную ленту активности (постранично, сначала новые).
 func GetActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
@@ -73,14 +73,14 @@ func GetActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// PostActivityFeed lets a manager post to the activity feed with optional mentions.
+// PostActivityFeed публикует запись в ленту активности с опциональными упоминаниями.
 func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			CandidateID *int   `json:"candidate_id"`
 			ActionType  string `json:"action_type" binding:"required"`
 			Content     string `json:"content" binding:"required,min=1,max=2000"`
-			Mentions    []int  `json:"mentions"` // user IDs mentioned
+			Mentions    []int  `json:"mentions"` // явно переданные user ID
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			HandleValidationError(c, err)
@@ -89,9 +89,9 @@ func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		userID, _ := c.Get("user_id")
 
-		// Parse @mentions from content text — look for @email or @username patterns
+		// Парсим @упоминания из текста
 		mentionHandles := mentionRegex.FindAllStringSubmatch(req.Content, -1)
-		mentionedUserIDs := req.Mentions // start with explicitly passed IDs
+		mentionedUserIDs := req.Mentions // начинаем с явно переданных ID
 		seen := map[int]bool{}
 		for _, existing := range mentionedUserIDs {
 			seen[existing] = true
@@ -99,7 +99,7 @@ func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 		for _, match := range mentionHandles {
 			handle := match[1]
 			var uid int
-			// Try matching by full email first, then by full_name/email prefix
+			// Ищем пользователя по email или full_name
 			if err2 := pool.QueryRow(c.Request.Context(),
 				`SELECT id FROM users WHERE email = $1 OR full_name ILIKE $1 LIMIT 1`, handle,
 			).Scan(&uid); err2 == nil && !seen[uid] {
@@ -122,7 +122,7 @@ func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Create notifications only for tagged/mentioned users
+		// Уведомления только для упомянутых пользователей
 		for _, mentionedUID := range mentionedUserIDs {
 			pool.Exec(c.Request.Context(), `
 				INSERT INTO notifications (user_id, from_user_id, candidate_id, activity_id, type)
@@ -135,7 +135,7 @@ func PostActivityFeed(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// MarkForDiscussion flags a candidate as "needs discussion" in the War Room.
+// MarkForDiscussion помечает кандидата для обсуждения в War Room.
 func MarkForDiscussion(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID, err := strconv.Atoi(c.Param("id"))
@@ -161,7 +161,7 @@ func MarkForDiscussion(pool *pgxpool.Pool) gin.HandlerFunc {
 				`UPDATE candidates SET needs_discussion=true, discussion_note=$1, discussion_by=$2, discussion_at=NOW() WHERE id=$3`,
 				req.Note, userID, candidateID)
 
-			// Post to activity feed
+			// Пишем в ленту активности
 			if err == nil {
 				var candidateName string
 				pool.QueryRow(c.Request.Context(), `SELECT full_name FROM candidates WHERE id=$1`, candidateID).Scan(&candidateName)
@@ -184,7 +184,7 @@ func MarkForDiscussion(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// GetDiscussionCandidates returns all candidates flagged for discussion.
+// GetDiscussionCandidates возвращает всех кандидатов, помеченных для обсуждения.
 func GetDiscussionCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rows, err := pool.Query(c.Request.Context(), `
@@ -234,7 +234,7 @@ func GetDiscussionCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// GetNotifications returns unread notifications for the current user.
+// GetNotifications возвращает уведомления текущего пользователя.
 func GetNotifications(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, _ := c.Get("user_id")
@@ -288,7 +288,7 @@ func GetNotifications(pool *pgxpool.Pool) gin.HandlerFunc {
 			notifs = []Notification{}
 		}
 
-		// Count unread
+		// Считаем непрочитанные
 		var unread int
 		pool.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM notifications WHERE user_id=$1 AND read=false`, userID).Scan(&unread)
 
@@ -296,7 +296,7 @@ func GetNotifications(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// MarkNotificationsRead marks all notifications as read for the current user.
+// MarkNotificationsRead отмечает все уведомления пользователя как прочитанные.
 func MarkNotificationsRead(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, _ := c.Get("user_id")

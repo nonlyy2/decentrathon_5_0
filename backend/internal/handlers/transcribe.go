@@ -14,8 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TranscribeAudio accepts a browser-recorded audio file (webm/ogg/wav) and returns
-// the transcribed text using the Alem Plus Speech-to-Text API.
+// TranscribeAudio принимает аудио (webm/ogg/wav) и возвращает транскрипт через Alem STT.
 func TranscribeAudio(alemAPIKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if alemAPIKey == "" {
@@ -36,7 +35,7 @@ func TranscribeAudio(alemAPIKey string) gin.HandlerFunc {
 			return
 		}
 
-		// Convert to 16kHz mono WAV — Alem STT requires WAV format
+		// Конвертируем в 16kHz mono WAV — требование Alem STT
 		wavData, err := convertAudioToWAV(audioData)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "audio conversion failed: " + err.Error()})
@@ -56,8 +55,7 @@ func TranscribeAudio(alemAPIKey string) gin.HandlerFunc {
 	}
 }
 
-// convertAudioToWAV converts any audio format to 16kHz mono WAV using ffmpeg.
-// ffmpeg auto-detects the input format from the stream header.
+// convertAudioToWAV конвертирует любой аудиоформат в 16kHz mono WAV через ffmpeg.
 func convertAudioToWAV(audioData []byte) ([]byte, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		return nil, fmt.Errorf("ffmpeg is not installed")
@@ -80,7 +78,7 @@ type alemTranscribeResponse struct {
 	Text string `json:"text"`
 }
 
-// alemTranscribe sends WAV audio to the Alem Plus STT API and returns the text.
+// alemTranscribe отправляет WAV в Alem STT и возвращает текст.
 func alemTranscribe(ctx context.Context, apiKey string, wavData []byte) (string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)

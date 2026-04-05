@@ -29,7 +29,7 @@ type AnalysisHistoryEntry struct {
 	DurationMs        int       `json:"duration_ms"`
 }
 
-// GetAnalysisHistory returns all previous analyses for a candidate
+// GetAnalysisHistory возвращает историю анализов кандидата
 func GetAnalysisHistory(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		candidateID, err := strconv.Atoi(c.Param("id"))

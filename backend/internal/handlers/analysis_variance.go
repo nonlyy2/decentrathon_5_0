@@ -26,8 +26,8 @@ type VarianceSummary struct {
 	TotalMultiAnalyzed int                    `json:"total_multi_analyzed"`
 }
 
-// GetAnalysisVariance returns stdev/variance data for candidates with multiple analyses.
-// Auditor+ only.
+// GetAnalysisVariance возвращает статистику разброса оценок для кандидатов с несколькими анализами.
+// Только для auditor+.
 func GetAnalysisVariance(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !middleware.HasLevel(c, "auditor") {
@@ -37,7 +37,7 @@ func GetAnalysisVariance(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		ctx := c.Request.Context()
 
-		// For each candidate, combine current analysis + history to compute stats
+		// Объединяем текущий анализ и историю для подсчёта статистики
 		rows, err := pool.Query(ctx, `
 			WITH all_scores AS (
 				SELECT candidate_id, final_score FROM analyses

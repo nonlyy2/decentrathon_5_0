@@ -78,7 +78,7 @@ func ExportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 
 		c.Header("Content-Type", "text/csv; charset=utf-8")
 		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=candidates_%s.csv", time.Now().Format("2006-01-02")))
-		// UTF-8 BOM so Excel opens Cyrillic correctly
+		// UTF-8 BOM для корректного открытия кириллицы в Excel
 		c.Writer.Write([]byte{0xEF, 0xBB, 0xBF})
 
 		lang := c.Query("lang")
@@ -129,11 +129,7 @@ func ExportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// ImportCandidatesCSV imports candidates from a CSV file upload.
-// Expected columns: Full Name, Email, Phone, Telegram, Age, City, School, Graduation Year,
-//
-//	Achievements, Extracurriculars, Essay, Motivation Statement, Disability, Major
-//
+// ImportCandidatesCSV — импорт кандидатов из CSV-файла.
 // POST /candidates/import/csv
 func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -144,14 +140,14 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 		}
 		defer file.Close()
 
-		// Read entire file to handle BOM
+		// Читаем файл целиком для обработки BOM
 		raw, err := io.ReadAll(file)
 		if err != nil {
 			c.JSON(400, gin.H{"error": "failed to read file"})
 			return
 		}
 
-		// Strip UTF-8 BOM
+		// Удаляем UTF-8 BOM
 		content := string(raw)
 		content = strings.TrimPrefix(content, "\xEF\xBB\xBF")
 
@@ -169,7 +165,7 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Detect column indices by header names
+		// Определяем индексы столбцов по заголовкам
 		header := records[0]
 		colMap := map[string]int{}
 		for i, h := range header {
@@ -177,7 +173,7 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 			colMap[key] = i
 		}
 
-		// Column name aliases
+		// Псевдонимы названий колонок
 		nameAliases := map[string][]string{
 			"full_name":            {"full name", "full_name", "имя", "аты", "name"},
 			"email":               {"email", "e-mail", "почта"},
@@ -205,7 +201,7 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Require at least full_name and email
+		// Обязательные колонки: full_name и email
 		if _, ok := colIdx["full_name"]; !ok {
 			c.JSON(400, gin.H{"error": "CSV must contain a 'Full Name' column"})
 			return
@@ -229,7 +225,7 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 		var errors []string
 
 		for i, row := range records[1:] {
-			rowNum := i + 2 // 1-indexed, skip header
+			rowNum := i + 2 // с учётом заголовка (1-indexed)
 
 			fullName := getCol(row, "full_name")
 			email := getCol(row, "email")
@@ -252,7 +248,7 @@ func ImportCandidatesCSV(pool *pgxpool.Pool) gin.HandlerFunc {
 			major := getCol(row, "major")
 
 			if essay == "" {
-				essay = "N/A" // essay is NOT NULL in DB
+				essay = "N/A" // essay NOT NULL в БД
 			}
 
 			var age *int

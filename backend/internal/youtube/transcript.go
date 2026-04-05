@@ -55,17 +55,14 @@ func CheckAccessibility(videoID string) bool {
 	return resp.StatusCode != 404
 }
 
-// captionTrack is part of the ytInitialPlayerResponse captions JSON.
+// часть ytInitialPlayerResponse captions JSON
 type captionTrack struct {
 	BaseURL      string `json:"baseUrl"`
 	LanguageCode string `json:"languageCode"`
-	Kind         string `json:"kind"` // "asr" = auto-generated
+	Kind         string `json:"kind"` // "asr" = автогенерация
 }
 
-// FetchTranscript fetches plain-text transcript by:
-//  1. Scraping the video watch page for ytInitialPlayerResponse
-//  2. Extracting captionTracks from it
-//  3. Fetching and parsing the timed-text XML from the best available track
+// получает текст субтитров: скрейпинг watch-страницы → captionTracks → timed-text XML
 func FetchTranscript(videoID string) (string, error) {
 	watchURL := "https://www.youtube.com/watch?v=" + videoID
 	resp, err := browserGet(watchURL)
@@ -80,13 +77,13 @@ func FetchTranscript(videoID string) (string, error) {
 	}
 	page := string(body)
 
-	// Extract captionTracks JSON array from ytInitialPlayerResponse
+	// извлекаем captionTracks из ytInitialPlayerResponse
 	tracks, err := extractCaptionTracks(page)
 	if err != nil || len(tracks) == 0 {
 		return "", fmt.Errorf("no captions found for video %s", videoID)
 	}
 
-	// Prefer: en manual > en ASR > any manual > any ASR
+	// приоритет: en ручные > en ASR > любые ручные > любые ASR
 	best := chooseBestTrack(tracks)
 	if best == nil {
 		return "", fmt.Errorf("no suitable caption track found")
@@ -95,7 +92,7 @@ func FetchTranscript(videoID string) (string, error) {
 	return fetchTimedText(best.BaseURL)
 }
 
-// extractCaptionTracks pulls caption tracks from ytInitialPlayerResponse.
+// извлекает caption tracks из ytInitialPlayerResponse
 var (
 	captionTracksRe = regexp.MustCompile(`(?s)"captionTracks"\s*:\s*(\[.*?\])`)
 	initRespMarkers = []string{
@@ -119,7 +116,7 @@ func extractCaptionTracks(page string) ([]captionTrack, error) {
 		}
 	}
 
-	// Fallback for alternative page layouts.
+	// фоллбэк для нестандартных разметок страницы
 	m := captionTracksRe.FindStringSubmatch(page)
 	if len(m) < 2 {
 		return nil, fmt.Errorf("captionTracks not found in page")
@@ -189,7 +186,7 @@ func extractBalancedJSONObject(s string) string {
 }
 
 func chooseBestTrack(tracks []captionTrack) *captionTrack {
-	// Priority order
+	// порядок приоритета
 	for _, lang := range []string{"en", "en-US", "en-GB"} {
 		for i := range tracks {
 			if tracks[i].LanguageCode == lang && tracks[i].Kind != "asr" {
@@ -204,20 +201,20 @@ func chooseBestTrack(tracks []captionTrack) *captionTrack {
 			}
 		}
 	}
-	// Any manual track
+	// любые ручные
 	for i := range tracks {
 		if tracks[i].Kind != "asr" {
 			return &tracks[i]
 		}
 	}
-	// Any track
+	// любые
 	if len(tracks) > 0 {
 		return &tracks[0]
 	}
 	return nil
 }
 
-// timedTextXML maps the XML returned by the caption track URL.
+// XML от caption track URL
 type timedTextXML struct {
 	XMLName xml.Name        `xml:"transcript"`
 	Texts   []timedTextNode `xml:"text"`
@@ -228,7 +225,7 @@ type timedTextNode struct {
 }
 
 func fetchTimedText(baseURL string) (string, error) {
-	// Always force XML format. YouTube often returns base URLs with fmt=json3/srv3.
+	// принудительно XML: YouTube часто возвращает fmt=json3/srv3
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid timed text URL: %w", err)
@@ -265,9 +262,7 @@ func fetchTimedText(baseURL string) (string, error) {
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// ValidateAndFetch validates the YouTube URL and fetches its transcript.
-// If no captions are found, falls back to audio download + STT if credentials are provided.
-// Returns: transcript (may be empty string), isValid (video accessible), error.
+// проверяет URL и получает транскрипт; фоллбэк на аудио+STT если субтитры недоступны
 func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript string, isValid bool, err error) {
 	videoID, err := ExtractVideoID(rawURL)
 	if err != nil {
@@ -281,13 +276,13 @@ func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript 
 
 	transcript, err = FetchTranscript(videoID)
 	if err != nil {
-		// Fallback 1: try innertube API
+		// фоллбэк 1: innertube API
 		transcript, err = FetchTranscriptViaInnertube(videoID)
 		if err != nil {
-			// Fallback 2: try yt-dlp subtitle extraction
+			// фоллбэк 2: yt-dlp субтитры
 			transcript, err = FetchTranscriptViaYtDlpSubs(videoID)
 			if err != nil {
-				// Fallback 3: audio-based transcription if STT is configured
+				// фоллбэк 3: аудио STT
 				if sttAPIKey != "" {
 					transcript, err = FetchTranscriptViaAudio(videoID, sttAPIKey, sttProvider)
 					if err != nil {
@@ -303,8 +298,7 @@ func ValidateAndFetch(rawURL string, sttAPIKey, sttProvider string) (transcript 
 	return transcript, true, nil
 }
 
-// FetchTranscriptViaInnertube uses YouTube's internal innertube API to fetch captions.
-// This bypasses page scraping and works even when the watch page structure changes.
+// использует innertube API — надёжнее скрейпинга при изменениях разметки
 func FetchTranscriptViaInnertube(videoID string) (string, error) {
 	payload := fmt.Sprintf(`{
 		"context": {
@@ -359,7 +353,7 @@ func FetchTranscriptViaInnertube(videoID string) (string, error) {
 	return fetchTimedText(best.BaseURL)
 }
 
-// FetchTranscriptViaYtDlpSubs uses yt-dlp to download subtitles (more reliable than page scraping).
+// скачивает субтитры через yt-dlp
 func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not installed")
@@ -374,7 +368,7 @@ func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 	videoURL := "https://www.youtube.com/watch?v=" + videoID
 	outTemplate := filepath.Join(tmpDir, "subs")
 
-	// Try manual subs first, then auto-generated
+	// сначала ручные субтитры, потом авто
 	for _, args := range [][]string{
 		{"--write-subs", "--sub-langs", "en,en-US,en-GB,ru,kk", "--skip-download", "--sub-format", "vtt/srt/best", "-o", outTemplate, videoURL},
 		{"--write-auto-subs", "--sub-langs", "en,en-US,en-GB,ru,kk", "--skip-download", "--sub-format", "vtt/srt/best", "-o", outTemplate, videoURL},
@@ -382,9 +376,9 @@ func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 		cmd := exec.Command("yt-dlp", args...)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		_ = cmd.Run() // ignore error, check for files
+		_ = cmd.Run() // ошибку игнорируем — проверяем файлы
 
-		// Look for any subtitle file
+		// ищем файлы субтитров
 		matches, _ := filepath.Glob(filepath.Join(tmpDir, "subs.*"))
 		for _, m := range matches {
 			ext := strings.ToLower(filepath.Ext(m))
@@ -404,7 +398,7 @@ func FetchTranscriptViaYtDlpSubs(videoID string) (string, error) {
 	return "", fmt.Errorf("yt-dlp found no subtitles for video %s", videoID)
 }
 
-// parseSubtitleFile extracts plain text from VTT/SRT subtitle content.
+// извлекает plain text из VTT/SRT
 func parseSubtitleFile(content string) string {
 	lines := strings.Split(content, "\n")
 	var sb strings.Builder
@@ -412,25 +406,25 @@ func parseSubtitleFile(content string) string {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		// Skip empty lines, timestamps, sequence numbers, and VTT headers
+		// пустые, временны́е метки, VTT-заголовки
 		if line == "" || line == "WEBVTT" || strings.HasPrefix(line, "Kind:") || strings.HasPrefix(line, "Language:") {
 			continue
 		}
-		// Skip timestamp lines (00:00:01.000 --> 00:00:04.000)
+		// строки тайм-кодов
 		if strings.Contains(line, "-->") {
 			continue
 		}
-		// Skip pure numeric lines (SRT sequence numbers)
+		// порядковые номера SRT
 		if isNumericLine(line) {
 			continue
 		}
-		// Strip VTT tags like <c>, </c>, <00:00:01.000>
+		// убираем VTT-теги: <c>, </c>, <00:00:01.000>
 		cleaned := stripVTTTags(line)
 		cleaned = strings.TrimSpace(cleaned)
 		if cleaned == "" {
 			continue
 		}
-		// Deduplicate (auto-subs often repeat lines)
+		// дедупликация (авто-субтитры часто дублируют строки)
 		if !seen[cleaned] {
 			seen[cleaned] = true
 			sb.WriteString(cleaned)
@@ -455,13 +449,12 @@ func stripVTTTags(s string) string {
 	return vttTagRe.ReplaceAllString(s, "")
 }
 
-// FetchTranscriptViaAudio downloads the video audio using yt-dlp and transcribes it via Whisper/Alem STT.
+// скачивает аудио через yt-dlp и транскрибирует через Whisper/Alem STT
 func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		return "", fmt.Errorf("yt-dlp not installed — cannot extract audio")
 	}
 
-	// Create temp dir
 	tmpDir, err := os.MkdirTemp("", "ytaudio-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp dir: %w", err)
@@ -471,7 +464,7 @@ func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
 	audioPath := filepath.Join(tmpDir, "audio.mp3")
 	videoURL := "https://www.youtube.com/watch?v=" + videoID
 
-	// Download audio only (max 50 MB, bail fast on long videos)
+	// только аудио, лимит 50 МБ
 	cmd := exec.Command("yt-dlp",
 		"--extract-audio",
 		"--audio-format", "mp3",
@@ -495,7 +488,7 @@ func FetchTranscriptViaAudio(videoID, apiKey, provider string) (string, error) {
 	return transcribeAudio(audioData, "audio.mp3", apiKey, provider)
 }
 
-// transcribeAudio sends audio bytes to Whisper (OpenAI) or Alem STT.
+// отправляет аудио в Whisper (OpenAI) или Alem STT
 func transcribeAudio(audioData []byte, filename, apiKey, provider string) (string, error) {
 	var apiURL string
 	switch provider {

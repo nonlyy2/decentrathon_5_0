@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ManagerStats holds performance data for a single manager.
+// ManagerStats — данные о производительности менеджера.
 type ManagerStats struct {
 	UserID          int     `json:"user_id"`
 	Email           string  `json:"email"`
@@ -20,18 +20,17 @@ type ManagerStats struct {
 	Rejects         int     `json:"rejects"`
 	Waitlists       int     `json:"waitlists"`
 	Reviews         int     `json:"reviews"`
-	SuccessfulCases int     `json:"successful_cases"` // decisions where candidate ended up shortlisted
+	SuccessfulCases int     `json:"successful_cases"` // решения, где кандидат попал в шортлист
 	EfficiencyScore float64 `json:"efficiency_score"` // successful / total * 100
 	LastActiveAt    *string `json:"last_active_at"`
 }
 
-// GetManagerPerformance returns analytics about all managers' activity.
-// Accessible by auditor+ roles.
+// GetManagerPerformance — аналитика активности менеджеров (auditor+).
 func GetManagerPerformance(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 
-		// Get all managers' decision stats
+		// Статистика решений по всем менеджерам
 		rows, err := pool.Query(ctx, `
 			SELECT
 				u.id,
@@ -76,14 +75,14 @@ func GetManagerPerformance(pool *pgxpool.Pool) gin.HandlerFunc {
 			}
 		}
 
-		// Overall summary
+		// Общая сводка
 		var totalCandidates, shortlisted, rejected, pending int
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates`).Scan(&totalCandidates)
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE status='shortlisted'`).Scan(&shortlisted)
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE status='rejected'`).Scan(&rejected)
 		pool.QueryRow(ctx, `SELECT COUNT(*) FROM candidates WHERE status='pending'`).Scan(&pending)
 
-		// Decision trend (last 30 days, daily counts)
+		// Тренд решений за последние 30 дней (по дням)
 		trendRows, err := pool.Query(ctx, `
 			SELECT DATE(decided_at) as day, COUNT(*) as count
 			FROM committee_decisions

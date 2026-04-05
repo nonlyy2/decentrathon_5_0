@@ -29,17 +29,16 @@ func nilIntIfZero(i int) *int {
 	return &i
 }
 
-// countTotalChars returns the total character count of the 4 essay fields
+// countTotalChars суммарное количество символов в 4 текстовых полях
 func countTotalChars(achievements, extracurriculars, essay, motivation string) int {
 	return len(achievements) + len(extracurriculars) + len(essay) + len(motivation)
 }
 
-// recalcAllComplexity recalculates review_complexity for ALL candidates as a percentage
-// of the current global maximum total_chars. The candidate with the most text = 100%.
+// recalcAllComplexity пересчитывает review_complexity как % от глобального максимума символов.
 func recalcAllComplexity(pool *pgxpool.Pool) {
 	ctx := context.Background()
 
-	// Find current global max total_chars
+	// Глобальный максимум символов
 	var maxChars int
 	err := pool.QueryRow(ctx,
 		`SELECT COALESCE(MAX(
@@ -51,7 +50,7 @@ func recalcAllComplexity(pool *pgxpool.Pool) {
 		maxChars = 1
 	}
 
-	// Update all candidates' review_complexity as percentage of max
+	// Обновляем review_complexity для всех кандидатов
 	_, err = pool.Exec(ctx,
 		`UPDATE candidates SET review_complexity = ROUND(
 			(COALESCE(LENGTH(achievements),0) + COALESCE(LENGTH(extracurriculars),0) +
@@ -63,7 +62,7 @@ func recalcAllComplexity(pool *pgxpool.Pool) {
 	}
 }
 
-// RecalcComplexity is an HTTP handler to manually trigger recalculation
+// RecalcComplexity хэндлер для ручного пересчёта сложности
 func RecalcComplexity(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		recalcAllComplexity(pool)
@@ -74,12 +73,12 @@ func RecalcComplexity(pool *pgxpool.Pool) gin.HandlerFunc {
 func validateCandidateFields(req *models.CreateCandidateRequest) map[string]string {
 	errs := map[string]string{}
 
-	// Phone: only digits, spaces, +, -, ()
+	// Телефон: только цифры, +, -, пробелы, скобки
 	if req.Phone != "" && !phoneRegex.MatchString(req.Phone) {
 		errs["Phone"] = "phone must contain only digits and + - ( ) characters"
 	}
 
-	// Telegram: only latin letters, digits, underscore (no cyrillic)
+	// Telegram: латиница, цифры, подчёркивание
 	if req.Telegram != "" {
 		tg := strings.TrimPrefix(req.Telegram, "@")
 		if !telegramRegex.MatchString(tg) {
@@ -87,7 +86,7 @@ func validateCandidateFields(req *models.CreateCandidateRequest) map[string]stri
 		}
 	}
 
-	// City: no digits
+	// Город: без цифр
 	if req.City != "" {
 		for _, ch := range req.City {
 			if unicode.IsDigit(ch) {
@@ -100,8 +99,7 @@ func validateCandidateFields(req *models.CreateCandidateRequest) map[string]stri
 	return errs
 }
 
-// fetchAndStoreTranscript runs asynchronously after a candidate is saved.
-// It validates the YouTube URL and stores the transcript (if any).
+// fetchAndStoreTranscript валидирует YouTube-ссылку и сохраняет транскрипт. Запускать асинхронно.
 func fetchAndStoreTranscript(pool *pgxpool.Pool, candidateID int, youtubeURL, sttAPIKey, sttProvider string) {
 	transcript, isValid, err := youtube.ValidateAndFetch(youtubeURL, sttAPIKey, sttProvider)
 	if err != nil {
@@ -180,11 +178,11 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 			return
 		}
 
-		// Initial review_complexity will be recalculated after insert
+		// Временное значение, будет пересчитано после вставки
 		totalChars := countTotalChars(req.Achievements, req.Extracurriculars, req.Essay, req.MotivationStatement)
-		reviewComplexity := float64(totalChars) // temporary, will be recalculated
+		reviewComplexity := float64(totalChars) // временно, будет пересчитано
 
-		// Build full_name from first_name + last_name if provided
+		// Собираем full_name из first_name + last_name при необходимости
 		fullNameVal := req.FullName
 		if fullNameVal == "" && (req.FirstName != "" || req.LastName != "") {
 			fullNameVal = strings.TrimSpace(req.LastName + " " + req.FirstName)
@@ -218,16 +216,16 @@ func SubmitApplication(pool *pgxpool.Pool, sttAPIKey, sttProvider string, emailS
 			return
 		}
 
-		// Async: validate YouTube URL and fetch transcript
+		// Асинхронно: валидация YouTube и транскрипт
 		go fetchAndStoreTranscript(pool, id, req.YouTubeURL, sttAPIKey, sttProvider)
 
-		// Recalculate complexity for ALL candidates (new max may have changed)
+		// Пересчитываем сложность для всех
 		go recalcAllComplexity(pool)
 
-		// Auto-assign this candidate to the least-busy manager (round-robin)
+		// Назначаем менеджера по round-robin
 		go assignTaskRoundRobin(pool, id)
 
-		// Send confirmation email (fire-and-forget)
+		// Отправляем подтверждение на email
 		if len(emailSvc) > 0 && emailSvc[0] != nil && emailSvc[0].Enabled() {
 			go emailSvc[0].SendApplicationReceived(email, fullName, id)
 		}
@@ -246,7 +244,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-		// Numeric filters
+		// Числовые фильтры
 		minScore, _ := strconv.ParseFloat(c.Query("min_score"), 64)
 		maxScore, _ := strconv.ParseFloat(c.Query("max_score"), 64)
 		minAge, _ := strconv.Atoi(c.Query("min_age"))
@@ -283,7 +281,7 @@ func ListCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			argIdx++
 		}
 		if search != "" {
-			// Search by name, email, OR keywords
+			// Поиск по имени, email или ключевым словам
 			where += fmt.Sprintf(
 				` AND (c.full_name ILIKE $%d OR c.email ILIKE $%d OR $%d ILIKE ANY(c.keywords) OR c.achievements ILIKE $%d OR c.essay ILIKE $%d)`,
 				argIdx, argIdx, argIdx, argIdx, argIdx)
@@ -518,7 +516,7 @@ func UpdateCandidate(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.Hand
 			c.JSON(404, gin.H{"error": "candidate not found"})
 			return
 		}
-		// Re-fetch transcript if YouTube URL was provided
+		// Обновляем транскрипт если задан YouTube URL
 		if req.YouTubeURL != nil && *req.YouTubeURL != "" {
 			go fetchAndStoreTranscript(pool, id, *req.YouTubeURL, sttAPIKey, sttProvider)
 		}
@@ -557,7 +555,7 @@ func UpdateCandidateStatus(pool *pgxpool.Pool) gin.HandlerFunc {
 	}
 }
 
-// UpdateCandidateKeywords — save extracted keywords from AI analysis
+// UpdateCandidateKeywords сохраняет ключевые слова из AI-анализа
 func UpdateCandidateKeywords(pool *pgxpool.Pool, candidateID int, keywords []string) error {
 	seen := map[string]bool{}
 	unique := []string{}
@@ -574,7 +572,7 @@ func UpdateCandidateKeywords(pool *pgxpool.Pool, candidateID int, keywords []str
 	return err
 }
 
-// FetchTranscriptManually re-validates the YouTube URL and fetches/refreshes the transcript.
+// FetchTranscriptManually повторно валидирует YouTube и обновляет транскрипт.
 // POST /candidates/:id/fetch-transcript
 func FetchTranscriptManually(pool *pgxpool.Pool, sttAPIKey, sttProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -617,7 +615,7 @@ func FetchTranscriptManually(pool *pgxpool.Pool, sttAPIKey, sttProvider string) 
 	}
 }
 
-// GetSimilarCandidates returns candidates whose score is within ±3% of the given candidate.
+// GetSimilarCandidates возвращает кандидатов с оценкой в пределах ±3% от заданного.
 func GetSimilarCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.Atoi(c.Param("id"))
@@ -626,7 +624,7 @@ func GetSimilarCandidates(pool *pgxpool.Pool) gin.HandlerFunc {
 			return
 		}
 
-		// Get this candidate's score
+		// Получаем оценку кандидата
 		var score *float64
 		pool.QueryRow(c.Request.Context(),
 			`SELECT a.final_score FROM analyses a WHERE a.candidate_id = $1`, id).Scan(&score)

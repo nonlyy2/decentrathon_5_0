@@ -46,7 +46,7 @@ You can only answer questions based on the following information:
 Do NOT make up information not listed above. If you don't know the answer, say so and suggest contacting the admissions team.
 Be friendly, encouraging, and concise.`
 
-// AssistantChat handles AI assistant chat for both managers and regular users.
+// AssistantChat обрабатывает чат с AI-ассистентом для менеджеров и пользователей.
 func AssistantChat(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvider string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
@@ -80,7 +80,7 @@ func AssistantChat(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvide
 		var systemPrompt, contextData string
 
 		if isManager {
-			// Build data context for manager assistant
+			// Формируем контекст данных для менеджера
 			contextData = buildManagerDataContext(c.Request.Context(), pool)
 			systemPrompt = managerAssistantSystemPrompt + "\n\n=== CURRENT ADMISSIONS DATA ===\n" + contextData
 		} else {
@@ -100,11 +100,11 @@ func AssistantChat(pool *pgxpool.Pool, textGens AITextGenerators, defaultProvide
 	}
 }
 
-// buildManagerDataContext returns a text summary of current admissions stats for the AI context.
+// buildManagerDataContext формирует текстовый дайджест статистики приёма для AI-контекста.
 func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 	var sb strings.Builder
 
-	// Status counts
+	// Статусы кандидатов
 	rows, _ := pool.Query(ctx, `SELECT status, COUNT(*) FROM candidates GROUP BY status ORDER BY COUNT(*) DESC`)
 	if rows != nil {
 		sb.WriteString("Candidate status breakdown:\n")
@@ -118,13 +118,13 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		rows.Close()
 	}
 
-	// Score stats
+	// Статистика оценок
 	var avgScore, minScore, maxScore float64
 	var analyzed int
 	pool.QueryRow(ctx, `SELECT COALESCE(AVG(final_score),0), COALESCE(MIN(final_score),0), COALESCE(MAX(final_score),0), COUNT(*) FROM analyses`).Scan(&avgScore, &minScore, &maxScore, &analyzed)
 	sb.WriteString(fmt.Sprintf("\nAI Analysis scores (n=%d):\n  Average: %.1f | Min: %.1f | Max: %.1f\n", analyzed, avgScore, minScore, maxScore))
 
-	// Category distribution
+	// Распределение по категориям
 	catRows, _ := pool.Query(ctx, `SELECT category, COUNT(*) FROM analyses GROUP BY category ORDER BY COUNT(*) DESC`)
 	if catRows != nil {
 		sb.WriteString("\nCategory distribution:\n")
@@ -138,7 +138,7 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		catRows.Close()
 	}
 
-	// Major distribution
+	// Распределение по специальностям
 	majRows, _ := pool.Query(ctx, `SELECT COALESCE(major,'Unknown'), COUNT(*) FROM candidates GROUP BY major ORDER BY COUNT(*) DESC LIMIT 10`)
 	if majRows != nil {
 		sb.WriteString("\nMajor distribution (candidates):\n")
@@ -152,14 +152,14 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		majRows.Close()
 	}
 
-	// AI detection summary
+	// Статистика AI-детекции текстов
 	var highRisk, medRisk, lowRisk int
 	pool.QueryRow(ctx, `SELECT COUNT(*) FROM analyses WHERE ai_generated_risk='high'`).Scan(&highRisk)
 	pool.QueryRow(ctx, `SELECT COUNT(*) FROM analyses WHERE ai_generated_risk='medium'`).Scan(&medRisk)
 	pool.QueryRow(ctx, `SELECT COUNT(*) FROM analyses WHERE ai_generated_risk='low'`).Scan(&lowRisk)
 	sb.WriteString(fmt.Sprintf("\nAI-generated text risk:\n  High: %d | Medium: %d | Low: %d\n", highRisk, medRisk, lowRisk))
 
-	// Top 5 candidates by score (name only, no personal data)
+	// Топ-5 кандидатов по оценке
 	topRows, _ := pool.Query(ctx, `SELECT c.full_name, a.final_score, a.category, COALESCE(c.major,'Unknown') FROM candidates c JOIN analyses a ON c.id=a.candidate_id ORDER BY a.final_score DESC LIMIT 5`)
 	if topRows != nil {
 		sb.WriteString("\nTop 5 candidates by AI score:\n")
@@ -173,7 +173,7 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		topRows.Close()
 	}
 
-	// City distribution
+	// Распределение по городам
 	cityRows, _ := pool.Query(ctx, `SELECT COALESCE(city,'Unknown'), COUNT(*) FROM candidates GROUP BY city ORDER BY COUNT(*) DESC LIMIT 15`)
 	if cityRows != nil {
 		sb.WriteString("\nCity distribution:\n")
@@ -187,7 +187,7 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		cityRows.Close()
 	}
 
-	// School distribution
+	// Распределение по школам
 	schoolRows, _ := pool.Query(ctx, `SELECT COALESCE(school,'Unknown'), COUNT(*) FROM candidates GROUP BY school ORDER BY COUNT(*) DESC LIMIT 10`)
 	if schoolRows != nil {
 		sb.WriteString("\nSchool distribution (top 10):\n")
@@ -201,7 +201,7 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		schoolRows.Close()
 	}
 
-	// Partner school distribution
+	// Распределение по партнёрским школам
 	partnerRows, _ := pool.Query(ctx, `SELECT COALESCE(partner_school,'No partner'), COUNT(*) FROM candidates WHERE partner_school IS NOT NULL GROUP BY partner_school ORDER BY COUNT(*) DESC`)
 	if partnerRows != nil {
 		sb.WriteString("\nPartner school candidates:\n")
@@ -215,7 +215,7 @@ func buildManagerDataContext(ctx context.Context, pool *pgxpool.Pool) string {
 		partnerRows.Close()
 	}
 
-	// IELTS/TOEFL summary
+	// Статистика IELTS/TOEFL
 	var ieltsCount, toeflCount int
 	var avgIELTS, avgTOEFL float64
 	pool.QueryRow(ctx, `SELECT COUNT(*), COALESCE(AVG(ielts_score),0) FROM candidates WHERE exam_type='IELTS' AND ielts_score IS NOT NULL`).Scan(&ieltsCount, &avgIELTS)

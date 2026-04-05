@@ -64,7 +64,7 @@ func (c *Client) ModelName() string {
 	return c.model
 }
 
-// GenerateText generates free-form text (not forced JSON).
+// генерирует свободный текст (не JSON)
 func (c *Client) GenerateText(ctx context.Context, systemPrompt, userMessage string) (string, error) {
 	return c.generatePlain(ctx, systemPrompt, userMessage)
 }
@@ -78,7 +78,7 @@ func (c *Client) generatePlain(ctx context.Context, systemPrompt, userMessage st
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userMessage},
 		},
-		Format: "", // free text, not forced JSON
+		Format: "", // свободный текст
 		Stream: false,
 		Options: Options{
 			Temperature: 0.7,
@@ -138,7 +138,7 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string)
 		}
 		lastErr = err
 
-		// Don't retry on non-retryable errors (model not found, bad request, etc.)
+		// не ретраим нефатальные ошибки (модель не найдена, bad request)
 		if isNonRetryable(lastErr) {
 			return "", lastErr
 		}
@@ -146,7 +146,7 @@ func (c *Client) Generate(ctx context.Context, systemPrompt, userMessage string)
 	return "", fmt.Errorf("ollama failed after 2 attempts: %w", lastErr)
 }
 
-// isNonRetryable checks if the error message indicates a non-retryable condition
+// нефатальные ошибки — не ретраим
 func isNonRetryable(err error) bool {
 	msg := err.Error()
 	for _, s := range []string{"status 404", "status 400", "not found", "marshal"} {
