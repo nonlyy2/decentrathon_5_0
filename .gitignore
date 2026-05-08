@@ -29,11 +29,18 @@ Thumbs.db
 
 # Project
 /tasks/
-claude/
+.claude/
 .telegram_readme.md
 
 # Logs
 *.log
 
-#apply-template
+# apply-template
 /apply-template/
+
+# Miscellaneous
+ТЗ AI inDrive inVision U.docx
+test.txt
+telegram_readme.md
+demo_plan.md
+demo1_youtube_link.txt

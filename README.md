@@ -811,6 +811,13 @@ The project is deployed at https://front-production-6189.up.railway.app/ using [
 
 ---
 
+## License
+
+This project is licensed under the CC BY-NC-ND 4.0 License.  
+See [LICENSE](./LICENSE) for details.
+
+---
+
 ## Team
 
 Built for **Decentrathon 5.0** — Track: AI inDrive
